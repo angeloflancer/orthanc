@@ -1,0 +1,35 @@
+{
+  "name": "orthanc-explorer-2",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^6.5.1",
+    "@popperjs/core": "^2.11.8",
+    "@vuepic/vue-datepicker": "^11.0.2",
+    "axios": "^1.12.0",
+    "bootstrap": "5.3.3",
+    "bootstrap-icons": "^1.11.3",
+    "bootstrap5-tags": "^1.7.7",
+    "jquery": "^3.7.1",
+    "keycloak-js": "^24.0.5",
+    "mime-types": "^2.1.35",
+    "mitt": "^3.0.1",
+    "native-file-system-adapter": "^3.0.1",
+    "uppie": "^4.0.0",
+    "uuid": "^9.0.1",
+    "vue": "^3.5.13",
+    "vue-i18n": "^9.14.5",
+    "vue-router": "^4.5.0",
+    "vuex": "^4.1.0",
+    "vue3-observe-visibility": "^1.0.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^6.4.1"
+  }
+}
