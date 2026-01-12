@@ -700,34 +700,47 @@ export default {
     getStoneViewerUrlForBulkStudies(studiesDicomIds) {
         return orthancApiUrl + 'stone-webviewer/index.html?study=' + studiesDicomIds.join(",");
     },
+    // Helper to convert relative URL to absolute URL using backend
+    toBackendUrl(url) {
+        if (!url) return url;
+        // If URL is relative (starts with /), prepend backend URL
+        if (url.startsWith('/')) {
+            return 'http://localhost:5830' + url;
+        }
+        // If URL is absolute but uses frontend port, replace with backend port
+        return url.replace(/localhost:5829/g, 'localhost:5830');
+    },
     getOhifViewerUrlForDicomJson(mode, resourceOrthancId) {
+        let baseUrl = this.toBackendUrl(store.state.configuration.uiOptions.OhifViewer3PublicRoot);
         if (mode == 'basic') {
-            return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'viewer?url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
+            return baseUrl + 'viewer?url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
         } else if (mode == 'vr') {
-            return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'viewer?hangingprotocolId=mprAnd3DVolumeViewport&url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
+            return baseUrl + 'viewer?hangingprotocolId=mprAnd3DVolumeViewport&url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
         } else if (mode == 'tmtv') {
-            return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'tmtv?url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
+            return baseUrl + 'tmtv?url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
         } else if (mode == 'seg') {
-            return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'segmentation?url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
+            return baseUrl + 'segmentation?url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
         } else if (mode == 'microscopy') {
-            return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'microscopy?url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
+            return baseUrl + 'microscopy?url=../studies/' + resourceOrthancId + "/ohif-dicom-json";
         }
     },
     getOhifViewerUrlForDicomWeb(mode, resourceDicomUid) {
         if (store.state.configuration.uiOptions.EnableOpenInOhifViewer3) {
+            let baseUrl = this.toBackendUrl(store.state.configuration.uiOptions.OhifViewer3PublicRoot);
             if (mode == 'basic') {
-                return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'viewer?StudyInstanceUIDs=' + resourceDicomUid;
+                return baseUrl + 'viewer?StudyInstanceUIDs=' + resourceDicomUid;
             } else if (mode == 'vr') {
-                return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'viewer?hangingprotocolId=mprAnd3DVolumeViewport&StudyInstanceUIDs=' + resourceDicomUid;
+                return baseUrl + 'viewer?hangingprotocolId=mprAnd3DVolumeViewport&StudyInstanceUIDs=' + resourceDicomUid;
             } else if (mode == 'tmtv') {
-                return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'tmtv?StudyInstanceUIDs=' + resourceDicomUid;
+                return baseUrl + 'tmtv?StudyInstanceUIDs=' + resourceDicomUid;
             } else if (mode == 'seg') {
-                return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'segmentation?StudyInstanceUIDs=' + resourceDicomUid;
+                return baseUrl + 'segmentation?StudyInstanceUIDs=' + resourceDicomUid;
             } else if (mode == 'microscopy') {
-                return store.state.configuration.uiOptions.OhifViewer3PublicRoot + 'microscopy?StudyInstanceUIDs=' + resourceDicomUid;
+                return baseUrl + 'microscopy?StudyInstanceUIDs=' + resourceDicomUid;
             }
         } else {
-            return store.state.configuration.uiOptions.OhifViewerPublicRoot + 'Viewer/' + resourceDicomUid;
+            let baseUrl = this.toBackendUrl(store.state.configuration.uiOptions.OhifViewerPublicRoot);
+            return baseUrl + 'Viewer/' + resourceDicomUid;
         }
     },
     getOhifViewerUrlForDicomWebBulkStudies(mode, studiesDicomIds) {

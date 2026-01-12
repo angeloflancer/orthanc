@@ -409,6 +409,7 @@ export default {
             return this.studiesSourceType == SourceType.LOCAL_ORTHANC && this.isPluginEnabled("stone-webviewer");
         },
         stoneViewerUrl() {
+            console.log("stoneViewerUrl", this.resourceLevel, this.resourceDicomUid, this.resourceOrthancId);
             if (this.resourceLevel == 'bulk') {
                 const selectedStudiesDicomIds = this.selectedStudies.map(s => s['MainDicomTags']['StudyInstanceUID']);
                 const url = api.getStoneViewerUrlForBulkStudies(selectedStudiesDicomIds);
