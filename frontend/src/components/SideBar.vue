@@ -169,7 +169,7 @@ export default {
     <div class="nav-side-menu">
         <div class="nav-side-content">
             <div v-if="!hasCustomLogo">
-                <img class="emedx-logo" src="../assets/images/emedx-logo.png"/>
+                <img class="emedx-logo" src="../assets/images/emedx-logo-white.png"/>
             </div>
             <div v-if="hasCustomLogo">
                 <img class="custom-logo" :src="customLogoUrl" />
@@ -180,9 +180,9 @@ export default {
                 <img src="../assets/logo.png" />
                 </p>
             </div>
-            <div v-if="uiOptions.ShowOrthancName" class="orthanc-name">
+            <!-- <div v-if="uiOptions.ShowOrthancName" class="orthanc-name">
                 <p>{{ system.Name }}</p>
-            </div>
+            </div> -->
             <div class="menu-list">
                 <ul id="menu-content" class="menu-content collapse out">
                     <li class="d-flex align-items-center fix-router-link">
@@ -307,7 +307,7 @@ export default {
             </div>
             <div class="bottom-side-bar">
                 <div class="bottom-side-bar-button">
-                    <LanguagePicker/>
+                    <LanguagePicker />
                 </div>
             </div>
         </div>
@@ -340,10 +340,10 @@ export default {
 }
 
 .emedx-logo {
-    height: 48px;
-    max-width: 90%;
+    height: 80px;
+    width: 100%;
     object-fit: contain;
-    padding: 8px 12px;
+    /* background-color: black; */
 }
 
 .powered-by-emedx {
