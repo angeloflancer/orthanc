@@ -1,10 +1,35 @@
 import axios from "axios"
 import store from "./store"
-import mime from "mime-types";
 import { showSaveFilePicker } from "native-file-system-adapter";
 
 
 import { orthancApiUrl, oe2ApiUrl } from "./globalConfigurations";
+
+// Browser-compatible function to get file extension from content-type
+function getExtensionFromContentType(contentType) {
+    if (!contentType) return 'bin';
+    const mimeToExt = {
+        'application/dicom': 'dcm',
+        'application/zip': 'zip',
+        'application/pdf': 'pdf',
+        'application/json': 'json',
+        'application/xml': 'xml',
+        'application/octet-stream': 'bin',
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'image/bmp': 'bmp',
+        'image/tiff': 'tiff',
+        'text/plain': 'txt',
+        'text/html': 'html',
+        'text/csv': 'csv',
+        'video/mp4': 'mp4',
+        'video/mpeg': 'mpeg',
+    };
+    const type = contentType.split(';')[0].trim().toLowerCase();
+    return mimeToExt[type] || 'bin';
+}
 
 export default {
     updateAuthHeader(headerKey = null) {
@@ -607,7 +632,7 @@ export default {
                 suggestedFileName = response.headers.get('content-disposition').split('"')[1]
             }
                 
-            const extension = mime.extension(response.headers.get('content-type'));
+            const extension = getExtensionFromContentType(response.headers.get('content-type'));
             let acceptedTypes = [];
             acceptedTypes.push({ accept: { [response.headers.get('content-type').split(",")[0]]: ["." + extension] } });
 
