@@ -17,6 +17,7 @@ import Datepicker from '@vuepic/vue-datepicker';
 import '@vuepic/vue-datepicker/dist/main.css';
 import mitt from "mitt"
 import VueObserveVisibility from 'vue3-observe-visibility'
+import { oe2ApiUrl } from './globalConfigurations';
 
 // Names of the params that can contain an authorization token
 // If one of these params contain a token, it will be passed as a header
@@ -24,7 +25,7 @@ import VueObserveVisibility from 'vue3-observe-visibility'
 const VALID_TOKEN_PARAMS = ["token", "auth-token", "authorization"];
 
 // before initialization, we must load part of the configuration to know if we need to enable Keycloak or not
-axios.get('../api/pre-login-configuration').then((config) => {
+axios.get(oe2ApiUrl + 'pre-login-configuration').then((config) => {
 
     const app = createApp(App)
     const messageBus = mitt();

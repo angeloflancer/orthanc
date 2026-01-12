@@ -9,6 +9,7 @@ import store from "./store"
 import orthancApi from './orthancApi'
 import axios from 'axios'
 import mitt from "mitt"
+import { oe2ApiUrl } from './globalConfigurations';
 
 
 // Names of the params that can contain an authorization token
@@ -18,7 +19,7 @@ const VALID_TOKEN_PARAMS = ["token", "auth-token", "authorization"];
 
 
 // before initialization, we must load part of the configuration to know if we need to enable Keycloak or not
-axios.get('../api/pre-login-configuration').then((config) => {
+axios.get(oe2ApiUrl + 'pre-login-configuration').then((config) => {
 
     const app = createApp(AppLanding)
     const messageBus = mitt();

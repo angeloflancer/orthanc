@@ -16,9 +16,10 @@ import Datepicker from '@vuepic/vue-datepicker';
 import '@vuepic/vue-datepicker/dist/main.css';
 import mitt from "mitt"
 import VueObserveVisibility from 'vue3-observe-visibility'
+import { oe2ApiUrl } from './globalConfigurations';
 
 // before initialization, we must load part of the configuration to know if we need to enable Keycloak or not
-axios.get('../api/pre-login-configuration').then((config) => {
+axios.get(oe2ApiUrl + 'pre-login-configuration').then((config) => {
     const configData = config.data;
     const app = createApp(AppInbox)
 
