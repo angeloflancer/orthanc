@@ -73,7 +73,7 @@ export default {
     top: 0px;
     width: var(--nav-bar-width);
     height: 100%;
-    background-color: var(--nav-side-bg-color);
+    background: linear-gradient(180deg, var(--nav-side-bg-color-gradient-start) 0%, var(--nav-side-bg-color-gradient-end) 100%);
     color: var(--nav-side-color);
 }
 

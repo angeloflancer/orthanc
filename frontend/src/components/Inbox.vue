@@ -313,15 +313,15 @@ export default {
         <div class="d-flex flex-column justify-content-center align-items-center">
             <div class="row w-100 px-3 h4 text-center">
                 <div v-if="!hasCustomLogo">
-                    <img class="orthanc-logo" src="../assets/images/mohammed.png"/>
+                    <img class="emedx-logo" src="../assets/images/emedx-logo.png"/>
                 </div>
                 <div v-if="hasCustomLogo">
                     <img class="custom-logo" :src="customLogoUrl" />
                 </div>
                 <div v-if="hasCustomLogo">
-                    <p class="powered-by-orthanc">
+                    <p class="powered-by-emedx">
                     powered by
-                    <img src="../assets/images/mohammed.png" />
+                    <img src="../assets/logo.png" />
                     </p>
                 </div>
                 <div v-if="hasCustomTitle || uiOptions.ShowOrthancName" class="orthanc-name">
@@ -409,19 +409,24 @@ body {
     font-size: x-large;
 }
 
-.orthanc-logo {
-    filter: brightness(50);
+.emedx-logo {
     height: 100px;
+    max-width: 90%;
+    object-fit: contain;
+    margin-bottom: 16px;
 }
 
-.powered-by-orthanc {
-    font-size: small;
+.powered-by-emedx {
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.6);
+    margin-top: 8px;
 }
 
-.powered-by-orthanc > img {
-    filter: brightness(50);
+.powered-by-emedx > img {
     max-width: 50%;
-    max-height: 30px;
+    max-height: 24px;
+    margin-left: 4px;
+    vertical-align: middle;
 }
 
 .custom-logo {

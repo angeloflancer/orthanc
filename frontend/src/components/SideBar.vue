@@ -169,15 +169,15 @@ export default {
     <div class="nav-side-menu">
         <div class="nav-side-content">
             <div v-if="!hasCustomLogo">
-                <img class="orthanc-logo" src="../assets/images/mohammed.png"/>
+                <img class="emedx-logo" src="../assets/images/emedx-logo.png"/>
             </div>
             <div v-if="hasCustomLogo">
                 <img class="custom-logo" :src="customLogoUrl" />
             </div>
             <div v-if="hasCustomLogo">
-                <p class="powered-by-orthanc">
+                <p class="powered-by-emedx">
                 powered by
-                <img src="../assets/images/mohammed.png" />
+                <img src="../assets/logo.png" />
                 </p>
             </div>
             <div v-if="uiOptions.ShowOrthancName" class="orthanc-name">
@@ -339,15 +339,25 @@ export default {
     font-weight: 500;
 }
 
-.orthanc-logo {
-    filter: brightness(50);
+.emedx-logo {
     height: 48px;
+    max-width: 90%;
+    object-fit: contain;
+    padding: 8px 12px;
 }
 
-.powered-by-orthanc > img {
-    filter: brightness(50);
+.powered-by-emedx {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 4px;
+}
+
+.powered-by-emedx > img {
     max-width: 50%;
     height: auto;
+    max-height: 20px;
+    margin-left: 4px;
+    vertical-align: middle;
 }
 
 .custom-logo {
@@ -360,7 +370,7 @@ export default {
     font-family: verdana;
     font-size: 12px;
     font-weight: 200;
-    background-color: var(--nav-side-bg-color);
+    background: linear-gradient(180deg, var(--nav-side-bg-color-gradient-start) 0%, var(--nav-side-bg-color-gradient-end) 100%);
     color: var(--nav-side-color);
 }
 
@@ -434,7 +444,7 @@ export default {
     background-color: var(--nav-side-sub-bg-color);
     border: none;
     line-height: 28px;
-    border-bottom: 1px solid var(--nav-side-bg-color);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     margin-left: 0px;
 }
 
@@ -458,8 +468,8 @@ export default {
 .nav-side-menu li {
     margin-left: -10px;
     padding-left: 0px;
-    border-left: 3px solid var(--nav-side-bg-color);
-    border-bottom: 1px solid var(--nav-side-bg-color);
+    border-left: 3px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .nav-side-menu li a {
