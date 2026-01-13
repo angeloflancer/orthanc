@@ -18,10 +18,10 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
 // Authentication routes (our own API - don't proxy)
+// Apply body parsing only to auth routes, not to proxy routes
+app.use('/api/auth', express.json());
+app.use('/api/auth', express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 
 // Proxy middleware configuration for Orthanc service

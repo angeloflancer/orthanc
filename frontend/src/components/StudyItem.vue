@@ -207,12 +207,12 @@ export default {
 <template>
     <tbody>
         <tr v-if="loaded" :class="{ 'study-row-collapsed': !expanded, 'study-row-expanded': expanded, 'study-row-show-labels': showLabels }">
-            <td>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" v-model="selected" @click="clickedSelect">
+            <td style="vertical-align: middle; padding-right: 8px;">
+                <div class="form-check" style="display: flex; align-items: center; justify-content: center; height: 100%;">
+                    <input class="form-check-input" type="checkbox" v-model="selected" @click="clickedSelect" style="margin: 0;">
                 </div>
             </td>
-            <td v-if="hasPrimaryViewerIcon" class="td-viewer-icon">
+            <td v-if="hasPrimaryViewerIcon" class="td-viewer-icon" style="padding-left: 8px;">
                 <TokenLinkButton v-if="primaryViewerUrl"
                     level="study" :linkUrl="primaryViewerUrl"
                     :resourcesOrthancId="[study.ID]" linkType="icon"
@@ -302,14 +302,11 @@ export default {
 .study-row-expanded {
     background-color: var(--study-details-bg-color);
     font-weight: 700;
-
-    border-top: 3px !important;
-    border-style: solid !important;
-    border-color: black !important;
+    border-top: 1px solid rgba(229, 231, 235, 0.5) !important;
 }
 
 .study-row-expanded>:first-child {
-    border-bottom: 5px !important;
+    border-bottom: 1px solid rgba(229, 231, 235, 0.5) !important;
 }
 
 .study-row-show-labels {
@@ -329,11 +326,8 @@ export default {
 
 .study-details-expanded {
     background-color: var(--study-details-bg-color);
-
     border-top: 0px !important;
-    border-bottom: 3px !important;
-    border-style: solid !important;
-    border-color: black !important;
+    border-bottom: 1px solid rgba(229, 231, 235, 0.5) !important;
 }
 
 .label {
@@ -348,6 +342,22 @@ export default {
 
 .td-viewer-icon {
     padding: 0; /* to maximize click space for the icon */
+    text-align: center;
+    vertical-align: middle;
+}
+
+.td-viewer-icon .token-link-button,
+.td-viewer-icon a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+}
+
+.td-viewer-icon .icon i,
+.td-viewer-icon i {
+    color: #4a90e2 !important; /* Primary color */
 }
 
 .td-pdf-icon {

@@ -11,6 +11,30 @@
   padding-right: 25px !important;
 }
 
+/* Global datepicker calendar z-index - ensure it's always visible */
+.dp__menu,
+.dp__menu_transitioned,
+.dp__outer_menu_wrap {
+  z-index: 999999 !important;
+  position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  margin-top: 4px !important;
+}
+
+.dp__calendar_wrap {
+  z-index: 999999 !important;
+}
+
+.dp__calendar {
+  z-index: 999999 !important;
+}
+
+/* Ensure datepicker input wrapper is positioned relative */
+.dp__input_wrap {
+  position: relative !important;
+}
+
 .dp__preset_ranges {
   width: 300px !important;
 }

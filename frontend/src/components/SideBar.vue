@@ -217,8 +217,8 @@ export default {
                     </li>
                     <ul class="sub-menu collapse" id="modalities-list" ref="modalities-collapsible">
                         <li v-for="modality of Object.keys(queryableDicomModalities)" :key="modality"
-                            v-bind:class="{ 'active': this.isSelectedModality(modality) }">
-                            <router-link class="router-link"
+                            v-bind:class="{ 'active': this.isSelectedModality(modality) }" class="d-flex align-items-center">
+                            <router-link class="router-link flex-grow-1"
                                 :to="{ path: '/filtered-studies', query: { 'source-type': 'dicom', 'remote-source': modality } }">
                                 {{ modality }}
                             </router-link>
@@ -256,13 +256,13 @@ export default {
                         <span class="arrow ms-auto"></span>
                     </li>
                     <ul class="sub-menu collapse" id="settings-list">
-                        <li>
+                        <li class="d-flex align-items-center">
                             <router-link class="router-link" to="/settings">{{ $t('settings.system_info') }}</router-link>
                         </li>
-                        <li v-if="hasAccessToSettingsLabelsAndPermissions">
+                        <li v-if="hasAccessToSettingsLabelsAndPermissions" class="d-flex align-items-center">
                             <router-link class="router-link" to="/settings-labels">{{ $t('settings.available_labels_title') }}</router-link>
                         </li>
-                        <li v-if="hasAccessToSettingsLabelsAndPermissions">
+                        <li v-if="hasAccessToSettingsLabelsAndPermissions" class="d-flex align-items-center">
                             <router-link class="router-link" to="/settings-permissions">{{ $t('settings.permissions') }}</router-link>
                         </li>
                     </ul>
@@ -325,7 +325,23 @@ export default {
 }
 
 .fix-router-link {
-    margin-left: -20px !important;
+    margin-left: 0px !important;
+    padding-left: 10px !important;
+}
+
+/* Ensure all menu items have consistent left padding */
+.nav-side-menu li {
+    padding-left: 10px !important;
+}
+
+.nav-side-menu li.d-flex {
+    padding-left: 10px !important;
+}
+
+/* Sub-menu router links should also have consistent styling */
+.sub-menu .router-link {
+    padding: 8px 12px;
+    margin: 0;
 }
 
 .echo-status {
@@ -414,7 +430,6 @@ export default {
     font-family: "Font Awesome\ 5 Free";
     font-weight: 900;
     content: "\f0d7";
-    display: inline-block;
     padding-left: 10px;
     padding-right: 10px;
     vertical-align: middle;
@@ -448,9 +463,12 @@ export default {
 .nav-side-menu ul .sub-menu li,
 .nav-side-menu li .sub-menu li {
     display: flex;
+    align-items: center;
     background-color: var(--nav-side-sub-bg-color);
     border: none;
-    line-height: 28px;
+    line-height: 1.5;
+    min-height: 40px;
+    max-height: 40px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     margin-left: 0px;
     border-radius: 6px;
@@ -478,8 +496,8 @@ export default {
 }
 
 .nav-side-menu li {
-    margin-left: -10px;
-    padding-left: 0px;
+    margin-left: 0px;
+    padding-left: 10px !important;
     border-left: 3px solid rgba(255, 255, 255, 0.1);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     transition: all 0.3s ease;

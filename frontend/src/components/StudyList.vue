@@ -1127,8 +1127,8 @@ export default {
                                             aria-hidden="true"></span>{{
                                                 $t('loading_most_recent_studies') }}
                                     </div>
-                                    <div v-else-if="!isSearching && isDisplayingMostRecentStudies" class="alert alert-secondary study-list-alert" role="alert">
-                                        <i class="bi bi-exclamation-triangle-fill alert-icon"></i>{{
+                                    <div v-else-if="!isSearching && isDisplayingMostRecentStudies" class="alert alert-info study-list-alert modern-badge" role="alert">
+                                        <i class="bi bi-info-circle alert-icon"></i>{{
                                                 $t('displaying_most_recent_studies') }}
                                     </div>
                                     <div v-else-if="!isSearching && notShowingAllResults" class="alert alert-danger study-list-alert"
@@ -1213,6 +1213,9 @@ button.form-control.study-list-filter {
   margin-bottom: var(--filter-margin);
   padding-top: var(--filter-padding);
   padding-bottom: var(--filter-padding);
+  height: 38px !important;
+  line-height: 1.5;
+  box-sizing: border-box;
 }
 
 
@@ -1226,9 +1229,15 @@ button.form-control.study-list-filter {
   text-align: left;
   padding-left: 4px;
   padding-right: 4px;
-  vertical-align: middle;
-  line-height: 1.2rem;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  vertical-align: middle !important;
+  line-height: 1.5;
   position: sticky;
+}
+
+.study-column-titles th {
+  vertical-align: middle !important;
 }
 
 /* .study-table> :not(:first-child) {
@@ -1289,6 +1298,107 @@ button.form-control.study-list-filter {
   vertical-align: middle;    
 }
 
+/* Date picker styling to match other inputs */
+.study-table-filters .dp__input_wrap {
+  height: 38px;
+  display: flex;
+  align-items: center;
+}
+
+.study-table-filters .dp__input {
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  padding: 10px 14px !important;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.study-table-filters .dp__input:focus {
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06);
+  outline: none;
+  background: white;
+}
+
+/* Date picker calendar z-index - must be very high to ensure visibility */
+.dp__menu {
+  z-index: 999999 !important;
+  position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  margin-top: 4px !important;
+}
+
+.dp__calendar_wrap {
+  z-index: 999999 !important;
+  position: relative !important;
+}
+
+.dp__calendar {
+  z-index: 999999 !important;
+}
+
+.dp__overlay {
+  z-index: 999998 !important;
+}
+
+.dp__menu_transitioned {
+  z-index: 999999 !important;
+  position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  margin-top: 4px !important;
+}
+
+.dp__outer_menu_wrap {
+  z-index: 999999 !important;
+  position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  margin-top: 4px !important;
+}
+
+/* Ensure datepicker container is positioned relative for absolute positioning */
+.study-table-filters th > div:has(.dp__input_wrap) {
+  position: relative !important;
+}
+
+.study-table-filters .dp__input_wrap {
+  position: relative !important;
+}
+
+/* Ensure no parent elements block the calendar */
+.study-table-filters {
+  position: relative;
+  z-index: 1;
+}
+
+.study-table-filters th {
+  position: relative;
+  z-index: auto;
+  overflow: visible !important;
+}
+
+.study-table-filters th > div {
+  position: relative;
+  z-index: auto;
+  overflow: visible !important;
+}
+
+/* Ensure date picker container doesn't affect height */
+.study-table-filters th > div:has(.dp__input_wrap) {
+  height: 38px;
+  display: flex;
+  align-items: center;
+}
+
 .study-table td {
   text-align: left;
   padding-left: 10px;
@@ -1298,6 +1408,23 @@ button.form-control.study-list-filter {
   margin-top: var(--filter-margin);
   margin-bottom: var(--filter-margin);
   padding-top: var(--filter-padding);
+}
+
+.modern-badge {
+  background: rgba(74, 144, 226, 0.1) !important;
+  border: 1px solid rgba(74, 144, 226, 0.2) !important;
+  border-radius: 8px !important;
+  color: #357abd !important;
+  padding: 10px 16px !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.modern-badge .alert-icon {
+  margin-right: 8px;
+  color: #4a90e2;
   padding-bottom: var(--filter-padding);
 }
 
@@ -1353,19 +1480,18 @@ button.form-control.study-list-filter {
 }
 
 .title-container {
-    /* position: relative; */
+    position: relative;
     width: 100%;
-    height: 2rem;
+    min-height: 100%;
+    display: flex;
+    align-items: center;
 }
 
 .title-text {
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: relative;
     padding-left: 2px;
     padding-right: 2px;
     width: 100%;
-    height: 100%;
     border-left: 1px;
     border-right: 0px;
     border-top: 0px;
@@ -1373,7 +1499,8 @@ button.form-control.study-list-filter {
     border-style: solid;
     border-color: var(--study-table-actions-bg-color);
     text-overflow: ellipsis;
-    overflow: hidden; 
+    overflow: hidden;
+    line-height: 1.5;
 }
 
 .is-orderable {

@@ -217,7 +217,17 @@ export default {
 
 <style>
 .study-button-group i {
-    font-size: 1.4rem;
+    font-size: 1rem;
+}
+
+.study-button-group .btn {
+    padding: 6px 12px;
+    font-size: 0.875rem;
+}
+
+.study-button-group .btn-group .btn {
+    padding: 6px 12px;
+    font-size: 0.875rem;
 }
 
 .info-text {
