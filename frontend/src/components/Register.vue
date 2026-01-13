@@ -118,18 +118,24 @@ export default {
       this.loading = true;
       
       try {
-        // For now, just redirect to login since there's no auth backend
-        // In the future, you can add actual registration here
-        // const response = await axios.post(`${orthancApiUrl}api/auth/register`, {
-        //   name: this.name,
-        //   email: this.email,
-        //   password: this.password
-        // });
+        const response = await axios.post(`${orthancApiUrl}api/auth/register`, {
+          name: this.name,
+          email: this.email,
+          password: this.password
+        });
         
-        this.success = 'Account created successfully! Redirecting...';
-        setTimeout(() => {
-          this.$router.push('/login');
-        }, 1500);
+        if (response.data.success) {
+          // Store token and user data
+          localStorage.setItem('auth-token', response.data.token);
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+          
+          this.success = response.data.message || 'Account created successfully! Please check your email to verify your account.';
+          
+          // Redirect to login after a delay
+          setTimeout(() => {
+            this.$router.push('/login');
+          }, 3000);
+        }
       } catch (error) {
         this.error = error.response?.data?.error || 'Registration failed. Please try again.';
       } finally {
@@ -143,6 +149,7 @@ export default {
 <style scoped>
 .login-page {
   min-height: 100vh;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -152,22 +159,15 @@ export default {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
   padding: 40px 20px;
-  position: relative;
-  overflow: hidden;
-}
-
-.login-page::before {
-  content: '';
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(180deg, rgba(74, 144, 226, 0.7) 0%, rgba(53, 122, 189, 0.7) 100%);
-  pointer-events: none;
+  overflow-y: auto;
 }
+
 
 .login-container {
   width: 100%;

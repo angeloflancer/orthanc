@@ -10,7 +10,23 @@
           </div>
           
           <form @submit.prevent="handleLogin" class="login-form">
-            <div v-if="error" class="alert alert-danger">{{ error }}</div>
+            <div v-if="error" class="alert alert-danger">
+              {{ error }}
+              <div v-if="unverifiedEmail && !resendSuccess" class="mt-2">
+                <button 
+                  type="button" 
+                  @click="handleResendVerification" 
+                  class="btn btn-link p-0 text-decoration-underline"
+                  :disabled="resendLoading"
+                  style="font-size: 0.9rem; color: #4a90e2;"
+                >
+                  {{ resendLoading ? 'Sending...' : 'Resend verification email' }}
+                </button>
+              </div>
+            </div>
+            <div v-if="resendSuccess" class="alert alert-success">
+              Verification email sent! Please check your inbox.
+            </div>
             
             <div class="form-group">
               <label for="email">Email Address</label>
@@ -38,7 +54,7 @@
               />
             </div>
             
-            <button type="submit" class="btn btn-primary btn-block" :disabled="loading">
+            <button type="submit" class="btn btn-primary btn-block" :disabled="loading || emailNotVerified">
               <span v-if="loading">Signing in...</span>
               <span v-else>Sign In</span>
             </button>
@@ -64,22 +80,81 @@ export default {
       email: '',
       password: '',
       error: '',
-      loading: false
+      loading: false,
+      resendLoading: false,
+      resendSuccess: false,
+      unverifiedEmail: null,
+      emailNotVerified: false
     };
   },
   methods: {
     async handleLogin() {
       this.error = '';
+      this.emailNotVerified = false;
       this.loading = true;
       
       try {
-        // For now, just redirect to home since there's no auth backend
-        // In the future, you can add actual authentication here
-        this.$router.push('/');
+        const response = await axios.post(`${orthancApiUrl}api/auth/login`, {
+          email: this.email,
+          password: this.password
+        });
+        
+        if (response.data.success) {
+          // Check if email is verified
+          if (!response.data.user.emailVerified) {
+            this.unverifiedEmail = this.email;
+            this.emailNotVerified = true;
+            this.error = 'Please verify your email before signing in. Check your inbox for the verification link.';
+            this.loading = false;
+            return;
+          }
+          
+          // Email is verified - proceed with login
+          this.emailNotVerified = false;
+          
+          // Store token and user data
+          localStorage.setItem('auth-token', response.data.token);
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+          
+          // Redirect to home
+          this.$router.push('/');
+        }
       } catch (error) {
         this.error = error.response?.data?.error || 'Login failed. Please try again.';
       } finally {
         this.loading = false;
+      }
+    },
+    async handleResendVerification() {
+      if (!this.unverifiedEmail || !this.password) {
+        this.error = 'Please enter your email and password, then try to sign in first.';
+        return;
+      }
+      
+      this.resendLoading = true;
+      this.resendSuccess = false;
+      this.error = '';
+      
+      try {
+        const response = await axios.post(`${orthancApiUrl}api/auth/resend-verification-public`, {
+          email: this.unverifiedEmail,
+          password: this.password
+        });
+        
+        if (response.data.success) {
+          this.resendSuccess = true;
+          this.error = '';
+          // Keep emailNotVerified true until user verifies their email
+        }
+      } catch (error) {
+        if (error.response?.status === 401) {
+          this.error = 'Invalid credentials. Please check your email and password.';
+        } else {
+          this.error = error.response?.data?.error || 'Failed to resend verification email. Please try again.';
+        }
+        this.resendSuccess = false;
+      } finally {
+        this.resendLoading = false;
       }
     }
   }
@@ -89,6 +164,7 @@ export default {
 <style scoped>
 .login-page {
   min-height: 100vh;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,10 +174,13 @@ export default {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
   padding: 40px 20px;
-  position: relative;
-  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
 }
 
 .login-page::before {
@@ -221,6 +300,15 @@ export default {
   padding: 12px 16px;
   background: #fee2e2;
   color: #dc2626;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+
+.alert-success {
+  padding: 12px 16px;
+  background: #d1fae5;
+  color: #059669;
   border-radius: 8px;
   margin-bottom: 24px;
   font-size: 14px;

@@ -9,9 +9,20 @@ import SideBar from './components/SideBar.vue'
 import NotFound from './components/NotFound.vue'
 import Login from './components/Login.vue'
 import Register from './components/Register.vue'
+import VerifyEmail from './components/VerifyEmail.vue'
 import { baseOe2Url } from "./globalConfigurations"
 
 console.log('Base URL for router: ', baseOe2Url);
+
+// Auth guard
+const requireAuth = (to, from, next) => {
+  const token = localStorage.getItem('auth-token');
+  if (!token) {
+    next('/login');
+  } else {
+    next();
+  }
+};
 
 export const router = createRouter({
   history: createWebHashHistory(baseOe2Url),
@@ -27,13 +38,19 @@ export const router = createRouter({
       name: 'register'
     },
     {
+      path: '/verify-email/:token',
+      component: VerifyEmail,
+      name: 'verify-email'
+    },
+    {
       path: '/',
       alias: '/index.html',
       components: {
         SideBarView: SideBar,
         ContentView: StudyList,
       },
-      name: 'home'
+      name: 'home',
+      beforeEnter: requireAuth
     },
     {
       path: '/filtered-studies',
@@ -41,7 +58,8 @@ export const router = createRouter({
         SideBarView: SideBar,
         ContentView: StudyList,
       },
-      name: 'local-studies-list'
+      name: 'local-studies-list',
+      beforeEnter: requireAuth
     },
     {
       path: '/worklists',
@@ -49,7 +67,8 @@ export const router = createRouter({
         SideBarView: SideBar,
         ContentView: Worklists,
       },
-      name: 'worklists'
+      name: 'worklists',
+      beforeEnter: requireAuth
     },
     {
       path: '/settings',
@@ -57,7 +76,8 @@ export const router = createRouter({
         SideBarView: SideBar,
         ContentView: Settings,
       },
-      name: 'settings'
+      name: 'settings',
+      beforeEnter: requireAuth
     },
     {
       path: '/settings-labels',
@@ -65,7 +85,8 @@ export const router = createRouter({
         SideBarView: SideBar,
         ContentView: SettingsLabels,
       },
-      name: 'settings-labels'
+      name: 'settings-labels',
+      beforeEnter: requireAuth
     },
     {
       path: '/settings-permissions',
@@ -73,7 +94,8 @@ export const router = createRouter({
         SideBarView: SideBar,
         ContentView: SettingsPermissions,
       },
-      name: 'settings-permissions'
+      name: 'settings-permissions',
+      beforeEnter: requireAuth
     },
     {
       path: '/audit-logs',
@@ -81,7 +103,8 @@ export const router = createRouter({
         SideBarView: SideBar,
         ContentView: AuditLogs,
       },
-      name: 'audit-logs'
+      name: 'audit-logs',
+      beforeEnter: requireAuth
     },
     {
       path: '/:pathMatch(.*)',
@@ -89,7 +112,8 @@ export const router = createRouter({
         SideBarView: SideBar,
         ContentView: NotFound,
       },
-      name: 'keycloak-path-match'
+      name: 'keycloak-path-match',
+      beforeEnter: requireAuth
     }
 
   ],
