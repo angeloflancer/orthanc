@@ -221,9 +221,11 @@ export default {
 }
 
 .upload-handler-drop-zone {
-    border-color: white;
-    border-style: dashed;
-    border-width: 4px;
+    margin: 10px 15px;
+    border-color: #ffffff7f;
+    border-style: solid;
+    border-width: 1px;
+    border-radius: 10px;
 }
 
 .upload-handler-drop-zone-disabled {

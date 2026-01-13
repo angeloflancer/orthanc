@@ -43,15 +43,25 @@
             
             <div class="form-group">
               <label for="password">Password</label>
-              <input
-                id="password"
-                v-model="password"
-                type="password"
-                class="form-control"
-                placeholder="Enter your password"
-                required
-                autocomplete="current-password"
-              />
+              <div class="password-input-wrapper">
+                <input
+                  id="password"
+                  v-model="password"
+                  :type="showPassword ? 'text' : 'password'"
+                  class="form-control"
+                  placeholder="Enter your password"
+                  required
+                  autocomplete="current-password"
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  @click="showPassword = !showPassword"
+                  :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                >
+                  <i :class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                </button>
+              </div>
             </div>
             
             <button type="submit" class="btn btn-primary btn-block" :disabled="loading || emailNotVerified">
@@ -84,7 +94,8 @@ export default {
       resendLoading: false,
       resendSuccess: false,
       unverifiedEmail: null,
-      emailNotVerified: false
+      emailNotVerified: false,
+      showPassword: false
     };
   },
   methods: {
@@ -352,5 +363,37 @@ export default {
 .dialog-enter-to, .dialog-leave-from {
   opacity: 1;
   transform: translateY(0) scale(1);
+}
+
+.password-input-wrapper {
+  position: relative;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.password-toggle:hover {
+  color: #4a90e2;
+}
+
+.password-toggle:focus {
+  outline: none;
+}
+
+.password-toggle i {
+  font-size: 18px;
 }
 </style>
