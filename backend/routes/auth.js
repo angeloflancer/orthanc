@@ -81,6 +81,22 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
+    // Check email verification requirement (read from env per request)
+    // Support both REQUIRE_VERIFY_EMAIL and REQUIRE_EMAIL_VERIFY for compatibility
+    const envValue = process.env.REQUIRE_VERIFY_EMAIL || process.env.REQUIRE_EMAIL_VERIFY;
+    console.log("EnValue", envValue)
+    const requireEmailVerify = envValue 
+      ? envValue.toString().trim().toLowerCase() === 'true'
+      : false; // Explicitly default to false
+    
+    if (requireEmailVerify && !user.emailVerified) {
+      return res.status(403).json({ 
+        error: 'Email verification required',
+        emailVerified: false,
+        requireEmailVerify: true
+      });
+    }
+    
     // Generate token
     const token = generateToken(user._id);
     
@@ -92,7 +108,8 @@ router.post('/login', async (req, res) => {
         email: user.email,
         name: user.name,
         emailVerified: user.emailVerified
-      }
+      },
+      requireEmailVerify
     });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -214,6 +231,100 @@ router.post('/resend-verification-public', async (req, res) => {
     res.json({
       success: true,
       message: 'Verification email sent. Please check your email.'
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update user profile
+router.put('/profile', protect, async (req, res) => {
+  try {
+    const { name, email } = req.body;
+    const user = await User.findById(req.user._id).select('+emailVerificationToken +emailVerificationTokenExpiry');
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    user.name = name || user.name;
+
+    if (email && email !== user.email) {
+      // Check if new email is already taken
+      const emailExists = await User.findOne({ email });
+      if (emailExists && emailExists._id.toString() !== user._id.toString()) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
+
+      user.email = email;
+      user.emailVerified = false; // Reset verification status
+      user.emailVerificationToken = crypto.randomBytes(32).toString('hex');
+      user.emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+      await sendVerificationEmail(user.email, user.name, user.emailVerificationToken);
+      await user.save();
+      return res.json({ 
+        success: true, 
+        message: 'Profile updated. New email requires verification.', 
+        user: { 
+          id: user._id, 
+          name: user.name, 
+          email: user.email, 
+          emailVerified: user.emailVerified 
+        } 
+      });
+    } else {
+      await user.save();
+      return res.json({ 
+        success: true, 
+        message: 'Profile updated successfully', 
+        user: { 
+          id: user._id, 
+          name: user.name, 
+          email: user.email, 
+          emailVerified: user.emailVerified 
+        } 
+      });
+    }
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ error: Object.values(error.errors)[0].message });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Change password
+router.put('/change-password', protect, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Please provide current password and new password' });
+    }
+    
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+    }
+    
+    const user = await User.findById(req.user._id).select('+password');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Verify current password
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    
+    // Update password
+    user.password = newPassword;
+    await user.save();
+    
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
     });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });

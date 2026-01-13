@@ -100,17 +100,8 @@ export default {
         });
         
         if (response.data.success) {
-          // Check if email is verified
-          if (!response.data.user.emailVerified) {
-            this.unverifiedEmail = this.email;
-            this.emailNotVerified = true;
-            this.error = 'Please verify your email before signing in. Check your inbox for the verification link.';
-            this.loading = false;
-            return;
-          }
-          
-          // Email is verified - proceed with login
-          this.emailNotVerified = false;
+          // Backend already checks REQUIRE_VERIFY_EMAIL setting
+          // If we get here, login is allowed (either email is verified or verification is not required)
           
           // Store token and user data
           localStorage.setItem('auth-token', response.data.token);
@@ -121,6 +112,15 @@ export default {
         }
       } catch (error) {
         this.error = error.response?.data?.error || 'Login failed. Please try again.';
+        
+        // If backend requires email verification and email is not verified, show resend option
+        if (error.response?.status === 403 && error.response?.data?.requireEmailVerify && !error.response?.data?.emailVerified) {
+          this.unverifiedEmail = this.email;
+          this.emailNotVerified = true;
+        } else {
+          this.emailNotVerified = false;
+          this.unverifiedEmail = null;
+        }
       } finally {
         this.loading = false;
       }

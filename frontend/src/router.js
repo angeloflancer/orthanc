@@ -1,9 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import Settings from './components/Settings.vue'
-import SettingsLabels from './components/SettingsLabels.vue'
-import SettingsPermissions from './components/SettingsPermissions.vue'
+import AccountSettings from './components/AccountSettings.vue'
 import Worklists from './components/Worklists.vue'
-import AuditLogs from './components/AuditLogs.vue'
 import StudyList from './components/StudyList.vue'
 import SideBar from './components/SideBar.vue'
 import NotFound from './components/NotFound.vue'
@@ -14,11 +12,21 @@ import { baseOe2Url } from "./globalConfigurations"
 
 console.log('Base URL for router: ', baseOe2Url);
 
-// Auth guard
+// Auth guard - redirect to login if not authenticated
 const requireAuth = (to, from, next) => {
   const token = localStorage.getItem('auth-token');
   if (!token) {
     next('/login');
+  } else {
+    next();
+  }
+};
+
+// Guest guard - redirect to dashboard if already authenticated
+const requireGuest = (to, from, next) => {
+  const token = localStorage.getItem('auth-token');
+  if (token) {
+    next('/'); // Redirect to dashboard/home
   } else {
     next();
   }
@@ -30,12 +38,14 @@ export const router = createRouter({
     {
       path: '/login',
       component: Login,
-      name: 'login'
+      name: 'login',
+      beforeEnter: requireGuest
     },
     {
       path: '/register',
       component: Register,
-      name: 'register'
+      name: 'register',
+      beforeEnter: requireGuest
     },
     {
       path: '/verify-email/:token',
@@ -80,30 +90,12 @@ export const router = createRouter({
       beforeEnter: requireAuth
     },
     {
-      path: '/settings-labels',
+      path: '/account-settings',
       components: {
         SideBarView: SideBar,
-        ContentView: SettingsLabels,
+        ContentView: AccountSettings,
       },
-      name: 'settings-labels',
-      beforeEnter: requireAuth
-    },
-    {
-      path: '/settings-permissions',
-      components: {
-        SideBarView: SideBar,
-        ContentView: SettingsPermissions,
-      },
-      name: 'settings-permissions',
-      beforeEnter: requireAuth
-    },
-    {
-      path: '/audit-logs',
-      components: {
-        SideBarView: SideBar,
-        ContentView: AuditLogs,
-      },
-      name: 'audit-logs',
+      name: 'account-settings',
       beforeEnter: requireAuth
     },
     {
