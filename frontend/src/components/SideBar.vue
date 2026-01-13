@@ -317,6 +317,11 @@ export default {
 .router-link {
     width: 100%;
     text-align: left;
+    transition: all 0.3s ease;
+    border-radius: 8px;
+    margin: 2px 8px;
+    padding: 10px 12px;
+    display: block;
 }
 
 .fix-router-link {
@@ -425,12 +430,14 @@ export default {
 .nav-side-menu li .active {
     border-left: 3px solid var(--nav-side-active-border-color);
     background-color: var(--nav-side-selected-bg-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .nav-side-menu ul .sub-menu li.active,
 .nav-side-menu li .sub-menu li.active {
     color: var(--nav-side-submenu-color);
     background-color: var(--nav-side-selected-bg-color);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 .nav-side-menu ul .sub-menu li.active a,
@@ -446,12 +453,17 @@ export default {
     line-height: 28px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     margin-left: 0px;
+    border-radius: 6px;
+    margin: 1px 16px;
+    padding: 8px 12px;
+    transition: all 0.3s ease;
 }
 
 .nav-side-menu ul .sub-menu li:hover,
 .nav-side-menu li .sub-menu li:hover {
     border-left: 3px solid var(--nav-side-active-border-color);
     background-color: var(--nav-side-selected-bg-color);
+    transform: translateX(4px);
 }
 
 .nav-side-menu ul .sub-menu li:before,
@@ -470,6 +482,7 @@ export default {
     padding-left: 0px;
     border-left: 3px solid rgba(255, 255, 255, 0.1);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
 }
 
 .nav-side-menu li a {
@@ -486,6 +499,7 @@ export default {
 .nav-side-menu li:hover {
     border-left: 3px solid var(--nav-side-active-border-color);
     background-color: var(--nav-side-selected-bg-color);
+    transform: translateX(4px);
 }
 
 .nav-side-menu .menu-list .menu-content {

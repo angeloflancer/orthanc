@@ -8,6 +8,7 @@ import "bootstrap-icons/font/bootstrap-icons.css"
 import "@fortawesome/fontawesome-free/css/all.min.css"
 import "./assets/css/layout.css"
 import "./assets/css/common.css"
+import "./assets/css/modern-styles.css"
 import store from "./store"
 import { router } from './router'
 import Keycloak from "keycloak-js"

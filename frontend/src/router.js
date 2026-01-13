@@ -7,6 +7,8 @@ import AuditLogs from './components/AuditLogs.vue'
 import StudyList from './components/StudyList.vue'
 import SideBar from './components/SideBar.vue'
 import NotFound from './components/NotFound.vue'
+import Login from './components/Login.vue'
+import Register from './components/Register.vue'
 import { baseOe2Url } from "./globalConfigurations"
 
 console.log('Base URL for router: ', baseOe2Url);
@@ -14,6 +16,16 @@ console.log('Base URL for router: ', baseOe2Url);
 export const router = createRouter({
   history: createWebHashHistory(baseOe2Url),
   routes: [
+    {
+      path: '/login',
+      component: Login,
+      name: 'login'
+    },
+    {
+      path: '/register',
+      component: Register,
+      name: 'register'
+    },
     {
       path: '/',
       alias: '/index.html',

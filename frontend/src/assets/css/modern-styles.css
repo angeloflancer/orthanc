@@ -1,0 +1,175 @@
+/* Modern table and button styles */
+
+/* Table styles */
+.study-table,
+.table {
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(229, 231, 235, 0.6);
+}
+
+.study-table thead,
+.table thead {
+    background: rgba(249, 250, 251, 0.85);
+}
+
+.study-table th,
+.table th {
+    border: none;
+    padding: 14px 16px;
+    font-weight: 600;
+    color: #374151;
+    transition: background-color 0.2s ease;
+}
+
+.study-table td,
+.table td {
+    border: none;
+    border-bottom: 1px solid rgba(229, 231, 235, 0.35);
+    padding: 14px 16px;
+    transition: background-color 0.2s ease;
+}
+
+.study-table tbody tr:hover,
+.table tbody tr:hover {
+    background-color: rgba(74, 144, 226, 0.03);
+}
+
+/* Form controls */
+.form-control,
+input.form-control,
+select.form-control {
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    padding: 10px 14px;
+    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.form-control:focus,
+input.form-control:focus,
+select.form-control:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06);
+    outline: none;
+    background: white;
+}
+
+/* Buttons */
+.btn {
+    border-radius: 9px;
+    padding: 9px 17px;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    border: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+    color: white;
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+}
+
+.btn-sm {
+    padding: 8px 14px;
+    font-size: 0.875rem;
+    border-radius: 8px;
+}
+
+/* Filter buttons */
+.filter-button,
+.study-list-filter {
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.filter-button:hover,
+.study-list-filter:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Study table filters */
+.study-table-filters {
+    background: rgba(249, 250, 251, 0.85) !important;
+    backdrop-filter: blur(10px);
+}
+
+.study-table-title {
+    background: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Study table actions */
+.study-table-actions {
+    background: rgba(249, 250, 251, 0.85) !important;
+    backdrop-filter: blur(10px);
+}
+
+/* Action buttons group */
+.btn-group .btn {
+    border-radius: 0;
+}
+
+.btn-group .btn:first-child {
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+}
+
+.btn-group .btn:last-child {
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+/* Card-like elements */
+.card,
+.job-card {
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: none;
+    transition: box-shadow 0.2s ease;
+}
+
+.card:hover,
+.job-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* Input groups */
+.input-group .form-control {
+    border-radius: 8px 0 0 8px;
+}
+
+.input-group .btn {
+    border-radius: 0 8px 8px 0;
+}
+
+.input-group.input-group-sm .form-control {
+    border-radius: 6px 0 0 6px;
+}
+
+.input-group.input-group-sm .btn {
+    border-radius: 0 6px 6px 0;
+}
