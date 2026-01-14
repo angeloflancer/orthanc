@@ -31,10 +31,10 @@ const proxyOptions = {
   pathRewrite: {},
   preserveHeaderKeyCase: true,
   onProxyReq: (proxyReq, req, res) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} -> ${TARGET_SERVICE}${req.originalUrl}`);
+    // console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} -> ${TARGET_SERVICE}${req.originalUrl}`);
   },
   onProxyRes: (proxyRes, req, res) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} <- ${proxyRes.statusCode}`);
+    // console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} <- ${proxyRes.statusCode}`);
   },
   onError: (err, req, res) => {
     console.error(`[${new Date().toISOString()}] Proxy error: ${err.message}`);

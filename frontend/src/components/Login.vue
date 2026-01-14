@@ -118,8 +118,27 @@ export default {
           localStorage.setItem('auth-token', response.data.token);
           localStorage.setItem('user', JSON.stringify(response.data.user));
           
-          // Redirect to home
-          this.$router.push('/');
+          // Check for URL parameters to preserve them when redirecting
+          const urlParams = new URLSearchParams(window.location.search);
+          const params = {};
+          
+          // Preserve common query parameters that might be used for study filtering
+          const validParams = ['StudyInstanceUID', 'PatientID', 'AccessionNumber', 'StudyDate', 
+                              'PatientName', 'StudyDescription', 'ModalitiesInStudy', 'labels', 
+                              'source-type', 'remote-source', 'order-by', 'labels-constraint'];
+          
+          for (const key of validParams) {
+            if (urlParams.has(key)) {
+              params[key] = urlParams.get(key);
+            }
+          }
+          
+          // Redirect to home with preserved parameters if any
+          if (Object.keys(params).length > 0) {
+            this.$router.push({ path: '/', query: params });
+          } else {
+            this.$router.push('/');
+          }
         }
       } catch (error) {
         this.error = error.response?.data?.error || 'Login failed. Please try again.';

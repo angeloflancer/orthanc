@@ -26,7 +26,27 @@ const requireAuth = (to, from, next) => {
 const requireGuest = (to, from, next) => {
   const token = localStorage.getItem('auth-token');
   if (token) {
-    next('/'); // Redirect to dashboard/home
+    // Preserve URL parameters when redirecting authenticated users
+    const urlParams = new URLSearchParams(window.location.search);
+    const params = {};
+    
+    // Preserve common query parameters that might be used for study filtering
+    const validParams = ['StudyInstanceUID', 'PatientID', 'AccessionNumber', 'StudyDate', 
+                        'PatientName', 'StudyDescription', 'ModalitiesInStudy', 'labels', 
+                        'source-type', 'remote-source', 'order-by', 'labels-constraint'];
+    
+    for (const key of validParams) {
+      if (urlParams.has(key)) {
+        params[key] = urlParams.get(key);
+      }
+    }
+    
+    // Redirect to dashboard/home with preserved parameters if any
+    if (Object.keys(params).length > 0) {
+      next({ path: '/', query: params });
+    } else {
+      next('/'); // Redirect to dashboard/home
+    }
   } else {
     next();
   }

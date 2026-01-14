@@ -185,7 +185,7 @@ export default {
             </div> -->
             <div class="menu-list">
                 <ul id="menu-content" class="menu-content collapse out">
-                    <li class="d-flex align-items-center fix-router-link">
+                    <li class="d-flex fix-router-link">
                         <router-link class="router-link" to="/">
                             <i class="fa fa-x-ray fa-lg menu-icon"></i>{{ $t('local_studies') }}
                             <span class="study-count ms-auto">{{ displayedStudyCount }} / {{ statistics.CountStudies
@@ -304,14 +304,15 @@ export default {
     text-align: left;
     transition: all 0.3s ease;
     border-radius: 8px;
-    margin: 2px 8px;
-    padding: 10px 12px;
+    margin: 2px 0px;
+    padding: 5px 0px;
+    padding-left: 0px;
     display: block;
 }
 
 .fix-router-link {
     margin-left: 0px !important;
-    padding-left: 10px !important;
+    padding-left: 0px !important;
 }
 
 /* Ensure all menu items have consistent left padding */
@@ -321,6 +322,12 @@ export default {
 
 .nav-side-menu li.d-flex {
     padding-left: 10px !important;
+}
+
+/* Fix first nav item icon to be closer to left */
+.nav-side-menu li.fix-router-link .router-link .menu-icon {
+    padding-left: 0px !important;
+    margin-left: 0px !important;
 }
 
 /* Sub-menu router links should also have consistent styling */
