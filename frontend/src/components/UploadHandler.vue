@@ -79,6 +79,26 @@ function readFileAsync(file) {
     })
 }
 
+// Check if file is a Word document
+function isWordFile(file) {
+    const fileName = file.name.toLowerCase();
+    const mimeType = file.type.toLowerCase();
+    return fileName.endsWith('.doc') || 
+           fileName.endsWith('.docx') ||
+           mimeType.includes('word') ||
+           mimeType.includes('msword') ||
+           mimeType.includes('officedocument.wordprocessingml');
+}
+
+// Check if file is a DICOM file
+function isDicomFile(file) {
+    const fileName = file.name.toLowerCase();
+    const mimeType = file.type.toLowerCase();
+    return fileName.endsWith('.dcm') ||
+           mimeType.includes('dicom') ||
+           mimeType === 'application/octet-stream' && !isWordFile(file);
+}
+
 export default {
     props: ["showStudyDetails", "uploadDisabled", "uploadDisabledMessage", "singleUse", "disableCloseReport"],
     emits: ["uploadCompleted"],
@@ -86,20 +106,26 @@ export default {
         return {
             uploadCounter: 0,
             lastUploadReports: {},
-            disabledAfterUpload: false
+            disabledAfterUpload: false,
+            // Word file upload fields
+            wordPatientId: '',
+            wordPatientName: '',
+            wordFilesToUpload: [],
+            // Collapsible states
+            dicomExpanded: false,
+            documentExpanded: false
         };
     },
     mounted() {
         uppie(document.querySelector("#filesUpload"), this.uppieUploadHandler);
         uppie(document.querySelector("#foldersUpload"), this.uppieUploadHandler);
+        uppie(document.querySelector("#wordFilesUpload"), this.uppieWordUploadHandler);
     },
     methods: {
         onDrop(ev) {
-            // console.log("on drop", ev);
             ev.preventDefault();
-
             getAllFiles(ev.dataTransfer.items).then((files) => {
-                this.uploadFiles(files);
+                this.handleFiles(files);
             });
         },
         onDragOver(event) {
@@ -120,7 +146,50 @@ export default {
                 }
             }
         },
-        async uploadFiles(files) {
+        // Separate files into DICOM and Word files
+        separateFiles(files) {
+            const dicomFiles = [];
+            const wordFiles = [];
+            
+            for (let file of files) {
+                if (isWordFile(file)) {
+                    wordFiles.push(file);
+                } else if (isDicomFile(file) || file.name === "DICOMDIR") {
+                    dicomFiles.push(file);
+                } else {
+                    // Try to detect by file extension or default to DICOM
+                    const fileName = file.name.toLowerCase();
+                    if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
+                        wordFiles.push(file);
+                    } else {
+                        dicomFiles.push(file);
+                    }
+                }
+            }
+            
+            return { dicomFiles, wordFiles };
+        },
+        async handleFiles(files) {
+            const { dicomFiles, wordFiles } = this.separateFiles(files);
+            
+            // Upload DICOM files
+            if (dicomFiles.length > 0) {
+                await this.uploadDicomFiles(dicomFiles);
+            }
+            
+            // Handle Word files
+            if (wordFiles.length > 0) {
+                this.wordFilesToUpload = wordFiles;
+                this.documentExpanded = true;
+            }
+        },
+        toggleDicomSection() {
+            this.dicomExpanded = !this.dicomExpanded;
+        },
+        toggleDocumentSection() {
+            this.documentExpanded = !this.documentExpanded;
+        },
+        async uploadDicomFiles(files) {
             let uploadId = this.uploadCounter++;
             if (this.singleUse) {
                 this.disabledAfterUpload = true;
@@ -133,9 +202,10 @@ export default {
                 failedFilesCount: 0,
                 skippedFilesCount: 0,
                 uploadedStudiesIds: new Set(),
-                uploadedStudies: {},  // studies as returned by tools/find
+                uploadedStudies: {},
                 errorMessages: {}
             };
+            
             for (let file of files) {
                 let filename = file.webkitRelativePath || file.name;
                 if (file.name == "DICOMDIR") {
@@ -148,8 +218,7 @@ export default {
                 try {
                     const uploadResponse = await api.uploadFile(fileContent);
 
-                    if (Array.isArray(uploadResponse)) { // we have uploaded a zip
-
+                    if (Array.isArray(uploadResponse)) {
                         if (uploadResponse.length > 0) {
                             this.lastUploadReports[uploadId].successFilesCount++;
                             for (let uploadFileResponse of uploadResponse) {
@@ -165,10 +234,10 @@ export default {
                     }
                 }
                 catch (error) {
-                    console.error('uploadFiles', error);
-                    let errorMessage = "error " + error.response.status;
-                    if (error.response.status >= 400 && error.response.status < 500) {
-                        errorMessage = error.response.data.Message;
+                    console.error('uploadDicomFiles', error);
+                    let errorMessage = "error " + error.response?.status;
+                    if (error.response?.status >= 400 && error.response?.status < 500) {
+                        errorMessage = error.response.data?.Message || errorMessage;
                     }
                     this.lastUploadReports[uploadId].failedFilesCount++;
                     this.lastUploadReports[uploadId].errorMessages[filename] = errorMessage;
@@ -177,13 +246,105 @@ export default {
 
             this.$emit("uploadCompleted", this.lastUploadReports[uploadId].uploadedStudiesIds);
         },
+        async uploadWordFiles() {
+            if (!this.wordPatientId.trim() || !this.wordPatientName.trim()) {
+                this.messageBus.emit('show-toast', 'Please enter Patient ID and Patient Name');
+                return;
+            }
+            
+            if (this.wordFilesToUpload.length === 0) {
+                this.messageBus.emit('show-toast', 'No Word files to upload');
+                return;
+            }
+            
+            let uploadId = this.uploadCounter++;
+            if (this.singleUse) {
+                this.disabledAfterUpload = true;
+            }
+
+            this.lastUploadReports[uploadId] = {
+                id: uploadId,
+                filesCount: this.wordFilesToUpload.length,
+                successFilesCount: 0,
+                failedFilesCount: 0,
+                skippedFilesCount: 0,
+                uploadedStudiesIds: new Set(),
+                uploadedStudies: {},
+                errorMessages: {},
+                isWordUpload: true
+            };
+            
+            for (let file of this.wordFilesToUpload) {
+                let filename = file.webkitRelativePath || file.name;
+                try {
+                    const uploadResponse = await api.uploadWordFile(file, this.wordPatientId.trim(), this.wordPatientName.trim());
+                    
+                    if (uploadResponse.success) {
+                        this.lastUploadReports[uploadId].successFilesCount++;
+                        this.lastUploadReports[uploadId].uploadedStudies[uploadResponse.wordFile.id] = {
+                            type: 'word',
+                            ...uploadResponse.wordFile
+                        };
+                    } else {
+                        this.lastUploadReports[uploadId].failedFilesCount++;
+                        this.lastUploadReports[uploadId].errorMessages[filename] = uploadResponse.error || "Upload failed";
+                    }
+                } catch (error) {
+                    console.error('uploadWordFiles', error);
+                    let errorMessage = "error " + (error.response?.status || 'unknown');
+                    if (error.response?.status >= 400 && error.response?.status < 500) {
+                        errorMessage = error.response.data?.error || errorMessage;
+                    }
+                    this.lastUploadReports[uploadId].failedFilesCount++;
+                    this.lastUploadReports[uploadId].errorMessages[filename] = errorMessage;
+                }
+            }
+            
+            // Reset form
+            this.wordFilesToUpload = [];
+            this.wordPatientId = '';
+            this.wordPatientName = '';
+            this.documentExpanded = false;
+            
+            // Emit event to refresh Word file list if needed
+            this.$emit("uploadCompleted", new Set());
+        },
+        cancelWordUpload() {
+            this.wordFilesToUpload = [];
+            this.wordPatientId = '';
+            this.wordPatientName = '';
+            this.documentExpanded = false;
+        },
         async uppieUploadHandler(event, formData, files) {
-            await this.uploadFiles(event.target.files);
+            const fileList = Array.from(event.target.files);
+            const { dicomFiles } = this.separateFiles(fileList);
+            if (dicomFiles.length > 0) {
+                await this.uploadDicomFiles(dicomFiles);
+            }
+            
+            const { wordFiles } = this.separateFiles(fileList);
+            if (wordFiles.length > 0) {
+                this.wordFilesToUpload = wordFiles;
+                this.documentExpanded = true;
+            }
 
             // reset input for next upload
             if (!this.singleUse) {
                 document.getElementById('filesUpload').value = null;
                 document.getElementById('foldersUpload').value = null;
+            }
+        },
+        async uppieWordUploadHandler(event, formData, files) {
+            const fileList = Array.from(event.target.files);
+            const { wordFiles } = this.separateFiles(fileList);
+            if (wordFiles.length > 0) {
+                this.wordFilesToUpload = wordFiles;
+                this.documentExpanded = true;
+            }
+
+            // reset input for next upload
+            if (!this.singleUse) {
+                document.getElementById('wordFilesUpload').value = null;
             }
         }
     },
@@ -194,18 +355,66 @@ export default {
 <template>
     <div>
         <div v-if="!disabledAfterUpload" class="upload-handler-drop-zone" :class="{'upload-handler-drop-zone-disabled': uploadDisabled}"  @drop="this.onDrop" @dragover="this.onDragOver" :disabled="uploadDisabled">
-            <div v-if="uploadDisabled" class="mb-3">{{ uploadDisabledMessage }}</div>
-            <div v-if="!uploadDisabled" class="mb-3">{{ $t('drop_files') }}</div>
-            <div class="mb-3">
-                <label class="btn btn-primary btn-file" :class="{'disabled': uploadDisabled}" >
-                    {{ $t('select_folder') }} <input :disabled="uploadDisabled" type="file" style="display: none;" id="foldersUpload" required
-                        multiple directory webkitdirectory allowdirs>
-                </label>
+            <div v-if="uploadDisabled" class="upload-disabled-message mb-3">{{ uploadDisabledMessage }}</div>
+            <div v-if="!uploadDisabled" class="upload-drag-text mb-3">Drag files here or</div>
+            
+            <!-- DICOM Upload Section -->
+            <div class="upload-section-item">
+                <div class="upload-section-header" @click="toggleDicomSection">
+                    <span class="upload-section-title">Upload DICOM</span>
+                    <i :class="dicomExpanded ? 'fa fa-chevron-up' : 'fa fa-chevron-down'" class="upload-chevron"></i>
+                </div>
+                <div class="upload-section-content" :class="{'expanded': dicomExpanded}">
+                    <div class="upload-buttons">
+                        <label class="upload-btn" :class="{'disabled': uploadDisabled}">
+                            <input :disabled="uploadDisabled" type="file" style="display: none;" id="foldersUpload" required
+                                multiple directory webkitdirectory allowdirs>
+                            <span>Select Folder</span>
+                        </label>
+                        <label class="upload-btn" :class="{'disabled': uploadDisabled}">
+                            <input :disabled="uploadDisabled" type="file" style="display: none;" id="filesUpload" required multiple>
+                            <span>Select Files</span>
+                        </label>
+                    </div>
+                </div>
             </div>
-            <div class="mb-3">
-                <label class="btn btn-primary btn-file" :class="{'disabled': uploadDisabled}">
-                    {{ $t('select_files') }} <input :disabled="uploadDisabled" type="file" style="display: none;" id="filesUpload" required multiple>
-                </label>
+            
+            <!-- Document Upload Section -->
+            <div class="upload-section-item">
+                <div class="upload-section-divider"></div>
+                <div class="upload-section-header" @click="toggleDocumentSection">
+                    <span class="upload-section-title">Upload Document</span>
+                    <i :class="documentExpanded ? 'fa fa-chevron-up' : 'fa fa-chevron-down'" class="upload-chevron"></i>
+                </div>
+                <div class="upload-section-content" :class="{'expanded': documentExpanded}">
+                    <div v-if="wordFilesToUpload.length > 0" class="word-upload-form">
+                        <div class="form-row">
+                            <label class="form-label">Patient ID</label>
+                            <input type="text" class="form-control" v-model="wordPatientId" placeholder="Patient ID" required>
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label">Patient Name</label>
+                            <input type="text" class="form-control" v-model="wordPatientName" placeholder="Patient Name" required>
+                        </div>
+                        <div class="form-row">
+                            <small class="text-muted">{{ wordFilesToUpload.length }} file(s) selected: {{ wordFilesToUpload.map(f => f.name).join(', ') }}</small>
+                        </div>
+                        <div class="form-actions">
+                            <button class="upload-btn" @click="uploadWordFiles" :disabled="!wordPatientId.trim() || !wordPatientName.trim()">
+                                Upload
+                            </button>
+                            <button class="upload-btn upload-btn-secondary" @click="cancelWordUpload">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                    <div v-else class="upload-buttons">
+                        <label class="upload-btn" :class="{'disabled': uploadDisabled}">
+                            <input :disabled="uploadDisabled" type="file" style="display: none;" id="wordFilesUpload" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple>
+                            <span>Select Document Files</span>
+                        </label>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="upload-report-list">
@@ -226,12 +435,147 @@ export default {
     border-style: solid;
     border-width: 1px;
     border-radius: 10px;
+    background: linear-gradient(180deg, var(--nav-side-bg-color-gradient-start) 0%, var(--nav-side-bg-color-gradient-end) 100%);
+    color: var(--nav-side-color, #ffffff);
+    padding: 15px;
 }
 
 .upload-handler-drop-zone-disabled {
-    opacity: 90;
+    opacity: 0.6;
     border-color: #ff0000d2;
     cursor: not-allowed;
 }
 
+.upload-disabled-message {
+    text-align: center;
+    color: var(--nav-side-color, #ffffff);
+}
+
+.upload-drag-text {
+    text-align: center;
+    color: var(--nav-side-color, #ffffff);
+    font-size: 14px;
+}
+
+.upload-section-item {
+    margin: 10px 0;
+}
+
+.upload-section-divider {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.3);
+    margin: 10px 0;
+}
+
+.upload-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 8px 0;
+    user-select: none;
+}
+
+.upload-section-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--nav-side-color, #ffffff);
+}
+
+.upload-chevron {
+    font-size: 12px;
+    color: var(--nav-side-color, #ffffff);
+    opacity: 0.7;
+    transition: transform 0.3s ease;
+}
+
+.upload-section-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+}
+
+.upload-section-content.expanded {
+    max-height: 500px;
+    transition: max-height 0.3s ease-in;
+}
+
+.upload-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 0;
+}
+
+.upload-btn {
+    background-color: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: var(--nav-side-color, #ffffff);
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    display: inline-block;
+}
+
+.upload-btn:hover:not(.disabled) {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.upload-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.upload-btn-secondary {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.word-upload-form {
+    padding: 15px 0;
+}
+
+.form-row {
+    margin-bottom: 12px;
+}
+
+.form-label {
+    display: block;
+    color: var(--nav-side-color, #ffffff);
+    font-size: 13px;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.form-control {
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #333;
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+.form-control:focus {
+    background-color: #fff;
+    border-color: rgba(255, 255, 255, 0.5);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.text-muted {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+}
 </style>

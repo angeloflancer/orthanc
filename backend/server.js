@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
+const wordFileRoutes = require('./routes/wordFiles');
 
 const app = express();
 const PORT = process.env.PORT || 5830;
@@ -25,6 +26,11 @@ app.use(cors({
 app.use('/api/auth', express.json());
 app.use('/api/auth', express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
+
+// Word file routes (our own API - don't proxy)
+app.use('/api/wordfiles', express.json());
+app.use('/api/wordfiles', express.urlencoded({ extended: true }));
+app.use('/api/wordfiles', wordFileRoutes);
 
 // Proxy middleware configuration for Orthanc service
 const proxyOptions = {
@@ -150,10 +156,10 @@ const proxyOptions = {
 const proxy = createProxyMiddleware(proxyOptions);
 
 // Proxy all other routes to Orthanc service (conditionally - only for Orthanc API routes)
-// Routes that start with /api/ (except /api/auth) and other Orthanc routes will be proxied
+// Routes that start with /api/ (except /api/auth and /api/wordfiles) and other Orthanc routes will be proxied
 app.use((req, res, next) => {
-  // Don't proxy authentication routes
-  if (req.path.startsWith('/api/auth')) {
+  // Don't proxy authentication routes or word file routes
+  if (req.path.startsWith('/api/auth') || req.path.startsWith('/api/wordfiles')) {
     return next();
   }
   

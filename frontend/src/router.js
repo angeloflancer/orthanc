@@ -1,8 +1,9 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import Settings from './components/Settings.vue'
 import AccountSettings from './components/AccountSettings.vue'
 import Worklists from './components/Worklists.vue'
 import StudyList from './components/StudyList.vue'
+import WordFileList from './components/WordFileList.vue'
 import SideBar from './components/SideBar.vue'
 import NotFound from './components/NotFound.vue'
 import Login from './components/Login.vue'
@@ -53,7 +54,7 @@ const requireGuest = (to, from, next) => {
 };
 
 export const router = createRouter({
-  history: createWebHashHistory(baseOe2Url),
+  history: createWebHistory(baseOe2Url),
   routes: [
     {
       path: '/login',
@@ -89,6 +90,15 @@ export const router = createRouter({
         ContentView: StudyList,
       },
       name: 'local-studies-list',
+      beforeEnter: requireAuth
+    },
+    {
+      path: '/word-files',
+      components: {
+        SideBarView: SideBar,
+        ContentView: WordFileList,
+      },
+      name: 'word-files-list',
       beforeEnter: requireAuth
     },
     {

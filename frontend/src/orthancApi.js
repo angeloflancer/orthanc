@@ -368,6 +368,54 @@ export default {
     async uploadFile(filecontent) {
         return (await axios.post(orthancApiUrl + "instances", filecontent)).data;
     },
+    async uploadWordFile(file, patientId, patientName) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('patientId', patientId);
+        formData.append('patientName', patientName);
+        
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        
+        return (await axios.post(orthancApiUrl + "api/wordfiles/upload", formData, config)).data;
+    },
+    async getWordFiles() {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.get(orthancApiUrl + "api/wordfiles", config)).data;
+    },
+    async deleteWordFile(id) {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.delete(orthancApiUrl + "api/wordfiles/" + id, config)).data;
+    },
+    async downloadWordFile(id) {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            responseType: 'blob'
+        };
+        return (await axios.get(orthancApiUrl + "api/wordfiles/" + id + "/download", config));
+    },
+    getWordFileDownloadUrl(id) {
+        const token = localStorage.getItem('auth-token');
+        return `${orthancApiUrl}api/wordfiles/${id}/download`;
+    },
     async createDicom(parentId, content, tags) {
         return (await axios.post(orthancApiUrl + "tools/create-dicom", {
             "Parent": parentId,
