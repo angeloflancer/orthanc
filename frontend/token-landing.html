@@ -2,9 +2,57 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" />
+    <script>
+      // Set favicon IMMEDIATELY before anything else loads
+      (function() {
+        const link = document.createElement('link');
+        link.rel = 'icon';
+        link.type = 'image/png';
+        link.href = '/favicon.ico?v=4';
+        document.head.appendChild(link);
+        
+        // Also set logo.png as backup
+        const logoLink = document.createElement('link');
+        logoLink.rel = 'icon';
+        logoLink.type = 'image/png';
+        logoLink.href = '/logo.png?v=4';
+        document.head.appendChild(logoLink);
+      })();
+    </script>
+    <link rel="icon" type="image/png" href="/favicon.ico?v=4" />
+    <link rel="icon" type="image/png" href="/logo.png?v=4" />
+    <link rel="shortcut icon" type="image/png" href="/favicon.ico?v=4" />
+    <link rel="apple-touch-icon" href="/logo.png?v=4" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OE2 Token landing</title>
+    <title>EMEDX</title>
+    <script>
+      // Prevent any code from changing the favicon
+      (function() {
+        const observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+              if (node.nodeType === 1 && node.tagName && node.tagName.toLowerCase() === 'link') {
+                const rel = node.getAttribute('rel');
+                const href = node.getAttribute('href');
+                if (rel && (rel === 'icon' || rel === 'shortcut icon' || rel === 'apple-touch-icon')) {
+                  if (!href || (!href.includes('/logo.png') && !href.includes('/favicon.ico'))) {
+                    console.log('Blocked favicon link addition:', href);
+                    node.remove();
+                  }
+                }
+              }
+            });
+          });
+        });
+        if (document.head) {
+          observer.observe(document.head, { childList: true, subtree: true });
+        } else {
+          document.addEventListener('DOMContentLoaded', function() {
+            observer.observe(document.head, { childList: true, subtree: true });
+          });
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="app-landing"></div>

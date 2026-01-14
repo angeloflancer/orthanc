@@ -2,9 +2,110 @@
 <html lang="en" data-bs-theme="light"><!-- don't change !!! data-bs-theme is changed dynamically in the C++ code when the index.html file is loaded or when the custom css is loaded for dev setups-->
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" />
+    <script>
+      // Set favicon IMMEDIATELY before anything else loads
+      (function() {
+        const link = document.createElement('link');
+        link.rel = 'icon';
+        link.type = 'image/png';
+        link.href = '/favicon.ico?v=4';
+        document.head.appendChild(link);
+        
+        // Also set shortcut icon
+        const shortcutLink = document.createElement('link');
+        shortcutLink.rel = 'shortcut icon';
+        shortcutLink.type = 'image/png';
+        shortcutLink.href = '/favicon.ico?v=4';
+        document.head.appendChild(shortcutLink);
+        
+        // Also set logo.png as backup
+        const logoLink = document.createElement('link');
+        logoLink.rel = 'icon';
+        logoLink.type = 'image/png';
+        logoLink.href = '/logo.png?v=4';
+        document.head.appendChild(logoLink);
+      })();
+    </script>
+    <link rel="icon" type="image/png" href="/favicon.ico?v=4" />
+    <link rel="icon" type="image/png" href="/logo.png?v=4" />
+    <link rel="shortcut icon" type="image/png" href="/favicon.ico?v=4" />
+    <link rel="apple-touch-icon" href="/logo.png?v=4" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>...</title>
+    <title>EMEDX</title>
+    <script>
+      // Prevent any code from changing the favicon
+      (function() {
+        const originalCreateElement = document.createElement;
+        const originalSetAttribute = Element.prototype.setAttribute;
+        const originalAppendChild = Node.prototype.appendChild;
+        const originalInsertBefore = Node.prototype.insertBefore;
+        const originalReplaceChild = Node.prototype.replaceChild;
+        
+        // Override createElement to prevent creating favicon links
+        document.createElement = function(tagName) {
+          const element = originalCreateElement.call(document, tagName);
+          if (tagName.toLowerCase() === 'link') {
+            const originalSetAttributeElement = element.setAttribute;
+            element.setAttribute = function(name, value) {
+              if (name && name.toLowerCase() === 'rel' && 
+                  (value === 'icon' || value === 'shortcut icon' || value === 'apple-touch-icon')) {
+                // Allow our favicon links, but prevent others
+                const href = element.getAttribute('href');
+                if (!href || (!href.includes('/logo.png') && !href.includes('/favicon.ico'))) {
+                  console.log('Blocked favicon change attempt:', value, href);
+                  return; // Block the change
+                }
+              }
+              return originalSetAttributeElement.call(this, name, value);
+            };
+          }
+          return element;
+        };
+        
+        // Override setAttribute to prevent changing existing favicon links
+        Element.prototype.setAttribute = function(name, value) {
+          if (this.tagName && this.tagName.toLowerCase() === 'link') {
+            const rel = this.getAttribute('rel');
+            if (name && name.toLowerCase() === 'href' && 
+                (rel === 'icon' || rel === 'shortcut icon' || rel === 'apple-touch-icon')) {
+              // Only allow our favicon URLs
+              if (!value || (!value.includes('/logo.png') && !value.includes('/favicon.ico'))) {
+                console.log('Blocked favicon href change attempt:', value);
+                return; // Block the change
+              }
+            }
+          }
+          return originalSetAttribute.call(this, name, value);
+        };
+        
+        // Monitor for any favicon link additions
+        const observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+              if (node.nodeType === 1 && node.tagName && node.tagName.toLowerCase() === 'link') {
+                const rel = node.getAttribute('rel');
+                const href = node.getAttribute('href');
+                if (rel && (rel === 'icon' || rel === 'shortcut icon' || rel === 'apple-touch-icon')) {
+                  if (!href || (!href.includes('/logo.png') && !href.includes('/favicon.ico'))) {
+                    console.log('Blocked favicon link addition:', href);
+                    node.remove(); // Remove unauthorized favicon links
+                  }
+                }
+              }
+            });
+          });
+        });
+        
+        // Start observing when DOM is ready
+        if (document.head) {
+          observer.observe(document.head, { childList: true, subtree: true });
+        } else {
+          document.addEventListener('DOMContentLoaded', function() {
+            observer.observe(document.head, { childList: true, subtree: true });
+          });
+        }
+      })();
+    </script>
     <script>
       // Custom bit of code to redirect to /app/ if the uri is /app
       // The reason for this is that the path to assets is relative

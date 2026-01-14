@@ -1,7 +1,9 @@
 require('dotenv').config();
 const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 
@@ -30,12 +32,109 @@ const proxyOptions = {
   changeOrigin: true,
   pathRewrite: {},
   preserveHeaderKeyCase: true,
+  selfHandleResponse: true, // Handle response manually to intercept HTML
   onProxyReq: (proxyReq, req, res) => {
     // console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} -> ${TARGET_SERVICE}${req.originalUrl}`);
   },
-  onProxyRes: (proxyRes, req, res) => {
+  onProxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
     // console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} <- ${proxyRes.statusCode}`);
-  },
+    
+    // Check if response is HTML and if URL matches stone-webviewer pattern for optimization
+    const contentType = proxyRes.headers['content-type'] || '';
+    const isHtml = contentType.includes('text/html');
+    const isStoneViewer = req.originalUrl.startsWith('/stone-webviewer/');
+    
+    // Only process HTML responses (with optimization for stone-webviewer)
+    if (isHtml || isStoneViewer) {
+      // Double-check content type if URL suggests HTML but content-type doesn't
+      if (!isHtml && isStoneViewer) {
+        // Try to detect HTML by checking first bytes
+        const preview = responseBuffer.toString('utf8', 0, Math.min(100, responseBuffer.length));
+        if (!preview.trim().startsWith('<')) {
+          // Doesn't look like HTML, return original
+          return responseBuffer;
+        }
+      }
+      
+      console.log(`\n========== HTML Response Detected ==========`);
+      console.log(`Method: ${req.method}`);
+      console.log(`URL: ${req.originalUrl}`);
+      console.log(`Status Code: ${proxyRes.statusCode}`);
+      
+      // Convert buffer to string
+      let modifiedHtml = responseBuffer.toString('utf8');
+      
+      // Replace logo and product info
+      const assetsDir = path.join(__dirname, 'assets');
+      const logoPath = path.join(assetsDir, 'emedx-logo.png');
+      const faviconLogoPath = path.join(assetsDir, 'logo.png');
+      let logoDataUrl = null;
+      let faviconDataUrl = null;
+      
+      // Read logo file once if it exists
+      if (fs.existsSync(logoPath)) {
+        const logoBuffer = fs.readFileSync(logoPath);
+        const logoBase64 = logoBuffer.toString('base64');
+        logoDataUrl = `data:image/png;base64,${logoBase64}`;
+        console.log('Logo file loaded');
+      } else {
+        console.warn(`Logo file not found at ${logoPath}`);
+      }
+      
+      // Read favicon logo file for stone viewer
+      if (fs.existsSync(faviconLogoPath)) {
+        const faviconBuffer = fs.readFileSync(faviconLogoPath);
+        const faviconBase64 = faviconBuffer.toString('base64');
+        faviconDataUrl = `data:image/png;base64,${faviconBase64}`;
+        console.log('Favicon logo file loaded');
+      } else {
+        console.warn(`Favicon logo file not found at ${faviconLogoPath}`);
+      }
+      
+      // Replace favicon links (for stone viewer)
+      if (faviconDataUrl && isStoneViewer) {
+        modifiedHtml = modifiedHtml.replace(/<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*>/gi, `<link rel="icon" href="${faviconDataUrl}" />`);
+        modifiedHtml = modifiedHtml.replace(/<link[^>]*href=["'][^"']*favicon[^"']*["'][^>]*rel=["'](?:shortcut )?icon["'][^>]*>/gi, `<link rel="icon" href="${faviconDataUrl}" />`);
+        console.log('Favicon links replaced for stone viewer');
+      }
+      
+      // Replace title tags - "EMEDX Viewer" for stone viewer, "EMEDX" for others
+      const titleText = isStoneViewer ? 'EMEDX Viewer' : 'EMEDX';
+      modifiedHtml = modifiedHtml.replace(/<title>([^<]*)<\/title>/gi, `<title>${titleText}</title>`);
+      modifiedHtml = modifiedHtml.replace(/<title\s+[^>]*>([^<]*)<\/title>/gi, `<title>${titleText}</title>`);
+      console.log(`Title tags replaced with "${titleText}"`);
+      
+      // Replace Orthanc logo images with custom logo
+      if (logoDataUrl) {
+        modifiedHtml = modifiedHtml.replace(/src="img\/orthanc\.png"/g, `src="${logoDataUrl}"`);
+        modifiedHtml = modifiedHtml.replace(/src='img\/orthanc\.png'/g, `src='${logoDataUrl}'`);
+        console.log('Logo images replaced');
+      }
+      
+      // Replace product info text (Orthanc version info, product names, etc.)
+      modifiedHtml = modifiedHtml.replace(/Orthanc:?\s*{{[^}]*orthancSystem\.Version[^}]*}}/g, 'EMEDX');
+      modifiedHtml = modifiedHtml.replace(/Orthanc:?\s*\d+\.\d+\.\d+/g, 'EMEDX');
+      modifiedHtml = modifiedHtml.replace(/Orthanc\s*Web\s*Viewer/gi, 'EMEDX');
+      modifiedHtml = modifiedHtml.replace(/orthanc-system/gi, 'emedx-system');
+      console.log('Product info text replaced');
+      
+      // Replace product info images (any Orthanc branding images)
+      if (logoDataUrl) {
+        modifiedHtml = modifiedHtml.replace(/src="[^"]*orthanc[^"]*\.(png|jpg|jpeg|svg)"/gi, `src="${logoDataUrl}"`);
+        modifiedHtml = modifiedHtml.replace(/src='[^']*orthanc[^']*\.(png|jpg|jpeg|svg)'/gi, `src='${logoDataUrl}'`);
+        console.log('Product info images replaced');
+      }
+      
+      console.log(`HTML modified and sent to browser`);
+      console.log(`=====================================================\n`);
+      
+      // Return modified HTML
+      return modifiedHtml;
+    }
+    
+    // For non-HTML responses, return original buffer
+    return responseBuffer;
+  }),
   onError: (err, req, res) => {
     console.error(`[${new Date().toISOString()}] Proxy error: ${err.message}`);
     if (!res.headersSent) {
