@@ -4,14 +4,21 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const WordFile = require('../models/WordFile');
+const Patient = require('../models/Patient');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
 
+// Get upload directory from environment variable or use default
+const uploadsDir = process.env.WORD_FILES_UPLOAD_PATH 
+  ? path.resolve(process.env.WORD_FILES_UPLOAD_PATH)
+  : path.join(__dirname, '../uploads/wordfiles');
+
 // Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, '../uploads/wordfiles');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+
+console.log('Word files upload directory:', uploadsDir);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -75,6 +82,24 @@ router.post('/upload', protect, upload.single('file'), async (req, res) => {
       uploadedBy: req.user._id,
       uploadedByName: user.name
     });
+    
+    // Update or create patient record
+    let patient = await Patient.findOne({ patientId: patientId.trim() });
+    if (!patient) {
+      patient = await Patient.create({
+        patientId: patientId.trim(),
+        patientName: patientName.trim(),
+        dicomStudyCount: 0,
+        wordFileCount: 1
+      });
+    } else {
+      patient.wordFileCount += 1;
+      // Update patient name if not set
+      if (!patient.patientName && patientName) {
+        patient.patientName = patientName.trim();
+      }
+      await patient.save();
+    }
     
     res.status(201).json({
       success: true,
@@ -191,6 +216,13 @@ router.delete('/:id', protect, async (req, res) => {
     // Delete file from filesystem
     if (fs.existsSync(wordFile.filePath)) {
       fs.unlinkSync(wordFile.filePath);
+    }
+    
+    // Decrement patient word file count
+    const patient = await Patient.findOne({ patientId: wordFile.patientId });
+    if (patient) {
+      patient.wordFileCount = Math.max(0, patient.wordFileCount - 1);
+      await patient.save();
     }
     
     // Delete from database

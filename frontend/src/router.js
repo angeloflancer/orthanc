@@ -4,6 +4,7 @@ import AccountSettings from './components/AccountSettings.vue'
 import Worklists from './components/Worklists.vue'
 import StudyList from './components/StudyList.vue'
 import WordFileList from './components/WordFileList.vue'
+import PatientList from './components/PatientList.vue'
 import SideBar from './components/SideBar.vue'
 import NotFound from './components/NotFound.vue'
 import Login from './components/Login.vue'
@@ -99,6 +100,15 @@ export const router = createRouter({
         ContentView: WordFileList,
       },
       name: 'word-files-list',
+      beforeEnter: requireAuth
+    },
+    {
+      path: '/patients',
+      components: {
+        SideBarView: SideBar,
+        ContentView: PatientList,
+      },
+      name: 'patients-list',
       beforeEnter: requireAuth
     },
     {

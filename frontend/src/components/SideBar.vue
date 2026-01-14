@@ -197,6 +197,11 @@ export default {
                             <i class="fa fa-file-word fa-lg menu-icon"></i>All Documents
                         </router-link>
                     </li>
+                    <li class="d-flex fix-router-link">
+                        <router-link class="router-link" to="/patients">
+                            <i class="fa fa-users fa-lg menu-icon"></i>All Patients
+                        </router-link>
+                    </li>
                     <ul v-if="allLabels.length > 0" class="sub-menu" id="labels-list">
                         <li v-for="label in allLabels" :key="label"
                         v-bind:class="{ 'active': isSelectedLabel(label) }" @click="selectLabel(label)">

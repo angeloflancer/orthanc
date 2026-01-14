@@ -143,6 +143,33 @@ export default {
                     const studyResponse = await api.getStudy(studyId);
                     this.lastUploadReports[uploadId].uploadedStudies[studyId] = studyResponse;
                     this.$store.dispatch('studies/addStudy', { study: studyResponse, studyId: studyId, reloadStats: true });
+                    
+                    // Save DICOM study info to database
+                    try {
+                        const studyInfo = {
+                            studyInstanceUid: studyResponse.MainDicomTags?.StudyInstanceUID || '',
+                            orthancStudyId: studyId,
+                            patientId: studyResponse.PatientMainDicomTags?.PatientID || '',
+                            patientName: studyResponse.PatientMainDicomTags?.PatientName || '',
+                            patientBirthDate: studyResponse.PatientMainDicomTags?.PatientBirthDate || '',
+                            patientSex: studyResponse.PatientMainDicomTags?.PatientSex || '',
+                            studyDate: studyResponse.MainDicomTags?.StudyDate || '',
+                            studyTime: studyResponse.MainDicomTags?.StudyTime || '',
+                            studyDescription: studyResponse.MainDicomTags?.StudyDescription || '',
+                            accessionNumber: studyResponse.MainDicomTags?.AccessionNumber || '',
+                            referringPhysicianName: studyResponse.MainDicomTags?.ReferringPhysicianName || '',
+                            modalitiesInStudy: studyResponse.RequestedTags?.ModalitiesInStudy || '',
+                            seriesCount: studyResponse.Series?.length || 0,
+                            instancesCount: studyResponse.RequestedTags?.NumberOfStudyRelatedInstances || 0
+                        };
+                        
+                        if (studyInfo.studyInstanceUid && studyInfo.patientId) {
+                            await api.saveDicomStudyInfo(studyInfo);
+                        }
+                    } catch (error) {
+                        console.error('Error saving DICOM study info:', error);
+                        // Don't fail the upload if saving to DB fails
+                    }
                 }
             }
         },
@@ -356,13 +383,12 @@ export default {
     <div>
         <div v-if="!disabledAfterUpload" class="upload-handler-drop-zone" :class="{'upload-handler-drop-zone-disabled': uploadDisabled}"  @drop="this.onDrop" @dragover="this.onDragOver" :disabled="uploadDisabled">
             <div v-if="uploadDisabled" class="upload-disabled-message mb-3">{{ uploadDisabledMessage }}</div>
-            <div v-if="!uploadDisabled" class="upload-drag-text mb-3">Drag files here or</div>
+            <div v-if="!uploadDisabled" class="upload-drag-text">Drop files here or</div>
             
             <!-- DICOM Upload Section -->
             <div class="upload-section-item">
                 <div class="upload-section-header" @click="toggleDicomSection">
                     <span class="upload-section-title">Upload DICOM</span>
-                    <i :class="dicomExpanded ? 'fa fa-chevron-up' : 'fa fa-chevron-down'" class="upload-chevron"></i>
                 </div>
                 <div class="upload-section-content" :class="{'expanded': dicomExpanded}">
                     <div class="upload-buttons">
@@ -384,7 +410,6 @@ export default {
                 <div class="upload-section-divider"></div>
                 <div class="upload-section-header" @click="toggleDocumentSection">
                     <span class="upload-section-title">Upload Document</span>
-                    <i :class="documentExpanded ? 'fa fa-chevron-up' : 'fa fa-chevron-down'" class="upload-chevron"></i>
                 </div>
                 <div class="upload-section-content" :class="{'expanded': documentExpanded}">
                     <div v-if="wordFilesToUpload.length > 0" class="word-upload-form">
@@ -411,7 +436,7 @@ export default {
                     <div v-else class="upload-buttons">
                         <label class="upload-btn" :class="{'disabled': uploadDisabled}">
                             <input :disabled="uploadDisabled" type="file" style="display: none;" id="wordFilesUpload" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple>
-                            <span>Select Document Files</span>
+                            <span>Select Files</span>
                         </label>
                     </div>
                 </div>
@@ -431,11 +456,11 @@ export default {
 
 .upload-handler-drop-zone {
     margin: 10px 15px;
-    border-color: #ffffff7f;
+    border-color: rgba(255, 255, 255, 0.3);
     border-style: solid;
     border-width: 1px;
     border-radius: 10px;
-    background: linear-gradient(180deg, var(--nav-side-bg-color-gradient-start) 0%, var(--nav-side-bg-color-gradient-end) 100%);
+    background-color: var(--nav-side-bg-color-gradient-end, #2c3e50);
     color: var(--nav-side-color, #ffffff);
     padding: 15px;
 }
@@ -455,38 +480,34 @@ export default {
     text-align: center;
     color: var(--nav-side-color, #ffffff);
     font-size: 14px;
+    font-weight: 400;
+    margin-bottom: 10px;
 }
 
 .upload-section-item {
-    margin: 10px 0;
+    margin: 5px 0;
 }
 
 .upload-section-divider {
     height: 1px;
-    background-color: rgba(255, 255, 255, 0.3);
-    margin: 10px 0;
+    background-color: rgba(255, 255, 255, 0.2);
+    margin: 8px 0;
 }
 
 .upload-section-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     cursor: pointer;
-    padding: 8px 0;
+    padding: 6px 0;
     user-select: none;
 }
 
 .upload-section-title {
-    font-weight: 600;
-    font-size: 15px;
+    font-weight: 400;
+    font-size: 14px;
     color: var(--nav-side-color, #ffffff);
-}
-
-.upload-chevron {
-    font-size: 12px;
-    color: var(--nav-side-color, #ffffff);
-    opacity: 0.7;
-    transition: transform 0.3s ease;
+    text-align: center;
 }
 
 .upload-section-content {
@@ -502,27 +523,27 @@ export default {
 
 .upload-buttons {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 10px 0;
+    flex-direction: row;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 0;
 }
 
 .upload-btn {
-    background-color: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    background-color: transparent;
+    border: none;
     color: var(--nav-side-color, #ffffff);
-    padding: 10px 20px;
-    border-radius: 6px;
+    padding: 6px 12px;
+    border-radius: 4px;
     cursor: pointer;
     text-align: center;
-    font-size: 14px;
+    font-size: 12px;
     transition: all 0.2s ease;
     display: inline-block;
 }
 
 .upload-btn:hover:not(.disabled) {
-    background-color: rgba(255, 255, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.5);
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 .upload-btn.disabled {
@@ -531,23 +552,23 @@ export default {
 }
 
 .upload-btn-secondary {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: transparent;
 }
 
 .word-upload-form {
-    padding: 15px 0;
+    padding: 10px 0;
 }
 
 .form-row {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .form-label {
     display: block;
     color: var(--nav-side-color, #ffffff);
-    font-size: 13px;
-    margin-bottom: 5px;
-    font-weight: 500;
+    font-size: 12px;
+    margin-bottom: 4px;
+    font-weight: 400;
 }
 
 .form-control {
@@ -555,9 +576,9 @@ export default {
     background-color: rgba(255, 255, 255, 0.9);
     border: 1px solid rgba(255, 255, 255, 0.3);
     color: #333;
-    font-size: 13px;
-    padding: 8px 12px;
-    border-radius: 6px;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
     box-sizing: border-box;
 }
 
@@ -570,12 +591,13 @@ export default {
 
 .form-actions {
     display: flex;
-    gap: 10px;
-    margin-top: 15px;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
 }
 
 .text-muted {
     color: rgba(255, 255, 255, 0.7);
-    font-size: 12px;
+    font-size: 11px;
 }
 </style>

@@ -7,6 +7,8 @@ const path = require('path');
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const wordFileRoutes = require('./routes/wordFiles');
+const patientRoutes = require('./routes/patients');
+const dicomStudyRoutes = require('./routes/dicomStudies');
 
 const app = express();
 const PORT = process.env.PORT || 5830;
@@ -31,6 +33,16 @@ app.use('/api/auth', authRoutes);
 app.use('/api/wordfiles', express.json());
 app.use('/api/wordfiles', express.urlencoded({ extended: true }));
 app.use('/api/wordfiles', wordFileRoutes);
+
+// Patient routes (our own API - don't proxy)
+app.use('/api/patients', express.json());
+app.use('/api/patients', express.urlencoded({ extended: true }));
+app.use('/api/patients', patientRoutes);
+
+// DICOM study routes (our own API - don't proxy)
+app.use('/api/dicom-studies', express.json());
+app.use('/api/dicom-studies', express.urlencoded({ extended: true }));
+app.use('/api/dicom-studies', dicomStudyRoutes);
 
 // Proxy middleware configuration for Orthanc service
 const proxyOptions = {
@@ -158,8 +170,11 @@ const proxy = createProxyMiddleware(proxyOptions);
 // Proxy all other routes to Orthanc service (conditionally - only for Orthanc API routes)
 // Routes that start with /api/ (except /api/auth and /api/wordfiles) and other Orthanc routes will be proxied
 app.use((req, res, next) => {
-  // Don't proxy authentication routes or word file routes
-  if (req.path.startsWith('/api/auth') || req.path.startsWith('/api/wordfiles')) {
+  // Don't proxy our custom API routes
+  if (req.path.startsWith('/api/auth') || 
+      req.path.startsWith('/api/wordfiles') ||
+      req.path.startsWith('/api/patients') ||
+      req.path.startsWith('/api/dicom-studies')) {
     return next();
   }
   

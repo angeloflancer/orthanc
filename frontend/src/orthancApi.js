@@ -416,6 +416,71 @@ export default {
         const token = localStorage.getItem('auth-token');
         return `${orthancApiUrl}api/wordfiles/${id}/download`;
     },
+    // DICOM Study API methods
+    async saveDicomStudyInfo(studyInfo) {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.post(orthancApiUrl + "api/dicom-studies/save", { studyInfo }, config)).data;
+    },
+    async getDicomStudies() {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.get(orthancApiUrl + "api/dicom-studies", config)).data;
+    },
+    async checkDicomStudyExists(studyInstanceUid) {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.get(orthancApiUrl + "api/dicom-studies/exists/" + encodeURIComponent(studyInstanceUid), config)).data;
+    },
+    // Patient API methods
+    async getPatients() {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.get(orthancApiUrl + "api/patients", config)).data;
+    },
+    async getPatientById(id) {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.get(orthancApiUrl + "api/patients/" + id, config)).data;
+    },
+    async getPatientDicomStudies(patientId) {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.get(orthancApiUrl + "api/patients/" + encodeURIComponent(patientId) + "/dicom-studies", config)).data;
+    },
+    async getPatientWordFiles(patientId) {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.get(orthancApiUrl + "api/patients/" + encodeURIComponent(patientId) + "/word-files", config)).data;
+    },
     async createDicom(parentId, content, tags) {
         return (await axios.post(orthancApiUrl + "tools/create-dicom", {
             "Parent": parentId,
