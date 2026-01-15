@@ -18,7 +18,13 @@ export default {
             filterFileName: '',
             filterPatientId: '',
             filterPatientName: '',
-            filterUploadedBy: ''
+            filterUploadedBy: '',
+            filterUploadedAt: null,
+            // Document viewer modal
+            showDocumentViewer: false,
+            viewingDocument: null,
+            documentViewerUrl: null,
+            documentViewerLoading: false
         };
     },
     async created() {
@@ -48,8 +54,19 @@ export default {
         filterUploadedBy() {
             this.applyFilters();
         },
+        filterUploadedAt() {
+            this.applyFilters();
+        },
         wordFiles() {
             this.applyFilters();
+        }
+    },
+    computed: {
+        hasSelection() {
+            return this.selectedWordFileIds.length > 0;
+        },
+        isEmpty() {
+            return !this.loading && this.filteredWordFiles.length === 0;
         }
     },
     methods: {
@@ -99,6 +116,27 @@ export default {
                 );
             }
             
+            // Date filter
+            if (this.filterUploadedAt) {
+                const filterDate = Array.isArray(this.filterUploadedAt) ? this.filterUploadedAt : [this.filterUploadedAt];
+                if (filterDate.length >= 1 && filterDate[0]) {
+                    const startDate = new Date(filterDate[0]);
+                    startDate.setHours(0, 0, 0, 0);
+                    filtered = filtered.filter(file => {
+                        const fileDate = new Date(file.uploadedAt);
+                        return fileDate >= startDate;
+                    });
+                }
+                if (filterDate.length >= 2 && filterDate[1]) {
+                    const endDate = new Date(filterDate[1]);
+                    endDate.setHours(23, 59, 59, 999);
+                    filtered = filtered.filter(file => {
+                        const fileDate = new Date(file.uploadedAt);
+                        return fileDate <= endDate;
+                    });
+                }
+            }
+            
             this.filteredWordFiles = filtered;
             this.updateSelectAll();
         },
@@ -107,6 +145,7 @@ export default {
             this.filterPatientId = '';
             this.filterPatientName = '';
             this.filterUploadedBy = '';
+            this.filterUploadedAt = null;
         },
         toggleExpand(id) {
             if (this.expandedWordFileId === id) {
@@ -159,13 +198,32 @@ export default {
         },
         async viewWordFile(id) {
             try {
+                this.viewingDocument = this.wordFiles.find(f => f.id === id);
+                this.documentViewerLoading = true;
+                this.showDocumentViewer = true;
+                
                 const response = await api.downloadWordFile(id);
-                const blob = new Blob([response.data]);
-                const url = window.URL.createObjectURL(blob);
-                window.open(url, '_blank');
+                const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                this.documentViewerUrl = window.URL.createObjectURL(blob);
+                this.documentViewerLoading = false;
             } catch (error) {
                 console.error('Error viewing word file:', error);
                 this.messageBus.emit('show-toast', 'Failed to view document');
+                this.closeDocumentViewer();
+            }
+        },
+        closeDocumentViewer() {
+            this.showDocumentViewer = false;
+            this.viewingDocument = null;
+            if (this.documentViewerUrl) {
+                window.URL.revokeObjectURL(this.documentViewerUrl);
+                this.documentViewerUrl = null;
+            }
+            this.documentViewerLoading = false;
+        },
+        downloadViewingDocument() {
+            if (this.viewingDocument) {
+                this.downloadWordFile(this.viewingDocument.id);
             }
         },
         async downloadWordFile(id) {
@@ -280,38 +338,42 @@ export default {
 </script>
 
 <template>
-    <div>
+    <div class="table-container">
         <table class="table table-sm study-table table-borderless">
             <thead class="sticky-top">
                 <tr class="study-column-titles">
                     <th width="3%" scope="col"></th>
-                    <th width="30%" class="study-table-title" scope="col">File Name</th>
-                    <th width="15%" class="study-table-title" scope="col">Patient ID</th>
-                    <th width="20%" class="study-table-title" scope="col">Patient Name</th>
-                    <th width="15%" class="study-table-title" scope="col">Uploaded By</th>
-                    <th width="12%" class="study-table-title" scope="col">Uploaded At</th>
-                    <th width="5%" class="study-table-title" scope="col">Delete</th>
+                    <th width="28%" class="study-table-title" scope="col">File Name</th>
+                    <th width="12%" class="study-table-title" scope="col">Patient ID</th>
+                    <th width="18%" class="study-table-title" scope="col">Patient Name</th>
+                    <th width="12%" class="study-table-title" scope="col">Uploaded By</th>
+                    <th width="15%" class="study-table-title" scope="col">Uploaded At</th>
+                    <th width="7%" class="study-table-title" scope="col">Delete</th>
                 </tr>
                 <tr class="study-table-filters">
                     <th scope="col">
-                        <button @click="clearFilters" type="button" class="form-control study-list-filter btn filter-button btn-sm"
+                        <button @click="clearFilters" type="button" class="clear-filter-btn"
                             data-bs-toggle="tooltip" title="Clear filter">
                             <i class="fa-regular fa-circle-xmark"></i>
                         </button>
                     </th>
                     <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterFileName" placeholder="Search file name...">
+                        <input type="text" class="form-control study-list-filter" v-model="filterFileName" placeholder="Search...">
                     </th>
                     <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterPatientId" placeholder="Search patient ID...">
+                        <input type="text" class="form-control study-list-filter" v-model="filterPatientId" placeholder="Search...">
                     </th>
                     <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterPatientName" placeholder="Search patient name...">
+                        <input type="text" class="form-control study-list-filter" v-model="filterPatientName" placeholder="Search...">
                     </th>
                     <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterUploadedBy" placeholder="Search uploaded by...">
+                        <input type="text" class="form-control study-list-filter" v-model="filterUploadedBy" placeholder="Search...">
                     </th>
-                    <th></th>
+                    <th>
+                        <Datepicker v-model="filterUploadedAt" :enable-time-picker="false" range
+                            text-input arrow-navigation hide-input-icon placeholder="Select date range">
+                        </Datepicker>
+                    </th>
                     <th></th>
                 </tr>
                 <tr class="study-table-actions">
@@ -325,25 +387,19 @@ export default {
                     <th width="97%" colspan="6" scope="col">
                         <div class="container px-0">
                             <div class="row g-1">
-                                <div class="col-6 study-list-bulk-buttons" v-if="selectedWordFileIds.length > 0">
-                                    <button class="btn btn-sm btn-secondary m-1" @click="downloadSelectedWordFiles" title="Download">
+                                <div class="col-6 study-list-bulk-buttons">
+                                    <button class="btn btn-sm btn-secondary m-1" @click="downloadSelectedWordFiles" 
+                                        :disabled="!hasSelection" title="Download">
                                         <i class="bi bi-download"></i> Download
                                     </button>
-                                    <button class="btn btn-sm btn-secondary m-1" @click="printSelectedWordFiles" title="Print">
+                                    <button class="btn btn-sm btn-secondary m-1" @click="printSelectedWordFiles" 
+                                        :disabled="!hasSelection" title="Print">
                                         <i class="bi bi-printer"></i> Print
                                     </button>
-                                    <button class="btn btn-sm btn-danger m-1" @click="deleteSelectedWordFiles" title="Delete">
+                                    <button class="btn btn-sm btn-danger m-1" @click="deleteSelectedWordFiles" 
+                                        :disabled="!hasSelection" title="Delete">
                                         <i class="bi bi-trash"></i> Delete
                                     </button>
-                                </div>
-                                <div class="col-4" v-else>
-                                    <div v-if="loading" class="alert alert-secondary study-list-alert" role="alert">
-                                        <span class="spinner-border spinner-border-sm alert-icon" role="status" aria-hidden="true"></span>
-                                        Loading...
-                                    </div>
-                                    <div v-else-if="filteredWordFiles.length === 0" class="alert alert-warning study-list-alert" role="alert">
-                                        <i class="bi bi-exclamation-triangle-fill alert-icon"></i> No documents found
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -352,24 +408,34 @@ export default {
             </thead>
             <tbody v-if="loading">
                 <tr>
-                    <td colspan="7" class="text-center">
-                        <div class="spinner-border" role="status">
+                    <td colspan="7" class="text-center" style="padding: 60px 20px;">
+                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
                             <span class="visually-hidden">Loading...</span>
                         </div>
+                        <p class="mt-3 text-muted">Loading documents...</p>
                     </td>
                 </tr>
             </tbody>
-            <tbody v-else-if="filteredWordFiles.length === 0">
-                <tr>
-                    <td colspan="7" class="text-center text-muted" style="padding: 20px;">
-                        No documents found
+            <tbody v-else-if="isEmpty" class="empty-state-tbody">
+                <tr class="empty-state-row">
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="bi bi-file-earmark-x"></i>
+                            </div>
+                            <h5 class="empty-state-title">No Documents Found</h5>
+                            <p class="empty-state-text">
+                                There are no documents matching your criteria.<br>
+                                Try adjusting your filters or upload new documents.
+                            </p>
+                        </div>
                     </td>
                 </tr>
             </tbody>
             <tbody v-for="wordFile in filteredWordFiles" :key="wordFile.id">
                 <tr 
-                    class="word-file-row" 
-                    :class="{ 'word-file-row-expanded': isExpanded(wordFile.id) }"
+                    class="data-row" 
+                    :class="{ 'data-row-expanded': isExpanded(wordFile.id) }"
                 >
                     <td style="vertical-align: middle; padding-right: 8px;">
                         <div class="form-check" style="display: flex; align-items: center; justify-content: center; height: 100%;">
@@ -410,9 +476,9 @@ export default {
                     </td>
                 </tr>
                 <!-- Expanded row with details -->
-                <tr v-if="isExpanded(wordFile.id)" class="word-file-details-row">
+                <tr v-if="isExpanded(wordFile.id)" class="details-row">
                     <td colspan="7">
-                        <div class="word-file-details">
+                        <div class="details-content">
                             <div class="details-grid">
                                 <!-- Document Preview -->
                                 <div class="preview-section">
@@ -497,10 +563,54 @@ export default {
             </tbody>
         </table>
         <Toasts />
+        
+        <!-- Document Viewer Modal -->
+        <div v-if="showDocumentViewer" class="document-viewer-overlay" @click.self="closeDocumentViewer">
+            <div class="document-viewer-modal">
+                <div class="document-viewer-header">
+                    <h5>{{ viewingDocument?.originalFileName }}</h5>
+                    <div class="document-viewer-actions">
+                        <button class="btn btn-sm btn-outline-primary me-2" @click="downloadViewingDocument">
+                            <i class="bi bi-download me-1"></i> Download
+                        </button>
+                        <button class="btn-close" @click="closeDocumentViewer"></button>
+                    </div>
+                </div>
+                <div class="document-viewer-body">
+                    <div v-if="documentViewerLoading" class="document-viewer-loading">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading document...</p>
+                    </div>
+                    <div v-else-if="documentViewerUrl" class="document-viewer-content">
+                        <div class="document-info-banner">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Word documents cannot be previewed directly in the browser. Please download the file to view its contents.
+                        </div>
+                        <div class="document-preview-placeholder">
+                            <i class="bi bi-file-earmark-word"></i>
+                            <h4>{{ viewingDocument?.originalFileName }}</h4>
+                            <p class="text-muted">
+                                Patient: {{ viewingDocument?.patientName }} ({{ viewingDocument?.patientId }})<br>
+                                Uploaded: {{ formatDate(viewingDocument?.uploadedAt) }}
+                            </p>
+                            <button class="btn btn-primary" @click="downloadViewingDocument">
+                                <i class="bi bi-download me-2"></i>Download to View
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
 <style scoped>
+.table-container {
+    position: relative;
+}
+
 .study-table {
     table-layout: fixed;
 }
@@ -547,6 +657,7 @@ export default {
 
 .study-table-filters > th {
     background-color: var(--study-table-filter-bg-color);
+    padding: 4px;
 }
 
 .study-table-actions {
@@ -566,6 +677,34 @@ export default {
 .study-table td {
     text-align: left;
     padding-left: 10px;
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    vertical-align: middle;
+}
+
+/* Clear filter button - fixed size */
+.clear-filter-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 6px;
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.clear-filter-btn:hover {
+    background-color: var(--bs-light);
+}
+
+.clear-filter-btn i {
+    font-size: 14px;
 }
 
 input.form-control.study-list-filter {
@@ -573,28 +712,19 @@ input.form-control.study-list-filter {
     margin-bottom: var(--filter-margin, 5px);
     padding-top: var(--filter-padding, 2px);
     padding-bottom: var(--filter-padding, 2px);
-    padding-left: 4px;
-    padding-right: 4px;
+    padding-left: 8px;
+    padding-right: 8px;
     border-bottom-width: thin;
-}
-
-.filter-button {
-    border-bottom-width: thin !important;
-    border-color: var(--bs-border-color);
+    font-size: 13px;
 }
 
 .study-list-bulk-buttons {
     margin-top: var(--filter-margin, 5px);
 }
 
-.study-list-alert {
-    margin-top: var(--filter-margin, 5px);
-    margin-bottom: var(--filter-margin, 5px);
-    padding-top: var(--filter-padding, 2px);
-}
-
-.alert-icon {
-    margin-right: 0.7rem;
+.study-list-bulk-buttons .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .cut-text {
@@ -603,30 +733,67 @@ input.form-control.study-list-filter {
     white-space: nowrap;
 }
 
-.word-file-row {
+/* Empty state styles */
+.empty-state-tbody tr.empty-state-row:hover,
+.empty-state-tbody tr.empty-state-row:hover > td {
+    background-color: transparent !important;
+    cursor: default;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    margin: 20px;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    color: #adb5bd;
+    margin-bottom: 20px;
+}
+
+.empty-state-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 10px;
+}
+
+.empty-state-text {
+    font-size: 14px;
+    color: #6c757d;
+    max-width: 400px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+/* Data row styles */
+.data-row {
     border-top-width: 1px;
     border-color: #ddd;
 }
 
-.word-file-row-expanded {
+.data-row-expanded {
     background-color: var(--study-details-bg-color) !important;
     font-weight: 600;
 }
 
-.word-file-row-expanded > td {
+.data-row-expanded > td {
     background-color: var(--study-details-bg-color) !important;
 }
 
-.word-file-details-row {
+.details-row {
     background-color: var(--study-details-bg-color) !important;
 }
 
-.word-file-details-row > td {
+.details-row > td {
     background-color: var(--study-details-bg-color) !important;
     padding: 0 !important;
 }
 
-.word-file-details {
+.details-content {
     padding: 20px;
     background-color: var(--study-details-bg-color);
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
@@ -669,17 +836,20 @@ input.form-control.study-list-filter {
     text-align: center;
     padding: 0 5px;
     word-break: break-all;
+    font-weight: 400;
 }
 
 .info-section h6 {
     margin-bottom: 15px;
     color: var(--bs-body-color);
     font-weight: 600;
+    font-size: 14px;
 }
 
 .info-row {
     display: flex;
     margin-bottom: 8px;
+    font-size: 13px;
 }
 
 .info-label {
@@ -704,6 +874,7 @@ input.form-control.study-list-filter {
     font-weight: 600;
     margin-right: 20px;
     color: var(--bs-body-color);
+    font-size: 14px;
 }
 
 .action-buttons {
@@ -737,5 +908,107 @@ input.form-control.study-list-filter {
     .preview-section {
         display: none;
     }
+}
+
+/* Document Viewer Modal */
+.document-viewer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.document-viewer-modal {
+    background: white;
+    border-radius: 12px;
+    width: 80%;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.document-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.document-viewer-header h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--bs-body-color);
+}
+
+.document-viewer-actions {
+    display: flex;
+    align-items: center;
+}
+
+.document-viewer-body {
+    flex: 1;
+    overflow: auto;
+    padding: 24px;
+}
+
+.document-viewer-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+}
+
+.document-viewer-loading p {
+    margin-top: 16px;
+    color: var(--bs-secondary-color);
+}
+
+.document-viewer-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.document-info-banner {
+    width: 100%;
+    padding: 12px 16px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    color: #856404;
+    margin-bottom: 24px;
+    font-size: 13px;
+}
+
+.document-preview-placeholder {
+    text-align: center;
+    padding: 40px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    width: 100%;
+}
+
+.document-preview-placeholder i {
+    font-size: 80px;
+    color: #2b579a;
+    margin-bottom: 16px;
+}
+
+.document-preview-placeholder h4 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--bs-body-color);
+    margin-bottom: 12px;
 }
 </style>

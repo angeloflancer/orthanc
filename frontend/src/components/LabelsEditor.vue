@@ -104,6 +104,8 @@ export default {
                     if (changed) {
                         // this forces refresh of the labels in the StudyItem 
                         this.messageBus.emit("study-labels-updated-in-labels-editor-" + this.studyId);
+                        // Notify sidebar to update label counts
+                        this.messageBus.emit("labels-updated");
                         setTimeout(() => { this.$store.dispatch('labels/refresh') }, 100);
                     }
                 } else { // bulk-selection or multi-label filter

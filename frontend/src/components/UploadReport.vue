@@ -16,6 +16,12 @@ export default {
         ...mapState({
             uiOptions: state => state.configuration.uiOptions,
         }),
+        isDocumentUpload() {
+            return this.report.isWordUpload || this.report.uploadType === 'document';
+        },
+        uploadTypeLabel() {
+            return this.isDocumentUpload ? 'Document' : 'Study';
+        },
         pctSuccess() {
             return 100.0 * this.report.successFilesCount / this.report.filesCount;
         },
@@ -63,6 +69,12 @@ export default {
         },
         uploadedStudiesCount() {
             return this.report.uploadedStudiesIds.size;
+        },
+        uploadedDocumentsCount() {
+            if (this.isDocumentUpload) {
+                return Object.keys(this.report.uploadedStudies).length;
+            }
+            return 0;
         }
     },
     methods: {
@@ -84,7 +96,13 @@ export default {
                 infos.push(studyId.slice(0, 20) + "...");
             }   
             return infos.slice(0, this.uiOptions.UploadReportMaxTags).join(" - ");
-        }        
+        },
+        getDocumentLine(doc) {
+            if (doc.originalFileName) {
+                return `${doc.originalFileName} (${doc.patientId})`;
+            }
+            return doc.fileName || 'Unknown document';
+        }
     },
     components: { Modal }
 }
@@ -93,7 +111,12 @@ export default {
 <template>
     <div class="card border-secondary job-card">
         <div class="card-header jobs-header">
-            {{ $t('upload') }} {{ report.filesCount }} {{ $t('files') }}
+            <template v-if="isDocumentUpload">
+                Uploading document {{ report.filesCount }} {{ $t('files') }}
+            </template>
+            <template v-else>
+                {{ $t('upload') }} {{ report.filesCount }} {{ $t('files') }}
+            </template>
             <button v-if="!disableCloseReport" type="button" class="btn-close job-card-close" aria-label="Close"
                 @click="close(report.id)"></button>
             <div class="progress mt-1 mb-1" style="width:90%">
@@ -131,21 +154,37 @@ export default {
             </div>
         </div>
         <div class="card-body text-secondary jobs-body">
-            <p v-if="showStudyDetails" class="card-text">
-                <span class="upload-details">{{ $t('uploaded_studies') }}:</span>
-                <br />
-                <span v-for="(study, studyId) in report.uploadedStudies" :key="studyId">
-                    <router-link
-                        v-bind:to="'/filtered-studies?StudyInstanceUID=' + study.MainDicomTags['StudyInstanceUID'] + '&expand=study'"
-                        class="upload-details-study">{{ this.getStudyLine(studyId, study.MainDicomTags,
-                                study.PatientMainDicomTags)
-                        }}</router-link>
+            <!-- Document upload details -->
+            <div v-if="isDocumentUpload">
+                <p class="card-text">
+                    <span class="upload-details">Uploaded documents: {{ uploadedDocumentsCount }}</span>
                     <br />
-                </span>
-            </p>
-            <p v-if="!showStudyDetails" class="card-text">
-                <span class="upload-details">{{ $t('uploaded_count_studies', {'count': uploadedStudiesCount }) }}</span>
-            </p>
+                    <span v-for="(doc, docId) in report.uploadedStudies" :key="docId">
+                        <router-link to="/word-files" class="upload-details-study">
+                            {{ getDocumentLine(doc) }}
+                        </router-link>
+                        <br />
+                    </span>
+                </p>
+            </div>
+            <!-- DICOM upload details -->
+            <div v-else>
+                <p v-if="showStudyDetails" class="card-text">
+                    <span class="upload-details">{{ $t('uploaded_studies') }}:</span>
+                    <br />
+                    <span v-for="(study, studyId) in report.uploadedStudies" :key="studyId">
+                        <router-link
+                            v-bind:to="'/filtered-studies?StudyInstanceUID=' + study.MainDicomTags['StudyInstanceUID'] + '&expand=study'"
+                            class="upload-details-study">{{ this.getStudyLine(studyId, study.MainDicomTags,
+                                    study.PatientMainDicomTags)
+                            }}</router-link>
+                        <br />
+                    </span>
+                </p>
+                <p v-if="!showStudyDetails" class="card-text">
+                    <span class="upload-details">{{ $t('uploaded_count_studies', {'count': uploadedStudiesCount }) }}</span>
+                </p>
+            </div>
         </div>
     </div>
 </template>

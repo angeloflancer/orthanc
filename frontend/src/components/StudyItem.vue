@@ -125,8 +125,9 @@ export default {
             }
         },
         showLabels() {
+            // Only show labels row if this specific study has labels
             if (this.studiesSourceType == SourceType.LOCAL_ORTHANC) {
-                return !this.expanded && ((this.allLabels && this.allLabels.length > 0));
+                return !this.expanded && this.hasLabels;
             } else {
                 return false;
             }
@@ -206,7 +207,7 @@ export default {
 
 <template>
     <tbody>
-        <tr v-if="loaded" :class="{ 'study-row-collapsed': !expanded, 'study-row-expanded': expanded, 'study-row-show-labels': showLabels }">
+        <tr v-if="loaded" class="study-row" :class="{ 'study-row-collapsed': !expanded, 'study-row-expanded': expanded, 'study-row-show-labels': showLabels }">
             <td style="vertical-align: middle; padding-right: 8px;">
                 <div class="form-check" style="display: flex; align-items: center; justify-content: center; height: 100%;">
                     <input class="form-check-input" type="checkbox" v-model="selected" @click="clickedSelect" style="margin: 0;">
@@ -273,16 +274,17 @@ export default {
                 </span>
             </td>
         </tr>
-        <tr v-show="showLabels">
+        <tr v-if="showLabels" class="labels-display-row">
             <td></td>
             <td v-if="hasPrimaryViewerColumn"></td>
             <td v-if="hasPdfReportIconColumn"></td>
             <td :colspan="uiOptions.StudyListColumns.length" class="label-row">
-                <span v-for="label in study.Labels" :key="label" class="label badge">{{ label }}</span>
-                <span v-if="!hasLabels">&nbsp;</span>
+                <span v-for="label in study.Labels" :key="label" class="study-label">
+                    <i class="fa fa-tag"></i>{{ label }}
+                </span>
             </td>
         </tr>
-        <tr v-show="loaded" class="collapse"
+        <tr v-show="loaded" class="collapse study-details-row"
             :class="{ 'study-details-expanded': expanded }"
             v-bind:id="'study-details-' + this.studyId" ref="study-collapsible-details">
             <td v-if="loaded && expanded" :colspan="colSpanStudyDetails">
@@ -294,6 +296,12 @@ export default {
 </template>
 
 <style scoped>
+.study-row {
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid #e5e7eb;
+}
+
 .study-row-collapsed {
     border-top-width: 1px;
     border-color: #ddd;
@@ -301,27 +309,29 @@ export default {
 
 .study-row-expanded {
     background-color: var(--study-details-bg-color);
-    font-weight: 700;
+    font-weight: 600;
     border-top: 1px solid rgba(229, 231, 235, 0.5) !important;
+    border-bottom: none !important;
 }
 
-.study-row-expanded>:first-child {
-    border-bottom: 1px solid rgba(229, 231, 235, 0.5) !important;
+.study-row-expanded > td {
+    background-color: var(--study-details-bg-color) !important;
 }
 
 .study-row-show-labels {
-    border-bottom: 0px !important;
+    border-bottom: none !important;
 }
-
 
 .study-table>tbody>tr.study-row-expanded:hover {
     background-color: var(--study-details-bg-color);
-    color: red;
 }
 
 .study-table>tbody>tr.study-details-expanded:hover {
     background-color: var(--study-details-bg-color);
-    color: red;
+}
+
+.study-details-row {
+    background-color: var(--study-details-bg-color);
 }
 
 .study-details-expanded {
@@ -330,14 +340,43 @@ export default {
     border-bottom: 1px solid rgba(229, 231, 235, 0.5) !important;
 }
 
-.label {
-    margin-left: 2px;
-    margin-left: 2px;
+.study-details-expanded > td {
+    background-color: var(--study-details-bg-color) !important;
+    padding: 0 !important;
+}
+
+/* Label styling */
+.labels-display-row:hover > td {
+    background-color: transparent !important;
+}
+
+.study-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    margin-right: 6px;
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.1) 0%, rgba(74, 144, 226, 0.05) 100%);
+    border: 1px solid rgba(74, 144, 226, 0.2);
+    border-radius: 12px;
+    font-size: 11px;
+    color: #4a90e2;
+    font-weight: 500;
+}
+
+.study-label i {
+    font-size: 9px;
+    opacity: 0.7;
 }
 
 .label-row {
-    border-top: 0px !important;
-    border-bottom: 0px !important;
+    border-top: none !important;
+    padding-top: 2px !important;
+    padding-bottom: 6px !important;
+}
+
+.labels-display-row {
+    border-bottom: 1px solid #e5e7eb;
 }
 
 .td-viewer-icon {
@@ -362,5 +401,11 @@ export default {
 
 .td-pdf-icon {
     padding: 0; /* to maximize click space for the icon */
+}
+
+.cut-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 </style>

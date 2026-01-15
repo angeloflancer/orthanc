@@ -80,6 +80,12 @@ export default {
         orthancApiUrl() {
             return orthancApiUrl;
         },
+        currentRoutePath() {
+            return this.$route.path;
+        },
+        hasLabels() {
+            return this.allLabels && this.allLabels.length > 0;
+        }
     },
     methods: {
         isSelectedModality(modality) {
@@ -94,14 +100,56 @@ export default {
         isEchoSuccess(modality) {
             return this.modalitiesEchoStatus[modality] == true;
         },
+        isRouteActive(path) {
+            if (path === '/studies') {
+                return this.currentRoutePath === '/studies' || this.currentRoutePath === '/filtered-studies';
+            }
+            if (path === '/') {
+                return this.currentRoutePath === '/';
+            }
+            return this.currentRoutePath.startsWith(path);
+        },
+        formatModalityName(modality) {
+            // Convert modality names to display format
+            const displayNames = {
+                'efilm_workstation': 'EFilm Workstation',
+                'efilm': 'EFilm',
+                // Add more mappings as needed
+            };
+            return displayNames[modality.toLowerCase()] || modality;
+        },
+        getModalityIcon(modality) {
+            // Return icon class based on modality
+            const icons = {
+                'efilm_workstation': 'fa fa-film',
+                'efilm': 'fa fa-film',
+            };
+            return icons[modality.toLowerCase()] || 'fa fa-desktop';
+        },
         async selectLabel(label) {
             this.selectedLabel = label;
-            if (this.$router.name == 'local-studies-list') {
+            if (this.$route.name == 'local-studies-list' || this.$route.name == 'studies-list') {
                 await this.$store.dispatch('studies/updateSource', { 'source-type': SourceType.LOCAL_ORTHANC, 'remote-source': null });
                 this.messageBus.emit('filter-label-changed', label);
             } else {
-                this.$router.push({name: 'local-studies-list', query: {'labels': label}});
+                this.$router.push({ path: '/filtered-studies', query: {'labels': label} });
             }
+        },
+        goToDashboard() {
+            this.$router.push('/');
+        },
+        goToAllStudies() {
+            // Clear label selection
+            this.selectedLabel = null;
+            // Clear label filters in the store
+            this.$store.dispatch('studies/updateLabelFilterNoReload', { labels: [], constraint: 'All' });
+            // Navigate to studies and emit event to clear filter
+            this.$router.push('/studies');
+            this.messageBus.emit('filter-label-changed', null);
+        },
+        onAllLocalStudiesClick() {
+            // When clicking "All local Studies" nav, go to all studies
+            this.goToAllStudies();
         },
         isSelectedLabel(label) {
             return this.labelFilters.includes(label);
@@ -126,26 +174,57 @@ export default {
             })
         },
         async loadLabelsCount() {
-            if (Object.entries(this.labelsStudyCount).length == 0) {
-                for (const label of this.allLabels) {
+            // Initialize any new labels that are not yet in labelsStudyCount
+            for (const label of this.allLabels) {
+                if (!(label in this.labelsStudyCount)) {
                     this.labelsStudyCount[label] = null;
                 }
             }
+            
             if (this.hasExtendedFind) {
                 if (this.uiOptions.EnableLabelsCount) {
-                    for (const [k, v] of Object.entries(this.labelsStudyCount)) {
-                        if (v == null) {
-                            this.labelsStudyCount[k] = await api.getLabelStudyCount(k);
+                    for (const label of this.allLabels) {
+                        // Always reload count for labels that are null
+                        if (this.labelsStudyCount[label] == null) {
+                            this.labelsStudyCount[label] = await api.getLabelStudyCount(label);
                         }
                     }
                 }
             }
+        },
+        async refreshLabelCount(label) {
+            // Force refresh a specific label's count
+            if (this.hasExtendedFind && this.uiOptions.EnableLabelsCount) {
+                this.labelsStudyCount[label] = await api.getLabelStudyCount(label);
+            }
         }
     },
     watch: {
-        allLabels(newValue, oldValue) {
-            this.loadLabelsCount();
+        allLabels: {
+            handler(newValue, oldValue) {
+                // Find new labels and load their counts
+                if (newValue && oldValue) {
+                    const newLabels = newValue.filter(l => !oldValue.includes(l));
+                    for (const label of newLabels) {
+                        this.labelsStudyCount[label] = null;
+                    }
+                }
+                this.loadLabelsCount();
+            },
+            deep: true
         }
+    },
+    created() {
+        // Listen for label updates from LabelsEditor
+        this.messageBus.on('labels-updated', () => {
+            // Reload all labels from API
+            this.$store.dispatch('labels/refresh');
+            // Force reload all label counts
+            for (const label of this.allLabels) {
+                this.labelsStudyCount[label] = null;
+            }
+            this.loadLabelsCount();
+        });
     },
     mounted() {
         this.loadLabelsCount();
@@ -168,69 +247,93 @@ export default {
 <template>
     <div class="nav-side-menu">
         <div class="nav-side-content">
-            <div v-if="!hasCustomLogo">
+            <div v-if="!hasCustomLogo" class="logo-container" @click="goToDashboard" style="cursor: pointer;">
                 <img class="emedx-logo" src="../assets/images/emedx-logo-white.png"/>
             </div>
-            <div v-if="hasCustomLogo">
+            <div v-if="hasCustomLogo" class="logo-container" @click="goToDashboard" style="cursor: pointer;">
                 <img class="custom-logo" :src="customLogoUrl" />
             </div>
-            <div v-if="hasCustomLogo">
+            <div v-if="hasCustomLogo" class="logo-container">
                 <p class="powered-by-emedx">
                 powered by
                 <img src="../assets/logo.png" />
                 </p>
             </div>
-            <!-- <div v-if="uiOptions.ShowOrthancName" class="orthanc-name">
-                <p>{{ system.Name }}</p>
-            </div> -->
             <div class="menu-list">
-                <ul id="menu-content" class="menu-content collapse out">
-                    <li class="d-flex fix-router-link">
-                        <router-link class="router-link" to="/">
-                            <i class="fa fa-x-ray fa-lg menu-icon"></i>{{ $t('local_studies') }}
-                            <span class="study-count ms-auto">{{ displayedStudyCount }} / {{ statistics.CountStudies
-                            }}</span>
+                <ul id="menu-content" class="menu-content">
+                    <!-- Dashboard -->
+                    <li class="nav-item" :class="{ 'nav-active': currentRoutePath === '/' }">
+                        <router-link class="nav-link" to="/">
+                            <i class="fa fa-home fa-lg nav-icon"></i>
+                            <span class="nav-text">Dashboard</span>
                         </router-link>
                     </li>
-                    <li class="d-flex fix-router-link">
-                        <router-link class="router-link" to="/word-files">
-                            <i class="fa fa-file-word fa-lg menu-icon"></i>All Documents
-                        </router-link>
+                    
+                    <!-- All local Studies with Labels as submenu -->
+                    <li class="nav-item nav-dropdown" :class="{ 'nav-active': isRouteActive('/studies') || isRouteActive('/filtered-studies') }" 
+                        @click="onAllLocalStudiesClick"
+                        data-bs-toggle="collapse" data-bs-target="#studies-labels-list">
+                        <div class="nav-link">
+                            <i class="fa fa-x-ray fa-lg nav-icon"></i>
+                            <span class="nav-text">{{ $t('local_studies') }}</span>
+                            <span class="nav-badge">{{ displayedStudyCount }} / {{ statistics.CountStudies }}</span>
+                            <span v-if="hasLabels" class="nav-arrow"></span>
+                        </div>
                     </li>
-                    <li class="d-flex fix-router-link">
-                        <router-link class="router-link" to="/patients">
-                            <i class="fa fa-users fa-lg menu-icon"></i>All Patients
-                        </router-link>
-                    </li>
-                    <ul v-if="allLabels.length > 0" class="sub-menu" id="labels-list">
+                    <ul class="sub-menu collapse" id="studies-labels-list">
+                        <li @click.stop="goToAllStudies" :class="{ 'active': isRouteActive('/studies') && !labelFilters.length && !selectedLabel }">
+                            <i class="fa fa-list-ul sub-menu-icon"></i>
+                            <span>All Studies</span>
+                            <span class="study-count ms-auto">{{ statistics.CountStudies }}</span>
+                        </li>
                         <li v-for="label in allLabels" :key="label"
-                        v-bind:class="{ 'active': isSelectedLabel(label) }" @click="selectLabel(label)">
-                            <i class="fa fa-tag label-icon"></i>
-                            {{ label }}
-                            <span class="study-count ms-auto">{{ labelsStudyCount[label] }}</span>
+                            v-bind:class="{ 'active': isSelectedLabel(label) }" @click.stop="selectLabel(label)">
+                            <i class="fa fa-tag sub-menu-icon"></i>
+                            <span>{{ label }}</span>
+                            <span class="study-count ms-auto">{{ labelsStudyCount[label] != null ? labelsStudyCount[label] : '...' }}</span>
                         </li>
                     </ul>
+                    
+                    <li class="nav-item" :class="{ 'nav-active': isRouteActive('/word-files') }">
+                        <router-link class="nav-link" to="/word-files">
+                            <i class="fa fa-file-word fa-lg nav-icon"></i>
+                            <span class="nav-text">All Documents</span>
+                        </router-link>
+                    </li>
+                    <li class="nav-item" :class="{ 'nav-active': isRouteActive('/patients') }">
+                        <router-link class="nav-link" to="/patients">
+                            <i class="fa fa-users fa-lg nav-icon"></i>
+                            <span class="nav-text">All Patients</span>
+                        </router-link>
+                    </li>
 
-                    <li v-if="uiOptions.EnableUpload" class="d-flex align-items-center" data-bs-toggle="collapse"
+                    <li v-if="uiOptions.EnableUpload" class="nav-item nav-dropdown" data-bs-toggle="collapse"
                         data-bs-target="#upload-handler">
-                        <i class="fa fa-file-upload fa-lg menu-icon"></i>{{ $t('upload') }}
-                        <span class="ms-auto"></span>
+                        <div class="nav-link">
+                            <i class="fa fa-file-upload fa-lg nav-icon"></i>
+                            <span class="nav-text">{{ $t('upload') }}</span>
+                            <span class="nav-arrow"></span>
+                        </div>
                     </li>
                     <div v-if="uiOptions.EnableUpload" class="collapse" id="upload-handler">
                         <UploadHandler :showStudyDetails="true"/>
                     </div>
 
-                    <li v-if="hasQueryableDicomModalities" class="d-flex align-items-center" data-bs-toggle="collapse"
+                    <li v-if="hasQueryableDicomModalities" class="nav-item nav-dropdown" data-bs-toggle="collapse"
                         data-bs-target="#modalities-list">
-                        <i class="fa fa-radiation fa-lg menu-icon"></i>{{ $t('dicom_modalities') }}
-                        <span class="arrow ms-auto"></span>
+                        <div class="nav-link">
+                            <i class="fa fa-radiation fa-lg nav-icon"></i>
+                            <span class="nav-text">{{ $t('dicom_modalities') }}</span>
+                            <span class="nav-arrow"></span>
+                        </div>
                     </li>
                     <ul class="sub-menu collapse" id="modalities-list" ref="modalities-collapsible">
                         <li v-for="modality of Object.keys(queryableDicomModalities)" :key="modality"
-                            v-bind:class="{ 'active': this.isSelectedModality(modality) }" class="d-flex align-items-center">
-                            <router-link class="router-link flex-grow-1"
+                            v-bind:class="{ 'active': this.isSelectedModality(modality) }" class="modality-item">
+                            <router-link class="modality-link"
                                 :to="{ path: '/filtered-studies', query: { 'source-type': 'dicom', 'remote-source': modality } }">
-                                {{ modality }}
+                                <i :class="getModalityIcon(modality)" class="modality-icon"></i>
+                                <span>{{ formatModalityName(modality) }}</span>
                             </router-link>
                             <span v-if="this.isEchoRunning(modality)" class="ms-auto spinner-border spinner-border-sm"
                                 data-bs-toggle="tooltip" title="Checking connectivity"></span>
@@ -242,10 +345,13 @@ export default {
                         </li>
                     </ul>
 
-                    <li v-if="hasQueryableDicomWebServers" class="d-flex align-items-center" data-bs-toggle="collapse"
+                    <li v-if="hasQueryableDicomWebServers" class="nav-item nav-dropdown" data-bs-toggle="collapse"
                         data-bs-target="#dicomweb-servers-list">
-                        <i class="fa fa-globe fa-lg menu-icon"></i>{{ $t('dicom_web_servers') }}
-                        <span class="arrow ms-auto"></span>
+                        <div class="nav-link">
+                            <i class="fa fa-globe fa-lg nav-icon"></i>
+                            <span class="nav-text">{{ $t('dicom_web_servers') }}</span>
+                            <span class="nav-arrow"></span>
+                        </div>
                     </li>
                     <ul class="sub-menu collapse" id="dicomweb-servers-list">
                         <li v-for="server in queryableDicomWebServers" :key="server" v-bind:class="{ 'active': this.isSelectedDicomWebServer(server) }">
@@ -255,45 +361,58 @@ export default {
                             </router-link>
                         </li>
                     </ul>
-                    <li v-if="hasAccessToWorklists" class="d-flex align-items-center fix-router-link">
-                        <router-link class="router-link" to="/worklists">
-                            <i class="fa fa-list fa-lg menu-icon"></i>{{ $t('worklists.side_bar_title') }}
+                    
+                    <li v-if="hasAccessToWorklists" class="nav-item" :class="{ 'nav-active': isRouteActive('/worklists') }">
+                        <router-link class="nav-link" to="/worklists">
+                            <i class="fa fa-list fa-lg nav-icon"></i>
+                            <span class="nav-text">{{ $t('worklists.side_bar_title') }}</span>
                         </router-link>
                     </li>
-                    <li v-if="hasAccessToSettings" class="d-flex align-items-center" data-bs-toggle="collapse"
+                    
+                    <li v-if="hasAccessToSettings" class="nav-item nav-dropdown" data-bs-toggle="collapse"
                         data-bs-target="#settings-list">
-                        <i class="fa fa-cogs fa-lg menu-icon"></i>{{ $t('settings.title') }}
-                        <span class="arrow ms-auto"></span>
+                        <div class="nav-link">
+                            <i class="fa fa-cogs fa-lg nav-icon"></i>
+                            <span class="nav-text">{{ $t('settings.title') }}</span>
+                            <span class="nav-arrow"></span>
+                        </div>
                     </li>
                     <ul class="sub-menu collapse" id="settings-list">
-                        <li class="d-flex align-items-center">
+                        <li :class="{ 'active': isRouteActive('/settings') }">
                             <router-link class="router-link" to="/settings">{{ $t('settings.system_info') }}</router-link>
                         </li>
-                        <li class="d-flex align-items-center">
+                        <li :class="{ 'active': isRouteActive('/account-settings') }">
                             <router-link class="router-link" to="/account-settings">Account Settings</router-link>
                         </li>
                     </ul>
-                    <li v-if="hasLogout" class="d-flex align-items-center" data-bs-toggle="collapse"
+                    
+                    <li v-if="hasLogout" class="nav-item nav-dropdown" data-bs-toggle="collapse"
                         data-bs-target="#profile-list">
-                        <i class="fa fa-user fa-lg menu-icon"></i><span v-if="hasUserProfile">{{ userProfile.name }}</span><span v-if="!hasUserProfile">{{ $t('profile') }}</span>
-                        <span class="arrow ms-auto"></span>
+                        <div class="nav-link">
+                            <i class="fa fa-user fa-lg nav-icon"></i>
+                            <span class="nav-text" v-if="hasUserProfile">{{ userProfile.name }}</span>
+                            <span class="nav-text" v-if="!hasUserProfile">{{ $t('profile') }}</span>
+                            <span class="nav-arrow"></span>
+                        </div>
                     </li>
                     <ul class="sub-menu collapse" id="profile-list" ref="profile-collapsible">
-                        <li v-if="uiOptions.EnableChangePassword" class="d-flex align-items-center fix-router-link">
+                        <li v-if="uiOptions.EnableChangePassword">
                             <a v-bind:href="'#'" @click="changePassword($event)">
                                 <i class="fa fa-solid fa-key fa-lg menu-icon"></i>{{ $t('change_password') }}
-                            </a><span class="ms-auto"></span>
+                            </a>
                         </li>
-                        <li v-if="hasLogout" class="d-flex align-items-center fix-router-link">
+                        <li v-if="hasLogout">
                             <a v-bind:href="'#'" @click="logout($event)">
                                 <i class="fa fa-solid fa-arrow-right-from-bracket fa-lg menu-icon"></i>{{ $t('logout') }}
-                            </a><span class="ms-auto"></span>
+                            </a>
                         </li>
                     </ul>
-                    <li v-if="hasJobs" class="d-flex align-items-center">
-                        <a href="#">
-                            <i class="fa fa-solid fa-bars-progress fa-lg menu-icon"></i>{{ $t('my_jobs') }}
-                        </a><span class="ms-auto"></span>
+                    
+                    <li v-if="hasJobs" class="nav-item">
+                        <div class="nav-link">
+                            <i class="fa fa-solid fa-bars-progress fa-lg nav-icon"></i>
+                            <span class="nav-text">{{ $t('my_jobs') }}</span>
+                        </div>
                     </li>
                     <div v-if="hasJobs" class="collapse show" id="jobs-list">
                         <JobsList />
@@ -309,64 +428,30 @@ export default {
     </div>
 </template>
 <style scoped>
-.router-link {
-    width: 100%;
-    text-align: left;
-    transition: all 0.3s ease;
-    border-radius: 8px;
-    margin: 2px 0px;
-    padding: 5px 0px;
-    padding-left: 0px;
-    display: block;
+/* Base sidebar styles */
+.nav-side-menu {
+    font-family: verdana;
+    font-size: 12px;
+    font-weight: 200;
+    background: linear-gradient(180deg, var(--nav-side-bg-color-gradient-start) 0%, var(--nav-side-bg-color-gradient-end) 100%);
+    color: var(--nav-side-color);
 }
 
-.fix-router-link {
-    margin-left: 0px !important;
-    padding-left: 0px !important;
+.nav-side-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
 }
 
-/* Ensure all menu items have consistent left padding */
-.nav-side-menu li {
-    padding-left: 10px !important;
-}
-
-.nav-side-menu li.d-flex {
-    padding-left: 10px !important;
-}
-
-/* Fix first nav item icon to be closer to left */
-.nav-side-menu li.fix-router-link .router-link .menu-icon {
-    padding-left: 0px !important;
-    margin-left: 0px !important;
-}
-
-/* Sub-menu router links should also have consistent styling */
-.sub-menu .router-link {
-    padding: 8px 12px;
-    margin: 0;
-}
-
-.echo-status {
-    font-size: 17px;
-}
-
-.orthanc-name {
-    border-bottom-width: 1px;
-    border-bottom-style: solid;
-    font-size: 1rem;
-    margin-bottom: 0.3rem;
-}
-
-.orthanc-name p {
-    margin-bottom: 0.3rem;
-    font-weight: 500;
+.logo-container {
+    padding: 10px 0;
+    text-align: center;
 }
 
 .emedx-logo {
     height: 80px;
     width: 100%;
     object-fit: contain;
-    /* background-color: black; */
 }
 
 .powered-by-emedx {
@@ -389,162 +474,184 @@ export default {
     height: auto;
 }
 
-.nav-side-menu {
-    font-family: verdana;
-    font-size: 12px;
-    font-weight: 200;
-    background: linear-gradient(180deg, var(--nav-side-bg-color-gradient-start) 0%, var(--nav-side-bg-color-gradient-end) 100%);
-    color: var(--nav-side-color);
-}
-
-.nav-side-content {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-}
-
-.bottom-side-bar {
-    flex: 1;
-    align-self: flex-end;
-    width: 100%;    
-    position: relative;
-    min-height: 5rem;
-}
-
-.bottom-side-bar-button { /* for the language picker */
-    position: absolute;
-    bottom: 1rem;
-    width: 100%;
-    height: 3rem;    
-}
-
-.nav-side-menu ul,
-.nav-side-menu li {
-    list-style: none;
-    padding: 0px;
-    margin: 0px;
-    line-height: 35px;
-    cursor: pointer;
-}
-
-.nav-side-menu ul :not(collapsed) .arrow:before,
-.nav-side-menu li :not(collapsed) .arrow:before {
-    font-family: "Font Awesome\ 5 Free";
-    font-weight: 900;
-    content: "\f0d7";
-    padding-left: 10px;
-    padding-right: 10px;
-    vertical-align: middle;
-    float: right;
-}
-
-.nav-side-menu li .study-count {
-    padding-right: 0px;
-    float: right;
-}
-
-.nav-side-menu ul .active,
-.nav-side-menu li .active {
-    border-left: 3px solid var(--nav-side-active-border-color);
-    background-color: var(--nav-side-selected-bg-color);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.nav-side-menu ul .sub-menu li.active,
-.nav-side-menu li .sub-menu li.active {
-    color: var(--nav-side-submenu-color);
-    background-color: var(--nav-side-selected-bg-color);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-}
-
-.nav-side-menu ul .sub-menu li.active a,
-.nav-side-menu li .sub-menu li.active a {
-    color: var(--nav-side-submenu-color);
-}
-
-.nav-side-menu ul .sub-menu li,
-.nav-side-menu li .sub-menu li {
-    display: flex;
-    align-items: center;
-    background-color: var(--nav-side-sub-bg-color);
-    border: none;
-    line-height: 1.5;
-    min-height: 40px;
-    max-height: 40px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-left: 0px;
-    border-radius: 6px;
-    margin: 1px 16px;
-    padding: 8px 12px;
-    transition: all 0.3s ease;
-}
-
-.nav-side-menu ul .sub-menu li:hover,
-.nav-side-menu li .sub-menu li:hover {
-    border-left: 3px solid var(--nav-side-active-border-color);
-    background-color: var(--nav-side-selected-bg-color);
-    transform: translateX(4px);
-}
-
-.nav-side-menu ul .sub-menu li:before,
-.nav-side-menu li .sub-menu li:before {
-    font-family: "Font Awesome\ 5 Free";
-    font-weight: 900;
-    content: " ";
-    display: inline-block;
-    padding-left: 20px;
-    padding-right: 20px;
-    vertical-align: middle;
-}
-
-.nav-side-menu li {
-    margin-left: 0px;
-    padding-left: 10px !important;
-    border-left: 3px solid rgba(255, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.3s ease;
-}
-
-.nav-side-menu li a {
-    text-decoration: none;
-    color: var(--nav-side-color);
-}
-
-.nav-side-menu li a i {
-    padding-left: 10px;
-    width: 20px;
-    padding-right: 20px;
-}
-
-.nav-side-menu li:hover {
-    border-left: 3px solid var(--nav-side-active-border-color);
-    background-color: var(--nav-side-selected-bg-color);
-    transform: translateX(4px);
-}
-
-.nav-side-menu .menu-list .menu-content {
-    display: block;
-}
-
-.nav-side-menu .menu-list .menu-content {
-    display: block;
-}
-
+/* Menu list - no horizontal padding */
 .menu-list {
-    margin-left: 10px;
-    margin-right: 10px;
     font-size: 14px;
 }
 
+.menu-content {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: block !important;
+}
+
+/* Nav item - consistent height, no horizontal padding/margin */
+.nav-item {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.nav-item:hover {
+    background-color: var(--nav-side-selected-bg-color, rgba(255, 255, 255, 0.1));
+}
+
+/* Active nav state - left border indicator, no shadow */
+.nav-item.nav-active {
+    background-color: var(--nav-side-selected-bg-color, rgba(255, 255, 255, 0.15));
+    border-left: 3px solid var(--nav-side-active-border-color, #4a90e2);
+}
+
+.nav-item.nav-active .nav-link {
+    padding-left: 12px; /* Compensate for border */
+}
+
+/* Nav link - full width */
+.nav-link {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    padding: 0 15px;
+    text-decoration: none;
+    color: var(--nav-side-color, #ffffff);
+}
+
+/* Nav icon - fixed width */
+.nav-icon {
+    width: 24px;
+    min-width: 24px;
+    text-align: center;
+    margin-right: 12px;
+}
+
+/* Nav text */
+.nav-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Nav badge (count) */
+.nav-badge {
+    font-size: 11px;
+    opacity: 0.8;
+    margin-left: auto;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+/* Nav arrow for dropdowns */
+.nav-arrow::before {
+    font-family: "Font Awesome 5 Free";
+    font-weight: 900;
+    content: "\f0d7";
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+/* Sub-menu styles */
+.sub-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    background-color: var(--nav-side-sub-bg-color, rgba(0, 0, 0, 0.1));
+}
+
+.sub-menu li {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    padding: 0 15px 0 40px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.sub-menu li:hover {
+    background-color: var(--nav-side-selected-bg-color, rgba(255, 255, 255, 0.1));
+}
+
+.sub-menu li.active {
+    background-color: var(--nav-side-selected-bg-color, rgba(255, 255, 255, 0.15));
+    border-left: 3px solid var(--nav-side-active-border-color, #4a90e2);
+    padding-left: 37px;
+}
+
+.sub-menu li a,
+.sub-menu .router-link {
+    color: var(--nav-side-color, #ffffff);
+    text-decoration: none;
+    flex: 1;
+}
+
+/* Sub-menu icon */
+.sub-menu-icon {
+    width: 16px;
+    margin-right: 10px;
+    text-align: center;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+/* Modality item styles */
+.modality-item {
+    display: flex;
+    align-items: center;
+}
+
+.modality-link {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    color: var(--nav-side-color, #ffffff);
+    text-decoration: none;
+}
+
+.modality-icon {
+    width: 20px;
+    margin-right: 10px;
+    text-align: center;
+}
+
+/* Study count in sidebar */
+.study-count {
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+/* Echo status */
+.echo-status {
+    font-size: 14px;
+}
+
+/* Menu icon for sub-menus */
 .menu-icon {
     width: 20px;
     margin-right: 10px;
 }
 
-.label-icon {
-    width: 15px;
-    margin-right: 5px;
-    line-height: 28px;
+/* Bottom sidebar */
+.bottom-side-bar {
+    flex: 1;
+    align-self: flex-end;
+    width: 100%;
+    position: relative;
+    min-height: 5rem;
 }
 
+.bottom-side-bar-button {
+    position: absolute;
+    bottom: 1rem;
+    width: 100%;
+    height: 3rem;
+}
 </style>

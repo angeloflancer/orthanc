@@ -5,6 +5,7 @@ import Worklists from './components/Worklists.vue'
 import StudyList from './components/StudyList.vue'
 import WordFileList from './components/WordFileList.vue'
 import PatientList from './components/PatientList.vue'
+import Dashboard from './components/Dashboard.vue'
 import SideBar from './components/SideBar.vue'
 import NotFound from './components/NotFound.vue'
 import Login from './components/Login.vue'
@@ -28,27 +29,7 @@ const requireAuth = (to, from, next) => {
 const requireGuest = (to, from, next) => {
   const token = localStorage.getItem('auth-token');
   if (token) {
-    // Preserve URL parameters when redirecting authenticated users
-    const urlParams = new URLSearchParams(window.location.search);
-    const params = {};
-    
-    // Preserve common query parameters that might be used for study filtering
-    const validParams = ['StudyInstanceUID', 'PatientID', 'AccessionNumber', 'StudyDate', 
-                        'PatientName', 'StudyDescription', 'ModalitiesInStudy', 'labels', 
-                        'source-type', 'remote-source', 'order-by', 'labels-constraint'];
-    
-    for (const key of validParams) {
-      if (urlParams.has(key)) {
-        params[key] = urlParams.get(key);
-      }
-    }
-    
-    // Redirect to dashboard/home with preserved parameters if any
-    if (Object.keys(params).length > 0) {
-      next({ path: '/', query: params });
-    } else {
-      next('/'); // Redirect to dashboard/home
-    }
+    next('/'); // Redirect to dashboard
   } else {
     next();
   }
@@ -76,12 +57,24 @@ export const router = createRouter({
     },
     {
       path: '/',
-      alias: '/index.html',
+      components: {
+        SideBarView: SideBar,
+        ContentView: Dashboard,
+      },
+      name: 'dashboard',
+      beforeEnter: requireAuth
+    },
+    {
+      path: '/index.html',
+      redirect: '/'
+    },
+    {
+      path: '/studies',
       components: {
         SideBarView: SideBar,
         ContentView: StudyList,
       },
-      name: 'home',
+      name: 'studies-list',
       beforeEnter: requireAuth
     },
     {
@@ -138,15 +131,25 @@ export const router = createRouter({
       name: 'account-settings',
       beforeEnter: requireAuth
     },
+    // Catch-all 404 route - must be last
     {
-      path: '/:pathMatch(.*)',
+      path: '/:pathMatch(.*)*',
       components: {
         SideBarView: SideBar,
         ContentView: NotFound,
       },
-      name: 'keycloak-path-match',
+      name: 'not-found',
       beforeEnter: requireAuth
     }
-
   ],
 })
+
+// Navigation guard to prevent unwanted URL changes
+router.beforeEach((to, from, next) => {
+  // Ensure the path doesn't get corrupted
+  if (to.path && to.path.includes('undefined')) {
+    next('/');
+    return;
+  }
+  next();
+});

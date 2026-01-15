@@ -472,7 +472,12 @@ export default {
             }
         },
         filterLabelChanged(label) {
-            this.filterLabels = [label];
+            // If label is null or empty, clear labels filter
+            if (label === null || label === undefined || label === '') {
+                this.filterLabels = [];
+            } else {
+                this.filterLabels = [label];
+            }
             this.multiLabelsFilterLabelsConstraint = "All";
             this.multiLabelsComponentKey++; // force refresh the multi-labels filter component
             this.search();
@@ -853,7 +858,13 @@ export default {
                 }
             }
 
-            if (this.filterOrderBy.length > 0 && this.sourceType == SourceType.LOCAL_ORTHANC) {
+            // Only add order-by if it's NOT the default ordering (LastUpdate DESC)
+            const isDefaultOrder = this.filterOrderBy.length === 1 
+                && this.filterOrderBy[0].Type === 'Metadata' 
+                && this.filterOrderBy[0].Key === 'LastUpdate' 
+                && this.filterOrderBy[0].Direction === 'DESC';
+            
+            if (this.filterOrderBy.length > 0 && this.sourceType == SourceType.LOCAL_ORTHANC && !isDefaultOrder) {
                 let orders = []
                 for (let order of this.filterOrderBy) {
                     orders.push([order['Type'], order['Key'], order['Direction']].join(','))
@@ -861,8 +872,13 @@ export default {
                 query['order-by'] = orders.join(';');
             }
 
-            let newUrl = "/filtered-studies?" + (new URLSearchParams(query)).toString();
-            await this.$router.replace(newUrl);
+            // If no filters, navigate to studies; otherwise use filtered-studies
+            if (Object.keys(query).length === 0) {
+                await this.$router.replace('/studies');
+            } else {
+                let newUrl = "/filtered-studies?" + (new URLSearchParams(query)).toString();
+                await this.$router.replace(newUrl);
+            }
         },
         async extendStudyList() {
             if (this.sourceType == SourceType.LOCAL_ORTHANC && this.hasExtendedFind) {
@@ -1034,7 +1050,7 @@ export default {
                 </tr>
                 <tr class="study-table-filters" v-on:keyup.enter="search">
                     <th scope="col" :colspan="colSpanClearFilter">
-                        <button @click="clearFilters" type="button" class="form-control study-list-filter btn filter-button btn-sm"
+                        <button @click="clearFilters" type="button" class="clear-filter-btn"
                             data-bs-toggle="tooltip" title="Clear filter">
                             <i class="fa-regular fa-circle-xmark"></i>
                         </button>
@@ -1165,6 +1181,23 @@ export default {
                     </th>
                 </tr>
             </thead>
+            <!-- Empty state for no studies -->
+            <tbody v-if="!isSearching && isStudyListEmpty && !showEmptyStudyListIfNoSearch" class="empty-state-tbody">
+                <tr class="empty-state-row">
+                    <td :colspan="uiOptions.StudyListColumns.length + colSpanClearFilter + (hasPrimaryViewerIcon ? 1 : 0) + (hasPdfReportIcon ? 1 : 0)">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="bi bi-file-earmark-x"></i>
+                            </div>
+                            <h5 class="empty-state-title">No Studies Found</h5>
+                            <p class="empty-state-text">
+                                There are no studies matching your criteria.<br>
+                                Try adjusting your filters or upload new studies.
+                            </p>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
             <StudyItem v-for="studyId in studiesIds" :key="studyId" :id="studyId" :studyId="studyId" v-observe-visibility="{callback: visibilityChanged, once: true}"
                 @deletedStudy="onDeletedStudy">
             </StudyItem>
@@ -1184,14 +1217,43 @@ input.form-control.study-list-filter {
   margin-bottom: var(--filter-margin);
   padding-top: var(--filter-padding);
   padding-bottom: var(--filter-padding);
-  padding-left: 4px;
-  padding-right: 4px;
+  padding-left: 8px;
+  padding-right: 8px;
   border-bottom-width: thin;
+  font-size: 13px;
+  height: 36px;
 }
 
 .filter-button {
   border-bottom-width: thin !important;
   border-color: var(--bs-border-color);
+}
+
+/* Clear filter button - fixed size to prevent shrinking */
+.clear-filter-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 6px;
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: var(--filter-margin);
+  margin-bottom: var(--filter-margin);
+}
+
+.clear-filter-btn:hover {
+  background-color: var(--bs-light);
+}
+
+.clear-filter-btn i {
+  font-size: 14px;
 }
 
 .search-button {
@@ -1514,5 +1576,41 @@ button.form-control.study-list-filter {
     bottom: 0;
     right: 0;
     padding-right: 5px;
+}
+
+/* Empty state styles */
+.empty-state-tbody tr.empty-state-row:hover,
+.empty-state-tbody tr.empty-state-row:hover > td {
+    background-color: transparent !important;
+    cursor: default;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    margin: 20px;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    color: #adb5bd;
+    margin-bottom: 20px;
+}
+
+.empty-state-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 10px;
+}
+
+.empty-state-text {
+    font-size: 14px;
+    color: #6c757d;
+    max-width: 400px;
+    margin: 0 auto;
+    line-height: 1.6;
 }
 </style>
