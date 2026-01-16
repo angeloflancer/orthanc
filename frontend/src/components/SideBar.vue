@@ -367,6 +367,40 @@ export default {
                 keepOpenDropdown = 'settings-list';
             }
             
+            // Update store source type based on route
+            if (to.path.startsWith('/filtered-studies') && to.query) {
+                // Update store when navigating to filtered-studies with source-type
+                if (to.query['source-type'] === 'dicom') {
+                    this.$store.dispatch('studies/updateSource', { 
+                        'source-type': SourceType.REMOTE_DICOM, 
+                        'remote-source': to.query['remote-source'] 
+                    });
+                } else if (to.query['source-type'] === 'dicom-web') {
+                    this.$store.dispatch('studies/updateSource', { 
+                        'source-type': SourceType.REMOTE_DICOM_WEB, 
+                        'remote-source': to.query['remote-source'] 
+                    });
+                } else {
+                    // Local studies - clear remote source
+                    this.$store.dispatch('studies/updateSource', { 
+                        'source-type': SourceType.LOCAL_ORTHANC, 
+                        'remote-source': null 
+                    });
+                }
+            } else if (to.path.startsWith('/studies')) {
+                // Local studies route - ensure source type is LOCAL_ORTHANC
+                this.$store.dispatch('studies/updateSource', { 
+                    'source-type': SourceType.LOCAL_ORTHANC, 
+                    'remote-source': null 
+                });
+            } else {
+                // Navigating away from studies routes - clear source type to LOCAL_ORTHANC
+                this.$store.dispatch('studies/updateSource', { 
+                    'source-type': SourceType.LOCAL_ORTHANC, 
+                    'remote-source': null 
+                });
+            }
+            
             // If navigating to remote DICOM or away from studies routes, clear studies selection
             if (isRemoteDicom || (!to.path.startsWith('/studies') && !to.path.startsWith('/filtered-studies'))) {
                 // Clear label selection

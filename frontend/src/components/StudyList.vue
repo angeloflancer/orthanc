@@ -285,10 +285,13 @@ export default {
         }
     },
     watch: {
-        '$route': async function () { // the watch is used when, e.g, clicking on the back button
-            if (!this.updatingRouteWithoutReload) {
-                this.updateFilterFromRoute(this.$route.query);
-            }
+        '$route': {
+            handler: async function (to, from) { // the watch is used when, e.g, clicking on the back button
+                if (!this.updatingRouteWithoutReload) {
+                    await this.updateFilterFromRoute(this.$route.query);
+                }
+            },
+            immediate: false // Don't run on initial mount, we handle it in mounted()
         },
         isConfigurationLoaded(newValue, oldValue) {
             // this is called when opening the page (with a filter or not)
@@ -378,6 +381,21 @@ export default {
     },
     async mounted() {
         this.updateSelectAll();
+        // If configuration is already loaded, ensure we process the route query params
+        // This is critical when navigating from other routes (e.g., WordFileList, PatientList) to filtered-studies
+        // The isConfigurationLoaded watcher might have already fired before the component was mounted,
+        // or the route watcher might not fire on initial mount
+        if (this.isConfigurationLoaded) {
+            // Use nextTick to ensure route is fully initialized
+            await this.$nextTick();
+            // Check if we have query params that need to be processed
+            if (this.$route.query && Object.keys(this.$route.query).length > 0) {
+                // Only update if we're not already updating (avoid duplicate calls)
+                if (!this.updatingRouteWithoutReload && !this.updatingFilterUi) {
+                    await this.updateFilterFromRoute(this.$route.query);
+                }
+            }
+        }
     },
     methods: {
         updateSelectAll() {
