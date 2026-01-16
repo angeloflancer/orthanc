@@ -138,17 +138,23 @@ export default {
         goToDashboard() {
             this.$router.push('/');
         },
-        goToAllStudies() {
+        async goToAllStudies() {
             // Clear label selection
             this.selectedLabel = null;
             // Clear label filters in the store
-            this.$store.dispatch('studies/updateLabelFilterNoReload', { labels: [], constraint: 'All' });
-            // Navigate to studies and emit event to clear filter
-            this.$router.push('/studies');
-            this.messageBus.emit('filter-label-changed', null);
+            await this.$store.dispatch('studies/updateLabelFilterNoReload', { labels: [], constraint: 'All' });
+            // Navigate to studies - this will trigger the route watcher in StudyList which calls updateFilterFromRoute
+            if (this.$route.path !== '/studies') {
+                await this.$router.push('/studies');
+            } else {
+                // If already on /studies, manually trigger the filter update to reload data
+                this.$nextTick(() => {
+                    this.messageBus.emit('filter-label-changed', null);
+                });
+            }
         },
         onAllLocalStudiesClick() {
-            // When clicking "All local Studies" nav, go to all studies
+            // When clicking "All local Studies" nav, go to all studies and load data
             this.goToAllStudies();
         },
         isSelectedLabel(label) {
@@ -212,6 +218,15 @@ export default {
                 this.loadLabelsCount();
             },
             deep: true
+        },
+        // Clear selected label and label filters when navigating away from studies routes
+        '$route'(to, from) {
+            if (!to.path.startsWith('/studies') && !to.path.startsWith('/filtered-studies')) {
+                // Clear label selection
+                this.selectedLabel = null;
+                // Clear label filters in the store
+                this.$store.dispatch('studies/updateLabelFilterNoReload', { labels: [], constraint: 'All' });
+            }
         }
     },
     created() {
