@@ -7,6 +7,7 @@ import { mapState, mapGetters } from "vuex"
 import { orthancApiUrl, oe2ApiUrl } from "../globalConfigurations";
 import api from "../orthancApi"
 import SourceType from "../helpers/source-type";
+import bootstrap from "bootstrap/dist/js/bootstrap.bundle.min.js"
 
 
 export default {
@@ -91,6 +92,62 @@ export default {
         isSelectedModality(modality) {
             return this.studiesSourceType == SourceType.REMOTE_DICOM && this.studiesRemoteSource == modality;
         },
+        isAnyModalitySelected() {
+            if (!this.hasQueryableDicomModalities) return false;
+            // Check store state first
+            if (Object.keys(this.queryableDicomModalities).some(modality => this.isSelectedModality(modality))) {
+                return true;
+            }
+            // Fallback: check route query parameters (for page refresh scenarios)
+            if (this.currentRoutePath === '/filtered-studies' && this.$route.query) {
+                const sourceType = this.$route.query['source-type'];
+                const remoteSource = this.$route.query['remote-source'];
+                if (sourceType === 'dicom' && remoteSource && Object.keys(this.queryableDicomModalities).includes(remoteSource)) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        isAnyDicomWebServerSelected() {
+            if (!this.hasQueryableDicomWebServers) return false;
+            // Check store state first
+            if (this.queryableDicomWebServers.some(server => this.isSelectedDicomWebServer(server))) {
+                return true;
+            }
+            // Fallback: check route query parameters (for page refresh scenarios)
+            if (this.currentRoutePath === '/filtered-studies' && this.$route.query) {
+                const sourceType = this.$route.query['source-type'];
+                const remoteSource = this.$route.query['remote-source'];
+                if (sourceType === 'dicom-web' && remoteSource && this.queryableDicomWebServers.includes(remoteSource)) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        onModalitySelected(modality) {
+            // Clear studies selection and collapse studies dropdown when modality is selected
+            this.selectedLabel = null;
+            this.$store.dispatch('studies/updateLabelFilterNoReload', { labels: [], constraint: 'All' });
+            this.collapseStudiesDropdown();
+            // Collapse all other dropdowns except modalities-list (keep parent open)
+            this.collapseAllDropdowns('modalities-list');
+        },
+        onDicomWebServerSelected(server) {
+            // Clear studies selection and collapse studies dropdown when DICOM Web server is selected
+            this.selectedLabel = null;
+            this.$store.dispatch('studies/updateLabelFilterNoReload', { labels: [], constraint: 'All' });
+            this.collapseStudiesDropdown();
+            // Collapse all other dropdowns except dicomweb-servers-list (keep parent open)
+            this.collapseAllDropdowns('dicomweb-servers-list');
+        },
+        onLabelSelected(label) {
+            // Collapse all other dropdowns except studies-labels-list (keep parent open)
+            this.collapseAllDropdowns('studies-labels-list');
+        },
+        onSettingsSubmenuSelected() {
+            // Collapse all other dropdowns except settings-list (keep parent open)
+            this.collapseAllDropdowns('settings-list');
+        },
         isSelectedDicomWebServer(server) {
             return this.studiesSourceType == SourceType.REMOTE_DICOM_WEB && this.studiesRemoteSource == server;
         },
@@ -102,10 +159,37 @@ export default {
         },
         isRouteActive(path) {
             if (path === '/studies') {
-                return this.currentRoutePath === '/studies' || this.currentRoutePath === '/filtered-studies';
+                // Only active for local studies, not for remote DICOM modalities or DICOM Web servers
+                if (this.currentRoutePath === '/studies') {
+                    return true;
+                }
+                if (this.currentRoutePath === '/filtered-studies') {
+                    // Check if it's actually for local studies (no source-type or source-type is not dicom/dicom-web)
+                    const query = this.$route.query;
+                    if (!query['source-type'] || (query['source-type'] !== 'dicom' && query['source-type'] !== 'dicom-web')) {
+                        return true;
+                    }
+                }
+                return false;
             }
             if (path === '/') {
                 return this.currentRoutePath === '/';
+            }
+            // For other paths, use exact match or startsWith, but be more specific
+            if (path === '/word-files') {
+                return this.currentRoutePath === '/word-files' || this.currentRoutePath.startsWith('/word-files/');
+            }
+            if (path === '/patients') {
+                return this.currentRoutePath === '/patients' || this.currentRoutePath.startsWith('/patients/');
+            }
+            if (path === '/worklists') {
+                return this.currentRoutePath === '/worklists' || this.currentRoutePath.startsWith('/worklists/');
+            }
+            if (path === '/settings') {
+                return this.currentRoutePath === '/settings' || this.currentRoutePath.startsWith('/settings/');
+            }
+            if (path === '/account-settings') {
+                return this.currentRoutePath === '/account-settings';
             }
             return this.currentRoutePath.startsWith(path);
         },
@@ -159,6 +243,49 @@ export default {
         },
         isSelectedLabel(label) {
             return this.labelFilters.includes(label);
+        },
+        collapseStudiesDropdown() {
+            // Collapse the "All local Studies" dropdown using Bootstrap collapse API
+            this.$nextTick(() => {
+                const studiesDropdown = document.getElementById('studies-labels-list');
+                if (studiesDropdown && studiesDropdown.classList.contains('show')) {
+                    const bsCollapse = bootstrap.Collapse.getInstance(studiesDropdown);
+                    if (bsCollapse) {
+                        bsCollapse.hide();
+                    } else {
+                        // If no instance exists, create one and hide
+                        const newCollapse = new bootstrap.Collapse(studiesDropdown, { toggle: false });
+                        newCollapse.hide();
+                    }
+                }
+            });
+        },
+        collapseAllDropdowns(exceptId = null) {
+            // Collapse all dropdowns except the one that should be active
+            const dropdowns = [
+                'studies-labels-list',
+                'modalities-list',
+                'dicomweb-servers-list',
+                'settings-list',
+                'upload-handler',
+                'profile-list'
+            ];
+            this.$nextTick(() => {
+                dropdowns.forEach(id => {
+                    if (id === exceptId) return;
+                    const element = document.getElementById(id);
+                    if (element && element.classList.contains('show')) {
+                        const bsCollapse = bootstrap.Collapse.getInstance(element);
+                        if (bsCollapse) {
+                            bsCollapse.hide();
+                        } else {
+                            // If no instance exists, create one and hide
+                            const newCollapse = new bootstrap.Collapse(element, { toggle: false });
+                            newCollapse.hide();
+                        }
+                    }
+                });
+            });
         },
         logout(event) {
             event.preventDefault();
@@ -219,13 +346,46 @@ export default {
             },
             deep: true
         },
-        // Clear selected label and label filters when navigating away from studies routes
+        // Clear selected label and label filters when navigating away from local studies routes
         '$route'(to, from) {
-            if (!to.path.startsWith('/studies') && !to.path.startsWith('/filtered-studies')) {
+            // Check if navigating to a remote DICOM modality or DICOM Web server
+            const isRemoteDicom = to.query && (to.query['source-type'] === 'dicom' || to.query['source-type'] === 'dicom-web');
+            
+            // Determine which dropdown should remain open based on the route
+            let keepOpenDropdown = null;
+            if (to.path.startsWith('/studies') || (to.path.startsWith('/filtered-studies') && !isRemoteDicom)) {
+                // Local studies route - keep studies dropdown open
+                keepOpenDropdown = 'studies-labels-list';
+            } else if (isRemoteDicom && to.query['source-type'] === 'dicom') {
+                // Remote DICOM modality - keep modalities dropdown open
+                keepOpenDropdown = 'modalities-list';
+            } else if (isRemoteDicom && to.query['source-type'] === 'dicom-web') {
+                // DICOM Web server - keep dicomweb-servers dropdown open
+                keepOpenDropdown = 'dicomweb-servers-list';
+            } else if (to.path.startsWith('/settings') || to.path.startsWith('/account-settings')) {
+                // Settings route - keep settings dropdown open
+                keepOpenDropdown = 'settings-list';
+            }
+            
+            // If navigating to remote DICOM or away from studies routes, clear studies selection
+            if (isRemoteDicom || (!to.path.startsWith('/studies') && !to.path.startsWith('/filtered-studies'))) {
                 // Clear label selection
                 this.selectedLabel = null;
                 // Clear label filters in the store
                 this.$store.dispatch('studies/updateLabelFilterNoReload', { labels: [], constraint: 'All' });
+                // Collapse "All local Studies" dropdown (unless it should stay open)
+                if (keepOpenDropdown !== 'studies-labels-list') {
+                    this.collapseStudiesDropdown();
+                }
+            }
+            
+            // Collapse all dropdowns except the one that should remain open
+            if (to.path.startsWith('/word-files') || to.path.startsWith('/patients') || to.path === '/' || to.path.startsWith('/worklists')) {
+                // Main nav routes - collapse all dropdowns
+                this.collapseAllDropdowns();
+            } else if (keepOpenDropdown) {
+                // Keep the appropriate dropdown open, collapse others
+                this.collapseAllDropdowns(keepOpenDropdown);
             }
         }
     },
@@ -277,7 +437,7 @@ export default {
             <div class="menu-list">
                 <ul id="menu-content" class="menu-content">
                     <!-- Dashboard -->
-                    <li class="nav-item" :class="{ 'nav-active': currentRoutePath === '/' }">
+                    <li class="nav-item" :class="{ 'nav-active': currentRoutePath === '/' }" @click="collapseAllDropdowns()">
                         <router-link class="nav-link" to="/">
                             <i class="fa fa-home fa-lg nav-icon"></i>
                             <span class="nav-text">Dashboard</span>
@@ -285,8 +445,8 @@ export default {
                     </li>
                     
                     <!-- All local Studies with Labels as submenu -->
-                    <li class="nav-item nav-dropdown" :class="{ 'nav-active': isRouteActive('/studies') || isRouteActive('/filtered-studies') }" 
-                        @click="onAllLocalStudiesClick"
+                    <li class="nav-item nav-dropdown" :class="{ 'nav-active': isRouteActive('/studies') }" 
+                        @click="onAllLocalStudiesClick(); collapseAllDropdowns('studies-labels-list')"
                         data-bs-toggle="collapse" data-bs-target="#studies-labels-list">
                         <div class="nav-link">
                             <i class="fa fa-x-ray fa-lg nav-icon"></i>
@@ -296,7 +456,7 @@ export default {
                         </div>
                     </li>
                     <ul class="sub-menu collapse" id="studies-labels-list">
-                        <li @click.stop="goToAllStudies" :class="{ 'active': isRouteActive('/studies') && !labelFilters.length && !selectedLabel }">
+                        <li @click.stop="goToAllStudies(); onLabelSelected(null)" :class="{ 'active': isRouteActive('/studies') && !labelFilters.length && !selectedLabel }">
                             <i class="fa fa-list-ul sub-menu-icon"></i>
                             <span>All Studies</span>
                             <span class="study-count ms-auto">{{ statistics.CountStudies }}</span>
@@ -309,13 +469,13 @@ export default {
                         </li>
                     </ul>
                     
-                    <li class="nav-item" :class="{ 'nav-active': isRouteActive('/word-files') }">
+                    <li class="nav-item" :class="{ 'nav-active': isRouteActive('/word-files') }" @click="collapseAllDropdowns()">
                         <router-link class="nav-link" to="/word-files">
                             <i class="fa fa-file-word fa-lg nav-icon"></i>
                             <span class="nav-text">All Documents</span>
                         </router-link>
                     </li>
-                    <li class="nav-item" :class="{ 'nav-active': isRouteActive('/patients') }">
+                    <li class="nav-item" :class="{ 'nav-active': isRouteActive('/patients') }" @click="collapseAllDropdowns()">
                         <router-link class="nav-link" to="/patients">
                             <i class="fa fa-users fa-lg nav-icon"></i>
                             <span class="nav-text">All Patients</span>
@@ -334,7 +494,10 @@ export default {
                         <UploadHandler :showStudyDetails="true"/>
                     </div>
 
-                    <li v-if="hasQueryableDicomModalities" class="nav-item nav-dropdown" data-bs-toggle="collapse"
+                    <li v-if="hasQueryableDicomModalities" class="nav-item nav-dropdown" 
+                        :class="{ 'nav-active': isAnyModalitySelected() }"
+                        @click="collapseAllDropdowns('modalities-list')"
+                        data-bs-toggle="collapse"
                         data-bs-target="#modalities-list">
                         <div class="nav-link">
                             <i class="fa fa-radiation fa-lg nav-icon"></i>
@@ -344,7 +507,8 @@ export default {
                     </li>
                     <ul class="sub-menu collapse" id="modalities-list" ref="modalities-collapsible">
                         <li v-for="modality of Object.keys(queryableDicomModalities)" :key="modality"
-                            v-bind:class="{ 'active': this.isSelectedModality(modality) }" class="modality-item">
+                            v-bind:class="{ 'active': this.isSelectedModality(modality) }" class="modality-item"
+                            @click="onModalitySelected(modality)">
                             <router-link class="modality-link"
                                 :to="{ path: '/filtered-studies', query: { 'source-type': 'dicom', 'remote-source': modality } }">
                                 <i :class="getModalityIcon(modality)" class="modality-icon"></i>
@@ -360,7 +524,10 @@ export default {
                         </li>
                     </ul>
 
-                    <li v-if="hasQueryableDicomWebServers" class="nav-item nav-dropdown" data-bs-toggle="collapse"
+                    <li v-if="hasQueryableDicomWebServers" class="nav-item nav-dropdown" 
+                        :class="{ 'nav-active': isAnyDicomWebServerSelected() }"
+                        @click="collapseAllDropdowns('dicomweb-servers-list')"
+                        data-bs-toggle="collapse"
                         data-bs-target="#dicomweb-servers-list">
                         <div class="nav-link">
                             <i class="fa fa-globe fa-lg nav-icon"></i>
@@ -369,7 +536,9 @@ export default {
                         </div>
                     </li>
                     <ul class="sub-menu collapse" id="dicomweb-servers-list">
-                        <li v-for="server in queryableDicomWebServers" :key="server" v-bind:class="{ 'active': this.isSelectedDicomWebServer(server) }">
+                        <li v-for="server in queryableDicomWebServers" :key="server" 
+                            v-bind:class="{ 'active': this.isSelectedDicomWebServer(server) }"
+                            @click="onDicomWebServerSelected(server)">
                             <router-link class="router-link"
                                 :to="{ path: '/filtered-studies', query: { 'source-type': 'dicom-web', 'remote-source': server } }">
                                 {{ server }}
@@ -377,14 +546,17 @@ export default {
                         </li>
                     </ul>
                     
-                    <li v-if="hasAccessToWorklists" class="nav-item" :class="{ 'nav-active': isRouteActive('/worklists') }">
+                    <li v-if="hasAccessToWorklists" class="nav-item" :class="{ 'nav-active': isRouteActive('/worklists') }" @click="collapseAllDropdowns()">
                         <router-link class="nav-link" to="/worklists">
                             <i class="fa fa-list fa-lg nav-icon"></i>
                             <span class="nav-text">{{ $t('worklists.side_bar_title') }}</span>
                         </router-link>
                     </li>
                     
-                    <li v-if="hasAccessToSettings" class="nav-item nav-dropdown" data-bs-toggle="collapse"
+                    <li v-if="hasAccessToSettings" class="nav-item nav-dropdown" 
+                        :class="{ 'nav-active': isRouteActive('/settings') || isRouteActive('/account-settings') }"
+                        @click="collapseAllDropdowns('settings-list')"
+                        data-bs-toggle="collapse"
                         data-bs-target="#settings-list">
                         <div class="nav-link">
                             <i class="fa fa-cogs fa-lg nav-icon"></i>
@@ -393,10 +565,10 @@ export default {
                         </div>
                     </li>
                     <ul class="sub-menu collapse" id="settings-list">
-                        <li :class="{ 'active': isRouteActive('/settings') }">
+                        <li :class="{ 'active': isRouteActive('/settings') }" @click="onSettingsSubmenuSelected()">
                             <router-link class="router-link" to="/settings">{{ $t('settings.system_info') }}</router-link>
                         </li>
-                        <li :class="{ 'active': isRouteActive('/account-settings') }">
+                        <li :class="{ 'active': isRouteActive('/account-settings') }" @click="onSettingsSubmenuSelected()">
                             <router-link class="router-link" to="/account-settings">Account Settings</router-link>
                         </li>
                     </ul>
