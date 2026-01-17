@@ -94,24 +94,43 @@ export default {
 
 .instance-row-expanded {
     background-color: var(--instance-details-bg-color);
-    font-weight: 700;
+    font-weight: 600 !important;
+    font-family: verdana !important;
+    font-size: 13px !important;
+    border-top: none !important;
+}
 
-    border-top: 3px !important;
-    border-style: solid !important;
-    border-color: black !important;    
+.instance-row-expanded > td {
+    font-family: verdana !important;
+    font-size: 13px !important;
+    padding: 14px 16px !important;
 }
 
 .instance-row-expanded>:first-child {
     border-bottom: 0px !important;
 }
 
-
 .instance-details-expanded {
     background-color: var(--instance-details-bg-color);
+    font-family: verdana !important;
+    font-size: 13px !important;
+    border-top: none !important;
+    border-bottom: none !important;
+}
 
-    border-top: 0px !important;
-    border-bottom: 3px !important;
-    border-style: solid !important;
-    border-color: black !important;
+.instance-details-expanded > td {
+    font-family: verdana !important;
+    font-size: 13px !important;
+    padding: 14px 16px !important;
+}
+
+/* Ensure all instance table cells match parent table */
+.instance-row-collapsed td,
+.instance-row-expanded td,
+.instance-details-expanded td {
+    font-family: verdana !important;
+    font-size: 13px !important;
+    padding: 14px 16px !important;
+    vertical-align: middle !important;
 }
 </style>

@@ -112,16 +112,24 @@ export default {
 </template>
 
 <style scoped>
+/* Match parent study-table row styles exactly */
 .series-row-collapsed {
+    font-family: verdana !important;
+    font-size: 13px !important;
 }
 
 .series-row-expanded {
     background-color: var(--series-selected-color);
-    font-weight: 700;
+    font-weight: 600 !important;
+    font-family: verdana !important;
+    font-size: 13px !important;
+    border-top: none !important;
+}
 
-    border-top: 3px !important;
-    border-style: solid !important;
-    border-color: black !important;
+.series-row-expanded > td {
+    font-family: verdana !important;
+    font-size: 13px !important;
+    padding: 14px 16px !important;
 }
 
 .series-row-expanded>:first-child {
@@ -130,11 +138,26 @@ export default {
 
 .series-details-expanded {
     background-color: var(--series-details-bg-color);
+    font-family: verdana !important;
+    font-size: 13px !important;
+    border-top: none !important;
+    border-bottom: none !important;
+}
 
-    border-top: 0px !important;
-    border-bottom: 3px !important;
-    border-style: solid !important;
-    border-color: black !important;
+.series-details-expanded > td {
+    font-family: verdana !important;
+    font-size: 13px !important;
+    padding: 14px 16px !important;
+}
+
+/* Ensure all series table cells match parent table */
+.series-row-collapsed td,
+.series-row-expanded td,
+.series-details-expanded td {
+    font-family: verdana !important;
+    font-size: 13px !important;
+    padding: 14px 16px !important;
+    vertical-align: middle !important;
 }
 
 </style>

@@ -102,18 +102,29 @@ export default {
 </template>
 
 <style>
+/* Match parent study-table styles exactly */
+.series-table {
+    font-family: verdana !important;
+    font-size: 13px !important;
+    border-radius: 14px;
+    overflow: visible;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(229, 231, 235, 0.6);
+    position: relative;
+}
 
 .series-table>:not(:first-child) {
     border-top: 0px !important;
 }
 
 .series-table>:first-child {
-    border-bottom: 2px !important;
-    border-style: solid !important;
-    border-color: black !important;
+    border-bottom: none !important;
 }
 
-.series-table {
+.series-table thead {
+    background: rgba(249, 250, 251, 0.85);
 }
 
 .series-table>:nth-child(odd) >* >* {
@@ -135,15 +146,41 @@ export default {
     background-color: var(--series-details-bg-color);
 }
 
-
 .series-table-header {
     text-align: left;
-    padding-left: 10px;
+    padding: 14px 16px !important;
+    font-weight: 500;
+    color: #374151;
+    transition: background-color 0.2s ease;
+    letter-spacing: -0.01em;
+    vertical-align: middle !important;
+    font-family: verdana !important;
+    font-size: smaller !important;
+    background-color: var(--study-table-header-bg-color) !important;
+    border: none;
+}
+
+.series-table th {
+    border: none;
+    padding: 14px 16px !important;
+    font-weight: 500;
+    color: #374151;
+    transition: background-color 0.2s ease;
+    letter-spacing: -0.01em;
+    vertical-align: middle !important;
+    font-family: verdana !important;
+    font-size: 13px !important;
 }
 
 .series-table td {
     text-align: left;
-    padding-left: 10px;
+    padding: 14px 16px !important;
+    border: none;
+    border-bottom: 1px solid rgba(229, 231, 235, 0.35);
+    transition: background-color 0.2s ease;
+    font-family: verdana !important;
+    font-size: 13px !important;
+    vertical-align: middle !important;
 }
 
 </style>

@@ -90,9 +90,9 @@ export default {
 }
 
 .instance-table>:first-child {
-    border-bottom: 2px !important;
+    border-bottom: 1px !important;
     border-style: solid !important;
-    border-color: black !important;
+    border-color: rgb(245, 245, 245) !important;
 }
 
 .instance-table>:nth-child(odd) >* >* {

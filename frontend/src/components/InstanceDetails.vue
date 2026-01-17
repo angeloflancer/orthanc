@@ -48,80 +48,127 @@ export default {
 
 
 <template>
-    <table v-if="loaded" class="table table-responsive table-sm instance-details-table">
-        <tbody>
-            <tr>
-                <td width="80%" class="cut-text">
-                    <TagsTree 
-                        :tags="headers">
-                    </TagsTree>
-                </td>
-                <td width="20%" class="instance-button-group">
+    <div v-if="loaded" class="instance-details-container">
+        <!-- Modern Details Content -->
+        <div class="details-content">
+            <!-- Headers Section -->
+            <div v-if="headers && Object.keys(headers).length > 0" class="info-section">
+                <h6><i class="bi bi-file-earmark-text me-2"></i>Instance Headers</h6>
+                <div class="tags-tree-wrapper">
+                    <TagsTree :tags="headers"></TagsTree>
+                </div>
+            </div>
+            
+            <!-- Tags Section -->
+            <div v-if="tags && Object.keys(tags).length > 0" class="info-section">
+                <h6><i class="bi bi-tags me-2"></i>Instance Tags</h6>
+                <div class="tags-tree-wrapper">
+                    <TagsTree :tags="tags"></TagsTree>
+                </div>
+            </div>
+            
+            <!-- Actions Section -->
+            <div class="actions-section">
+                <span class="actions-label">Actions:</span>
+                <div class="action-buttons">
                     <ResourceButtonGroup
-                    :resourceOrthancId="this.instanceId"
-                    :resourceLevel="'instance'"
-                    :studyMainDicomTags="this.studyMainDicomTags"
-                    :seriesMainDicomTags="this.seriesMainDicomTags"
-                    :patientMainDicomTags="this.patientMainDicomTags"
-                    :instanceTags="this.tags"
-                    :instanceHeaders="this.headers"
-                    @deletedResource="onDeletedInstance"
+                        :resourceOrthancId="this.instanceId"
+                        :resourceLevel="'instance'"
+                        :studyMainDicomTags="this.studyMainDicomTags"
+                        :seriesMainDicomTags="this.seriesMainDicomTags"
+                        :patientMainDicomTags="this.patientMainDicomTags"
+                        :instanceTags="this.tags"
+                        :instanceHeaders="this.headers"
+                        @deletedResource="onDeletedInstance"
                     ></ResourceButtonGroup>
-                </td>
-            </tr>
-            <tr>
-                <td width="80%" class="cut-text">
-                    <TagsTree 
-                        :tags="tags">
-                    </TagsTree>
-                </td>
-            </tr>
-        </tbody>
-    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 </template>
 
 <style scoped>
-.instance-details-table {
-    margin-top: var(--details-top-margin);
-    margin-left: 5%;
-    width: 95% !important;
-    background-color: var(--instance-details-bg-color) !important;
-    font-size: 0.8rem;
+/* Match StudyDetails styles exactly */
+.instance-details-container {
+    background-color: var(--instance-details-bg-color);
+    font-family: verdana !important;
+    font-size: 13px !important;
 }
 
-.instance-details-table td {
-    vertical-align: top;
+.details-content {
+    padding: 20px;
 }
 
-.instance-details-table>:not(caption) >* >* {
-  background-color: var(--instance-details-bg-color) !important;
+.info-section {
+    margin-bottom: 20px;
 }
 
-.instance-details-table >* >* {
-  background-color: var(--instance-details-bg-color) !important;
+.info-section h6 {
+    margin-bottom: 15px;
+    color: var(--bs-body-color);
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    font-family: verdana !important;
 }
 
-
-.details-label {
-    font-weight: 700;
-    max-width: 30%;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.tags-tree-wrapper {
+    font-family: verdana !important;
+    font-size: 13px !important;
 }
 
-.details {
-    margin-left: auto !important;
-    font-weight: 500;
-    max-width: 25vw;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.actions-section {
+    display: flex;
+    align-items: center;
+    padding: 15px 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.actions-label {
+    font-weight: 600;
+    margin-right: 20px;
+    color: var(--bs-body-color);
+    font-size: 14px;
+    font-family: verdana !important;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 </style>
 <style>
+/* Global styles for ResourceButtonGroup inside InstanceDetails */
+.instance-details-container .instance-button-group i {
+    font-size: 1rem;
+}
 
-.instance-button-group i {
-    font-size: 1.2rem !important;
+.instance-details-container .instance-button-group .btn {
+    padding: 6px 12px;
+    font-size: 0.875rem;
+}
+
+.instance-details-container .instance-button-group .btn-group .btn {
+    padding: 6px 12px;
+    font-size: 0.875rem;
+}
+
+/* Update TagsTree styles to match parent table */
+.instance-details-container .details-label {
+    font-weight: 500;
+    color: var(--bs-secondary-color);
+    font-family: verdana !important;
+    font-size: 13px !important;
+}
+
+.instance-details-container .details {
+    color: var(--bs-body-color);
+    font-weight: 400;
+    font-family: verdana !important;
+    font-size: 13px !important;
 }
 </style>
 
