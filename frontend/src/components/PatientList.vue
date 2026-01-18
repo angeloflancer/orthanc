@@ -11,6 +11,8 @@ export default {
             filteredPatients: [],
             loading: false,
             expandedPatientId: null,
+            uploadTargetPatient: null,
+            uploadingDocumentPatientId: null,
             // Search filters
             filterPatientId: '',
             filterPatientName: '',
@@ -179,12 +181,64 @@ export default {
                 query: { patientId: patient.patientId }
             });
         },
-        reportDocument(patient) {
-            // Navigate to upload page or trigger upload modal with pre-filled patient info
-            this.$router.push({
-                path: '/studies',
-                query: { uploadDoc: 'true', patientId: patient.patientId, patientName: patient.patientName }
-            });
+        uploadNewDocument(patient) {
+            // Minimal behavior: pick .doc/.docx and upload for this patient (no redirects, no extra steps)
+            this.uploadTargetPatient = patient;
+            const input = this.$refs.patientDocumentUploadInput;
+            if (input) {
+                input.value = null; // allow re-uploading the same file
+                input.click();
+            } else {
+                this.messageBus.emit('show-toast', 'Upload input not available');
+            }
+        },
+        async handlePatientDocumentUpload(event) {
+            const files = Array.from(event?.target?.files || []);
+            const patient = this.uploadTargetPatient;
+
+            if (!patient || files.length === 0) {
+                this.uploadTargetPatient = null;
+                return;
+            }
+
+            const patientId = (patient.patientId || '').trim();
+            const patientName = this.formatPatientName(patient.patientName);
+
+            if (!patientId) {
+                this.messageBus.emit('show-toast', 'Missing Patient ID');
+                this.uploadTargetPatient = null;
+                return;
+            }
+
+            this.uploadingDocumentPatientId = patient.id;
+
+            let successCount = 0;
+            let failedCount = 0;
+
+            for (const file of files) {
+                try {
+                    const response = await api.uploadWordFile(file, patientId, patientName);
+                    if (response && response.success) {
+                        successCount++;
+                    } else {
+                        failedCount++;
+                    }
+                } catch (error) {
+                    failedCount++;
+                    console.error('Error uploading document:', error);
+                }
+            }
+
+            this.uploadingDocumentPatientId = null;
+            this.uploadTargetPatient = null;
+
+            if (successCount > 0) {
+                this.messageBus.emit('show-toast', `Uploaded ${successCount} document(s)`);
+                await this.loadPatients(); // refresh counts/last-upload timestamps
+            }
+            if (failedCount > 0) {
+                this.messageBus.emit('show-toast', `Failed to upload ${failedCount} document(s)`);
+            }
         },
         formatDate(dateString) {
             if (!dateString) return '-';
@@ -381,9 +435,11 @@ export default {
                                         </button>
                                         <button 
                                             class="btn btn-outline-success action-btn"
-                                            @click.stop="reportDocument(patient)"
+                                            @click.stop="uploadNewDocument(patient)"
+                                            :disabled="uploadingDocumentPatientId === patient.id"
                                         >
-                                            <i class="bi bi-file-earmark-plus me-2"></i>
+                                            <span v-if="uploadingDocumentPatientId === patient.id" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            <i v-else class="bi bi-file-earmark-plus me-2"></i>
                                             Upload New Document
                                         </button>
                                     </div>
@@ -394,6 +450,14 @@ export default {
                 </tr>
             </tbody>
         </table>
+        <input
+            ref="patientDocumentUploadInput"
+            type="file"
+            style="display: none;"
+            multiple
+            accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            @change="handlePatientDocumentUpload"
+        />
         <Toasts />
     </div>
 </template>
