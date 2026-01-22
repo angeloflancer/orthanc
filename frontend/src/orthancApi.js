@@ -370,14 +370,17 @@ export default {
     },
     async uploadWordFile(file, patientId, patientName) {
         const formData = new FormData();
-        formData.append('file', file);
+        // Append file with explicit UTF-8 filename handling
+        // The browser will automatically encode the filename in Content-Disposition header
+        formData.append('file', file, file.name);
         formData.append('patientId', patientId);
         formData.append('patientName', patientName);
         
         const token = localStorage.getItem('auth-token');
         const config = {
             headers: {
-                'Content-Type': 'multipart/form-data',
+                // Don't set Content-Type manually - let axios set it with proper boundary
+                // This ensures proper encoding of filenames in multipart/form-data
                 'Authorization': `Bearer ${token}`
             }
         };

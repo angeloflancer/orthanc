@@ -27,7 +27,9 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    // Preserve file extension (handles UTF-8 filenames correctly)
+    const ext = path.extname(file.originalname);
+    cb(null, uniqueSuffix + ext);
   }
 });
 
@@ -71,9 +73,61 @@ router.post('/upload', protect, upload.single('file'), async (req, res) => {
     
     const user = await User.findById(req.user._id);
     
+    // Fix Arabic filename encoding issue
+    // Multer may receive filename incorrectly encoded. We need to properly decode it.
+    let originalFileName = req.file.originalname;
+    
+    try {
+      // Method 1: Check if filename is incorrectly encoded (latin1 instead of utf8)
+      // This happens when UTF-8 bytes are interpreted as latin1
+      const decodedFromLatin1 = Buffer.from(originalFileName, 'latin1').toString('utf8');
+      
+      // Check if decoded version is different and doesn't contain replacement characters
+      if (decodedFromLatin1 !== originalFileName && !decodedFromLatin1.includes('\uFFFD')) {
+        // Validate: decoded string should have valid UTF-8 characters
+        // Check if it contains Arabic characters (common range)
+        const hasArabicChars = /[\u0600-\u06FF]/.test(decodedFromLatin1);
+        const hasValidChars = /^[\u0000-\uFFFF]*$/.test(decodedFromLatin1);
+        
+        if (hasValidChars && (hasArabicChars || decodedFromLatin1.length > 0)) {
+          originalFileName = decodedFromLatin1;
+        }
+      }
+      
+      // Method 2: Check Content-Disposition header for properly encoded filename
+      // Modern browsers send filename*=UTF-8''encoded-name
+      const contentDisposition = req.headers['content-disposition'] || '';
+      
+      // Look for RFC 5987 encoded filename (filename*=UTF-8''...)
+      const utf8FilenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;\s]+)/i);
+      if (utf8FilenameMatch) {
+        try {
+          const decoded = decodeURIComponent(utf8FilenameMatch[1]);
+          if (decoded && decoded.length > 0) {
+            originalFileName = decoded;
+          }
+        } catch (e) {
+          // If URI decoding fails, continue with other methods
+        }
+      }
+      
+      // Method 3: Check for quoted filename in Content-Disposition
+      const quotedMatch = contentDisposition.match(/filename="([^"]+)"/);
+      if (quotedMatch) {
+        const quotedName = quotedMatch[1];
+        // Use quoted name if it's different and doesn't look corrupted
+        if (quotedName !== originalFileName && !/[ÃÂ]/.test(quotedName)) {
+          originalFileName = quotedName;
+        }
+      }
+    } catch (e) {
+      // If all decoding attempts fail, use original name
+      console.warn('Filename encoding fix failed, using original:', e.message);
+    }
+    
     const wordFile = await WordFile.create({
       fileName: req.file.filename,
-      originalFileName: req.file.originalname,
+      originalFileName: originalFileName,
       filePath: req.file.path,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
