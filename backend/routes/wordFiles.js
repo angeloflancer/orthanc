@@ -6,6 +6,8 @@ const fs = require('fs');
 const WordFile = require('../models/WordFile');
 const Patient = require('../models/Patient');
 const User = require('../models/User');
+const Hospital = require('../models/Hospital');
+const HospitalMember = require('../models/HospitalMember');
 const { protect } = require('../middleware/auth');
 
 // Get upload directory from environment variable or use default
@@ -179,10 +181,63 @@ router.post('/upload', protect, upload.single('file'), async (req, res) => {
   }
 });
 
+// Helper function to get allowed user IDs for word files based on role
+async function getAllowedWordFileUserIds(user) {
+  if (!user) return [];
+  
+  if (user.role === 'owner') {
+    // Owner can access all documents - return null to indicate no filtering
+    return null;
+  }
+  
+  if (user.role === 'admin') {
+    // Admin can access their own documents + all accepted hospital members' documents
+    const hospital = await Hospital.findOne({ admin: user._id });
+    
+    if (!hospital) {
+      // Admin without hospital can only see their own documents
+      return [user._id];
+    }
+    
+    // Get all accepted members of the hospital
+    const members = await HospitalMember.find({ 
+      hospital: hospital._id,
+      status: 'accepted'
+    }).select('user');
+    
+    const memberIds = members.map(m => m.user);
+    // Include admin's own ID
+    if (!memberIds.some(id => id.equals(user._id))) {
+      memberIds.push(user._id);
+    }
+    
+    return memberIds;
+  }
+  
+  // Doctor can only access their own documents
+  return [user._id];
+}
+
 // Get all Word files
 router.get('/', protect, async (req, res) => {
   try {
-    const wordFiles = await WordFile.find()
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    // Get allowed user IDs based on role
+    const allowedUserIds = await getAllowedWordFileUserIds(user);
+    
+    // Build query based on allowed user IDs
+    let query = {};
+    if (allowedUserIds !== null) {
+      // Filter by allowed user IDs
+      query.uploadedBy = { $in: allowedUserIds };
+    }
+    // If allowedUserIds is null (owner), query remains empty (all documents)
+    
+    const wordFiles = await WordFile.find(query)
       .sort({ uploadedAt: -1 })
       .select('-filePath')
       .lean();
@@ -216,6 +271,19 @@ router.get('/:id', protect, async (req, res) => {
       return res.status(404).json({ error: 'Word file not found' });
     }
     
+    // Check if user has permission to access this file
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const allowedUserIds = await getAllowedWordFileUserIds(user);
+    
+    // Check permission
+    if (allowedUserIds !== null && !allowedUserIds.some(id => id.equals(wordFile.uploadedBy))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
     res.json({
       success: true,
       wordFile: {
@@ -245,6 +313,19 @@ router.get('/:id/download', protect, async (req, res) => {
       return res.status(404).json({ error: 'Word file not found' });
     }
     
+    // Check if user has permission to access this file
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const allowedUserIds = await getAllowedWordFileUserIds(user);
+    
+    // Check permission
+    if (allowedUserIds !== null && !allowedUserIds.some(id => id.equals(wordFile.uploadedBy))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
     if (!fs.existsSync(wordFile.filePath)) {
       return res.status(404).json({ error: 'File not found on server' });
     }
@@ -265,6 +346,19 @@ router.delete('/:id', protect, async (req, res) => {
     
     if (!wordFile) {
       return res.status(404).json({ error: 'Word file not found' });
+    }
+    
+    // Check if user has permission to delete this file
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const allowedUserIds = await getAllowedWordFileUserIds(user);
+    
+    // Check permission
+    if (allowedUserIds !== null && !allowedUserIds.some(id => id.equals(wordFile.uploadedBy))) {
+      return res.status(403).json({ error: 'Access denied' });
     }
     
     // Delete file from filesystem

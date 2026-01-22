@@ -136,7 +136,7 @@
     },
     "legacy_ui": "Legacy UI",
     "loading_most_recent_studies": "Loading most recent studies",
-    "local_studies": "All local Studies",
+    "local_studies": "All DICOM Studies",
     "logout": "Logout",
     "logout_confirm_message": "Are you sure you want to log out?",
     "logout_success_message": "Logged out successfully!",

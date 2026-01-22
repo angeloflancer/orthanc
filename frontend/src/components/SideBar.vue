@@ -579,7 +579,6 @@ export default {
                         <div class="nav-link">
                             <i class="fa fa-x-ray fa-lg nav-icon"></i>
                             <span class="nav-text">{{ $t('local_studies') }}</span>
-                            <span class="nav-badge">{{ displayedStudyCount }} / {{ statistics.CountStudies }}</span>
                             <span v-if="hasLabels" class="nav-arrow"></span>
                         </div>
                     </li>
@@ -587,7 +586,7 @@ export default {
                         <li @click.stop="goToAllStudies(); onLabelSelected(null)" :class="{ 'active': isRouteActive('/studies') && !labelFilters.length && !selectedLabel }">
                             <i class="fa fa-list-ul sub-menu-icon"></i>
                             <span>All Studies</span>
-                            <span class="study-count ms-auto">{{ statistics.CountStudies }}</span>
+                            <span class="study-count ms-auto">{{ displayedStudyCount }}</span>
                         </li>
                         <li v-for="label in allLabels" :key="label"
                             v-bind:class="{ 'active': isSelectedLabel(label) }" @click.stop="selectLabel(label)">
