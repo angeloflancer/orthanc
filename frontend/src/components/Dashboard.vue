@@ -21,20 +21,24 @@ export default {
             statistics: state => state.studies.statistics,
             userProfile: state => state.configuration.userProfile
         }),
-        userName() {
+        userFullName() {
+            // First try userProfile from store
             if (this.userProfile && this.userProfile.name) {
                 return this.userProfile.name;
             }
-            const userData = localStorage.getItem('user-data');
+            // Then try localStorage
+            const userData = localStorage.getItem('user');
             if (userData) {
                 try {
                     const user = JSON.parse(userData);
-                    return user.name || user.email || 'User';
+                    if (user.name) {
+                        return user.name;
+                    }
                 } catch (e) {
-                    return 'User';
+                    console.error('Error parsing user data:', e);
                 }
             }
-            return 'User';
+            return null; // Return null if no name found, so we can show a fallback
         }
     },
     async mounted() {
@@ -92,8 +96,12 @@ export default {
         <!-- Header Section -->
         <div class="dashboard-header">
             <div class="welcome-section">
-                <h1 class="welcome-title">Welcome back, {{ userName }}</h1>
-                <p class="welcome-subtitle">Here's your medical imaging workspace overview</p>
+                <h1 class="welcome-title">
+                    <span class="welcome-greeting">Welcome back</span>
+                    <span v-if="userFullName" class="welcome-name">{{ userFullName }}</span>
+                    <span v-else class="welcome-name">there</span>
+                </h1>
+                <p class="welcome-subtitle">Here's what's happening in your workspace today</p>
             </div>
             <div class="header-actions">
                 <button class="btn-refresh" @click="loadDashboardData" :disabled="loading">
@@ -225,7 +233,7 @@ export default {
 
 <style scoped>
 .dashboard-container {
-    padding: 30px;
+    padding: 32px 40px;
     max-width: 1400px;
     margin: 0 auto;
 }
@@ -234,39 +242,67 @@ export default {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 30px;
+    margin-bottom: 48px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.welcome-section {
+    flex: 1;
 }
 
 .welcome-title {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--bs-body-color);
-    margin-bottom: 8px;
+    font-size: 34px;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 12px;
+    line-height: 1.3;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    letter-spacing: -0.02em;
+}
+
+.welcome-greeting {
+    color: #374151;
+    font-weight: 500;
+}
+
+.welcome-name {
+    color: #111827;
+    font-weight: 600;
 }
 
 .welcome-subtitle {
-    font-size: 14px;
-    color: var(--bs-secondary-color);
+    font-size: 15px;
+    color: #6b7280;
     margin: 0;
+    font-weight: 400;
+    line-height: 1.6;
 }
 
 .btn-refresh {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 20px;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
+    padding: 10px 18px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
     background: white;
-    color: var(--bs-body-color);
+    color: #4a5568;
     font-size: 14px;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .btn-refresh:hover:not(:disabled) {
-    background: #f8f9fa;
-    border-color: #d0d0d0;
+    background: #f7fafc;
+    border-color: #cbd5e0;
+    color: #2d3748;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
 .btn-refresh:disabled {
@@ -294,48 +330,50 @@ export default {
 .stat-card {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 24px;
+    gap: 18px;
+    padding: 28px 24px;
     background: white;
-    border-radius: 16px;
+    border-radius: 14px;
     border: 1px solid #e8e8e8;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-    border-color: #d0d0d0;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    border-color: #d1d5db;
 }
 
 .stat-icon {
     width: 56px;
     height: 56px;
-    border-radius: 12px;
+    border-radius: 13px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24px;
+    flex-shrink: 0;
 }
 
 .stat-icon.studies {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
     color: white;
 }
 
 .stat-icon.patients {
-    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
 }
 
 .stat-icon.documents {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
     color: white;
 }
 
 .stat-icon.series {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     color: white;
 }
 
@@ -346,27 +384,30 @@ export default {
 }
 
 .stat-value {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--bs-body-color);
+    font-size: 30px;
+    font-weight: 600;
+    color: #1a202c;
     line-height: 1.2;
+    letter-spacing: -0.5px;
 }
 
 .stat-label {
     font-size: 13px;
-    color: var(--bs-secondary-color);
-    margin-top: 4px;
+    color: #718096;
+    margin-top: 6px;
+    font-weight: 400;
 }
 
 .stat-arrow {
-    color: #ccc;
-    font-size: 20px;
-    transition: transform 0.2s;
+    color: #9ca3af;
+    font-size: 18px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
 }
 
 .stat-card:hover .stat-arrow {
-    transform: translateX(4px);
-    color: #666;
+    transform: translateX(3px);
+    color: #4b5563;
 }
 
 /* Section */
@@ -375,10 +416,11 @@ export default {
 }
 
 .section-title {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 600;
-    color: var(--bs-body-color);
+    color: #2d3748;
     margin-bottom: 20px;
+    letter-spacing: -0.3px;
 }
 
 /* Quick Actions */
@@ -393,47 +435,56 @@ export default {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 24px;
+    padding: 28px 24px;
     background: white;
     border: 1px solid #e8e8e8;
     border-radius: 12px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
     gap: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .quick-action-card:hover {
-    background: #f8f9fa;
+    background: #f7fafc;
     border-color: #4a90e2;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.12);
 }
 
 .quick-action-card i {
     font-size: 28px;
     color: #4a90e2;
+    transition: transform 0.2s ease;
+}
+
+.quick-action-card:hover i {
+    transform: scale(1.1);
 }
 
 .quick-action-card span {
     font-size: 14px;
     font-weight: 500;
-    color: var(--bs-body-color);
+    color: #4a5568;
 }
 
 /* Recent List */
 .recent-list {
     background: white;
-    border: 1px solid #e8e8e8;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
     overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .recent-item {
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 16px 20px;
-    border-bottom: 1px solid #f0f0f0;
+    padding: 18px 20px;
+    border-bottom: 1px solid #f3f4f6;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s ease;
 }
 
 .recent-item:last-child {
@@ -441,19 +492,20 @@ export default {
 }
 
 .recent-item:hover {
-    background: #f8f9fa;
+    background: #f9fafb;
 }
 
 .recent-icon {
     width: 40px;
     height: 40px;
-    border-radius: 8px;
-    background: rgba(74, 144, 226, 0.1);
+    border-radius: 10px;
+    background: rgba(59, 130, 246, 0.1);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #4a90e2;
+    color: #3b82f6;
     font-size: 18px;
+    flex-shrink: 0;
 }
 
 .recent-info {
@@ -465,13 +517,14 @@ export default {
 .recent-title {
     font-size: 14px;
     font-weight: 500;
-    color: var(--bs-body-color);
+    color: #111827;
+    line-height: 1.4;
 }
 
 .recent-meta {
     font-size: 12px;
-    color: var(--bs-secondary-color);
-    margin-top: 4px;
+    color: #6b7280;
+    margin-top: 6px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -492,21 +545,23 @@ export default {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
+    padding: 18px 20px;
     background: white;
-    border: 1px solid #e8e8e8;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .system-info-label {
     font-size: 14px;
-    color: var(--bs-secondary-color);
+    color: #6b7280;
+    font-weight: 400;
 }
 
 .system-info-value {
     font-size: 16px;
     font-weight: 600;
-    color: var(--bs-body-color);
+    color: #111827;
 }
 
 /* Responsive */
