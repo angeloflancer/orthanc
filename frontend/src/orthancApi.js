@@ -5,6 +5,31 @@ import { showSaveFilePicker } from "native-file-system-adapter";
 
 import { orthancApiUrl, oe2ApiUrl } from "./globalConfigurations";
 
+// Set up axios interceptor to automatically add auth token to requests
+axios.interceptors.request.use(
+    (config) => {
+        // Only add auth token for requests to our backend (orthancApiUrl)
+        if (config.url && config.url.startsWith(orthancApiUrl)) {
+            const authToken = localStorage.getItem('auth-token');
+            const vueToken = localStorage.getItem('vue-token');
+            
+            // Priority: auth-token (for auth-token based login) > vue-token (for Keycloak)
+            if (authToken) {
+                config.headers.Authorization = `Bearer ${authToken}`;
+                config.headers.token = authToken;
+            } else if (vueToken) {
+                config.headers.token = vueToken;
+                // Remove Authorization header for Keycloak
+                delete config.headers.Authorization;
+            }
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
 // Browser-compatible function to get file extension from content-type
 function getExtensionFromContentType(contentType) {
     if (!contentType) return 'bin';
@@ -33,7 +58,25 @@ function getExtensionFromContentType(contentType) {
 
 export default {
     updateAuthHeader(headerKey = null) {
-        axios.defaults.headers.common[headerKey ?? "token"] = localStorage.getItem(headerKey ?? "vue-token")
+        const tokenKey = headerKey ?? "vue-token";
+        const token = localStorage.getItem(tokenKey);
+        
+        if (token) {
+            // For Keycloak tokens, use 'token' header
+            if (tokenKey === "vue-token") {
+                axios.defaults.headers.common["token"] = token;
+                // Remove Authorization header for Keycloak
+                delete axios.defaults.headers.common["Authorization"];
+            } else {
+                // For auth-token based login, use both Authorization Bearer and token header
+                axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+                axios.defaults.headers.common["token"] = token;
+            }
+        } else {
+            // Clear headers if no token
+            delete axios.defaults.headers.common["token"];
+            delete axios.defaults.headers.common["Authorization"];
+        }
     },
     async loadOe2Configuration() {
         return (await axios.get(oe2ApiUrl + "configuration")).data;

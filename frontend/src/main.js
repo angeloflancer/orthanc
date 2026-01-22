@@ -135,6 +135,17 @@ axios.get(oe2ApiUrl + 'pre-login-configuration').then((config) => {
                     orthancApi.updateAuthHeader(paramName);
                 }
             }
+            
+            // If no token in URL params, check if auth-token exists in localStorage (from previous login)
+            if (!router.currentRoute.value.query['auth-token'] && 
+                !router.currentRoute.value.query['token'] && 
+                !router.currentRoute.value.query['authorization']) {
+                const authToken = localStorage.getItem('auth-token');
+                if (authToken) {
+                    console.log("Found auth-token in localStorage, setting axios headers");
+                    orthancApi.updateAuthHeader('auth-token');
+                }
+            }
 
             app.mount('#app');
         });

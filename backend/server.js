@@ -168,7 +168,7 @@ app.post('/tools/find', express.json(), async (req, res) => {
     
     if (queryLevel === 'Study') {
       // Filter studies directly
-      results = results.filter(studyId => allowedStudyIds.includes(studyId));
+      results = results.filter(dicomStudy => allowedStudyIds.includes(dicomStudy?.ID));
     } else if (queryLevel === 'Series' || queryLevel === 'Instance') {
       // For series/instances, we need to get the parent study and check
       const filteredResults = [];
@@ -200,7 +200,7 @@ app.post('/tools/find', express.json(), async (req, res) => {
           const patientStudies = patientResponse.data.Studies || [];
           
           // Check if user has access to any of the patient's studies
-          const hasAccess = patientStudies.some(studyId => allowedStudyIds.includes(studyId));
+          const hasAccess = patientStudies.some(dicomStudy => allowedStudyIds.includes(dicomStudy?.ID));
           
           if (hasAccess) {
             filteredResults.push(patientId);

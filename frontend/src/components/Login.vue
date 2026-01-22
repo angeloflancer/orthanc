@@ -91,6 +91,7 @@
 <script>
 import axios from 'axios';
 import { orthancApiUrl } from '../globalConfigurations';
+import orthancApi from '../orthancApi';
 
 export default {
   name: 'Login',
@@ -131,6 +132,9 @@ export default {
           // Store token and user data
           localStorage.setItem('auth-token', response.data.token);
           localStorage.setItem('user', JSON.stringify(response.data.user));
+          
+          // Update axios headers with auth token
+          orthancApi.updateAuthHeader('auth-token');
           
           // Show success notification
           if (this.messageBus) {
