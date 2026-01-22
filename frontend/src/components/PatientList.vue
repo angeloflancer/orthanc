@@ -172,7 +172,7 @@ export default {
         viewDicomFiles(patient) {
             this.$router.push({
                 path: '/filtered-studies',
-                query: { PatientID: patient.patientId }
+                query: { PatientID: '*' + patient.patientId + '*' }
             });
         },
         viewWordFiles(patient) {
