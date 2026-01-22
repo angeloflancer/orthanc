@@ -11,6 +11,31 @@
           </h5>
           <form @submit.prevent="updateProfile">
             <div class="form-row mb-3">
+              <label for="username" class="form-label">Username</label>
+              <div class="input-with-status">
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  :class="{ 'is-valid': usernameValid && userProfile.username !== originalUsername, 'is-invalid': usernameError }"
+                  id="username" 
+                  v-model="userProfile.username"
+                  required
+                  placeholder="Enter your username"
+                  @input="checkUsernameAvailability"
+                />
+                <span v-if="checkingUsername" class="input-status checking">
+                  <i class="bi bi-arrow-repeat spin"></i>
+                </span>
+                <span v-else-if="usernameValid && userProfile.username !== originalUsername" class="input-status valid">
+                  <i class="bi bi-check-circle-fill"></i>
+                </span>
+                <span v-else-if="usernameError" class="input-status invalid">
+                  <i class="bi bi-x-circle-fill"></i>
+                </span>
+              </div>
+              <small v-if="usernameError" class="text-danger">{{ usernameError }}</small>
+            </div>
+            <div class="form-row mb-3">
               <label for="name" class="form-label">Name</label>
               <input 
                 type="text" 
@@ -31,6 +56,15 @@
                 required
                 placeholder="Enter your email"
               />
+            </div>
+            <div class="form-row mb-3">
+              <label class="form-label">Role</label>
+              <div class="role-display">
+                <span class="role-badge" :class="userProfile.role">
+                  <i :class="getRoleIcon(userProfile.role)" class="me-1"></i>
+                  {{ formatRole(userProfile.role) }}
+                </span>
+              </div>
             </div>
             <div class="form-row mb-3">
               <label class="form-label">Email Verification</label>
@@ -73,12 +107,93 @@
             </div>
             <div class="form-row">
               <div class="form-label"></div>
-              <button type="submit" class="btn btn-primary" :disabled="profileLoading">
+              <button type="submit" class="btn btn-primary" :disabled="profileLoading || (usernameError && userProfile.username !== originalUsername)">
                 <span v-if="profileLoading" class="spinner-border spinner-border-sm me-2"></span>
                 {{ profileLoading ? 'Updating...' : 'Update Profile' }}
               </button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- Hospital Membership Section (for doctors only) -->
+      <div v-if="userProfile.role === 'doctor'" class="card mb-4 shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title mb-4">
+            <i class="bi bi-hospital me-2"></i>Hospital Membership
+          </h5>
+          
+          <!-- Current Membership Status -->
+          <div v-if="hospitalMembership" class="membership-info mb-4">
+            <div class="membership-card" :class="hospitalMembership.status">
+              <div class="membership-header">
+                <h6 class="mb-0">{{ hospitalMembership.hospital.name }}</h6>
+                <span class="membership-status" :class="hospitalMembership.status">
+                  {{ formatMembershipStatus(hospitalMembership.status) }}
+                </span>
+              </div>
+              <div class="membership-details">
+                <p class="mb-1"><strong>Hospital ID:</strong> {{ hospitalMembership.hospital.hospitalId }}</p>
+                <p v-if="hospitalMembership.hospital.address" class="mb-1">
+                  <strong>Address:</strong> {{ hospitalMembership.hospital.address }}
+                </p>
+                <p v-if="hospitalMembership.joinedAt" class="mb-0">
+                  <strong>Joined:</strong> {{ formatDate(hospitalMembership.joinedAt) }}
+                </p>
+              </div>
+              <div class="membership-actions" v-if="hospitalMembership.status === 'pending' || hospitalMembership.status === 'accepted'">
+                <button 
+                  class="btn btn-outline-danger btn-sm"
+                  @click="leaveHospital"
+                  :disabled="leaveLoading"
+                >
+                  <span v-if="leaveLoading" class="spinner-border spinner-border-sm me-1"></span>
+                  {{ hospitalMembership.status === 'pending' ? 'Cancel Request' : 'Leave Hospital' }}
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Join Hospital Form (only if not a member) -->
+          <div v-if="!hospitalMembership || hospitalMembership.status === 'kicked'">
+            <p class="text-muted mb-3">
+              <i class="bi bi-info-circle me-1"></i>
+              Enter a hospital ID to request membership. The hospital admin will need to approve your request.
+            </p>
+            <form @submit.prevent="joinHospital">
+              <div class="form-row mb-3">
+                <label for="hospitalId" class="form-label">Hospital ID</label>
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  id="hospitalId" 
+                  v-model="joinHospitalId"
+                  placeholder="e.g., HSP-A1B2C3"
+                  pattern="HSP-[A-Za-z0-9]{6}"
+                />
+              </div>
+              <div v-if="hospitalSuccess || hospitalError" class="form-row">
+                <div class="form-label"></div>
+                <div class="alert-wrapper">
+                  <div v-if="hospitalSuccess" class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="bi bi-check-circle me-2"></i>{{ hospitalSuccess }}
+                    <button type="button" class="btn-close" @click="hospitalSuccess = ''"></button>
+                  </div>
+                  <div v-if="hospitalError" class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-circle me-2"></i>{{ hospitalError }}
+                    <button type="button" class="btn-close" @click="hospitalError = ''"></button>
+                  </div>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-label"></div>
+                <button type="submit" class="btn btn-primary" :disabled="joinLoading || !joinHospitalId">
+                  <span v-if="joinLoading" class="spinner-border spinner-border-sm me-2"></span>
+                  {{ joinLoading ? 'Joining...' : 'Request to Join' }}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
 
@@ -189,31 +304,106 @@ export default {
   data() {
     return {
       userProfile: {
+        username: '',
         name: '',
         email: '',
+        role: 'doctor',
         emailVerified: false
       },
+      originalUsername: '',
       passwordForm: {
         currentPassword: '',
         newPassword: '',
         confirmPassword: ''
       },
+      hospitalMembership: null,
+      joinHospitalId: '',
       profileLoading: false,
       passwordLoading: false,
       resendLoading: false,
+      joinLoading: false,
+      leaveLoading: false,
       profileSuccess: '',
       profileError: '',
       passwordSuccess: '',
       passwordError: '',
+      hospitalSuccess: '',
+      hospitalError: '',
       showCurrentPassword: false,
       showNewPassword: false,
-      showConfirmPassword: false
+      showConfirmPassword: false,
+      checkingUsername: false,
+      usernameValid: true,
+      usernameError: '',
+      usernameCheckTimeout: null
     };
   },
   async mounted() {
     await this.loadUserProfile();
+    await this.loadMembership();
   },
   methods: {
+    async checkUsernameAvailability() {
+      // Clear previous timeout
+      if (this.usernameCheckTimeout) {
+        clearTimeout(this.usernameCheckTimeout);
+      }
+      
+      this.usernameValid = false;
+      this.usernameError = '';
+      
+      const username = this.userProfile.username?.trim();
+      
+      // If username is same as original, it's valid
+      if (username === this.originalUsername) {
+        this.usernameValid = true;
+        return;
+      }
+      
+      // Basic validation
+      if (!username) {
+        this.usernameError = 'Username is required';
+        return;
+      }
+      
+      if (username.length < 3) {
+        this.usernameError = 'Username must be at least 3 characters';
+        return;
+      }
+      
+      if (username.length > 20) {
+        this.usernameError = 'Username cannot exceed 20 characters';
+        return;
+      }
+      
+      const usernameRegex = /^[a-zA-Z0-9_]+$/;
+      if (!usernameRegex.test(username)) {
+        this.usernameError = 'Only letters, numbers and underscores allowed';
+        return;
+      }
+      
+      // Debounce the API call
+      this.usernameCheckTimeout = setTimeout(async () => {
+        this.checkingUsername = true;
+        
+        try {
+          const response = await axios.get(`${orthancApiUrl}api/auth/check-username/${encodeURIComponent(username)}`);
+          
+          if (response.data.available) {
+            this.usernameValid = true;
+            this.usernameError = '';
+          } else {
+            this.usernameValid = false;
+            this.usernameError = response.data.error || 'Username is already taken';
+          }
+        } catch (error) {
+          console.error('Username check error:', error);
+        } finally {
+          this.checkingUsername = false;
+        }
+      }, 500);
+    },
+    
     async loadUserProfile() {
       try {
         const token = localStorage.getItem('auth-token');
@@ -230,16 +420,55 @@ export default {
         
         if (response.data.success) {
           this.userProfile = response.data.user;
+          this.originalUsername = response.data.user.username;
+          this.usernameValid = true;
+          
+          // Set hospital membership if available
+          if (response.data.user.hospitalMembership) {
+            this.hospitalMembership = {
+              hospital: {
+                hospitalId: response.data.user.hospitalMembership.hospitalId,
+                name: response.data.user.hospitalMembership.hospitalName
+              },
+              status: response.data.user.hospitalMembership.status
+            };
+          }
         }
       } catch (error) {
         console.error('Error loading user profile:', error);
-        if (error.response?.status === 401) {
+        if (error.response?.status === 401 || error.response?.status === 403) {
           localStorage.removeItem('auth-token');
           this.$router.push('/login');
         }
       }
     },
+    
+    async loadMembership() {
+      if (this.userProfile.role !== 'doctor') return;
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.get(`${orthancApiUrl}api/members/my-membership`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.data.success && response.data.membership) {
+          this.hospitalMembership = response.data.membership;
+        }
+      } catch (error) {
+        console.error('Error loading membership:', error);
+      }
+    },
+    
     async updateProfile() {
+      // Validate username if changed
+      if (this.userProfile.username !== this.originalUsername && !this.usernameValid) {
+        this.profileError = this.usernameError || 'Please enter a valid username';
+        return;
+      }
+      
       this.profileLoading = true;
       this.profileError = '';
       this.profileSuccess = '';
@@ -249,6 +478,7 @@ export default {
         const response = await axios.put(
           `${orthancApiUrl}api/auth/profile`,
           {
+            username: this.userProfile.username,
             name: this.userProfile.name,
             email: this.userProfile.email
           },
@@ -261,8 +491,13 @@ export default {
         
         if (response.data.success) {
           this.profileSuccess = response.data.message || 'Profile updated successfully!';
-          this.userProfile = response.data.user;
-          // Clear form after successful update
+          this.userProfile = { ...this.userProfile, ...response.data.user };
+          this.originalUsername = response.data.user.username;
+          
+          // Update localStorage
+          const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+          localStorage.setItem('user', JSON.stringify({ ...storedUser, ...response.data.user }));
+          
           setTimeout(() => {
             this.profileSuccess = '';
           }, 3000);
@@ -273,6 +508,76 @@ export default {
         this.profileLoading = false;
       }
     },
+    
+    async joinHospital() {
+      if (!this.joinHospitalId) {
+        this.hospitalError = 'Please enter a hospital ID';
+        return;
+      }
+      
+      this.joinLoading = true;
+      this.hospitalError = '';
+      this.hospitalSuccess = '';
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.post(
+          `${orthancApiUrl}api/members/join`,
+          { hospitalId: this.joinHospitalId.trim().toUpperCase() },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        if (response.data.success) {
+          this.hospitalSuccess = response.data.message || 'Join request sent successfully!';
+          this.joinHospitalId = '';
+          await this.loadMembership();
+          
+          setTimeout(() => {
+            this.hospitalSuccess = '';
+          }, 5000);
+        }
+      } catch (error) {
+        this.hospitalError = error.response?.data?.error || 'Failed to join hospital. Please try again.';
+      } finally {
+        this.joinLoading = false;
+      }
+    },
+    
+    async leaveHospital() {
+      if (!confirm('Are you sure you want to leave this hospital?')) {
+        return;
+      }
+      
+      this.leaveLoading = true;
+      this.hospitalError = '';
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.delete(`${orthancApiUrl}api/members/leave`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.data.success) {
+          this.hospitalMembership = null;
+          this.hospitalSuccess = 'You have left the hospital.';
+          
+          setTimeout(() => {
+            this.hospitalSuccess = '';
+          }, 3000);
+        }
+      } catch (error) {
+        this.hospitalError = error.response?.data?.error || 'Failed to leave hospital. Please try again.';
+      } finally {
+        this.leaveLoading = false;
+      }
+    },
+    
     async changePassword() {
       // Validate passwords match
       if (this.passwordForm.newPassword !== this.passwordForm.confirmPassword) {
@@ -322,6 +627,7 @@ export default {
         this.passwordLoading = false;
       }
     },
+    
     async resendVerification() {
       this.resendLoading = true;
       this.profileError = '';
@@ -350,6 +656,43 @@ export default {
       } finally {
         this.resendLoading = false;
       }
+    },
+    
+    formatRole(role) {
+      const roles = {
+        doctor: 'Doctor',
+        admin: 'Admin',
+        owner: 'Owner'
+      };
+      return roles[role] || role;
+    },
+    
+    getRoleIcon(role) {
+      const icons = {
+        doctor: 'bi bi-person-badge',
+        admin: 'bi bi-building',
+        owner: 'bi bi-shield-check'
+      };
+      return icons[role] || 'bi bi-person';
+    },
+    
+    formatMembershipStatus(status) {
+      const statuses = {
+        pending: 'Pending Approval',
+        accepted: 'Active Member',
+        kicked: 'Removed',
+        blocked: 'Blocked'
+      };
+      return statuses[status] || status;
+    },
+    
+    formatDate(dateString) {
+      if (!dateString) return '';
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
     }
   }
 };
@@ -587,5 +930,201 @@ export default {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* Username validation styles */
+.input-with-status {
+  position: relative;
+  flex: 1;
+}
+
+.input-with-status .form-control {
+  padding-right: 40px;
+}
+
+.input-status {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-status.checking {
+  color: #6b7280;
+}
+
+.input-status.valid {
+  color: #059669;
+}
+
+.input-status.invalid {
+  color: #dc2626;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.form-control.is-valid {
+  border-color: #059669;
+}
+
+.form-control.is-valid:focus {
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+}
+
+.form-control.is-invalid {
+  border-color: #dc2626;
+}
+
+.form-control.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.text-danger {
+  color: #dc2626;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+  flex: 1;
+  margin-left: 156px;
+}
+
+.text-muted {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+/* Role badge styles */
+.role-display {
+  flex: 1;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.role-badge.doctor {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.role-badge.admin {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.role-badge.owner {
+  background-color: #ede9fe;
+  color: #6b21a8;
+}
+
+/* Hospital membership styles */
+.membership-info {
+  margin-bottom: 20px;
+}
+
+.membership-card {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e5e7eb;
+}
+
+.membership-card.accepted {
+  border-left: 4px solid #059669;
+}
+
+.membership-card.pending {
+  border-left: 4px solid #f59e0b;
+}
+
+.membership-card.blocked {
+  border-left: 4px solid #dc2626;
+}
+
+.membership-card.kicked {
+  border-left: 4px solid #6b7280;
+}
+
+.membership-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.membership-header h6 {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.membership-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.membership-status.accepted {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.membership-status.pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.membership-status.blocked {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.membership-status.kicked {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+
+.membership-details {
+  font-size: 0.875rem;
+  color: #4b5563;
+  margin-bottom: 16px;
+}
+
+.membership-details p {
+  margin-bottom: 4px;
+}
+
+.membership-actions {
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.btn-outline-danger {
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+.btn-outline-danger:hover {
+  background-color: #dc2626;
+  color: white;
 }
 </style>

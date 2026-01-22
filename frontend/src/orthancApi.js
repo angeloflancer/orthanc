@@ -977,5 +977,204 @@ export default {
         } else if (level == "series") {
             return "series"
         }
+    },
+
+    // ==================== AUTH RELATED ====================
+    
+    async getCurrentUser() {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.get(orthancApiUrl + 'api/auth/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async checkUsername(username) {
+        const response = await axios.get(orthancApiUrl + `api/auth/check-username/${encodeURIComponent(username)}`);
+        return response.data;
+    },
+
+    async updateProfile(data) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + 'api/auth/profile', data, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    // ==================== HOSPITAL MANAGEMENT ====================
+    
+    async getHospital() {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.get(orthancApiUrl + 'api/hospital', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async createHospital(data) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.post(orthancApiUrl + 'api/hospital', data, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async updateHospital(data) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + 'api/hospital', data, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async deleteHospital() {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.delete(orthancApiUrl + 'api/hospital', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async findHospital(hospitalId) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.get(orthancApiUrl + `api/hospital/find/${encodeURIComponent(hospitalId)}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    // ==================== MEMBER MANAGEMENT ====================
+    
+    async getMembers(params = {}) {
+        const token = localStorage.getItem('auth-token');
+        const queryString = new URLSearchParams(params).toString();
+        const response = await axios.get(orthancApiUrl + `api/members?${queryString}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async inviteMember(username) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.post(orthancApiUrl + 'api/members/invite', { username }, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async acceptMember(memberId) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + `api/members/${memberId}/accept`, {}, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async kickMember(memberId) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + `api/members/${memberId}/kick`, {}, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async blockMember(memberId) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + `api/members/${memberId}/block`, {}, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async unblockMember(memberId) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + `api/members/${memberId}/unblock`, {}, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async joinHospital(hospitalId) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.post(orthancApiUrl + 'api/members/join', { hospitalId }, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async getMyMembership() {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.get(orthancApiUrl + 'api/members/my-membership', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async leaveHospital() {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.delete(orthancApiUrl + 'api/members/leave', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async searchUsersForInvite(username) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.get(orthancApiUrl + `api/members/search-users?username=${encodeURIComponent(username)}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    // ==================== USER MANAGEMENT (OWNER) ====================
+    
+    async getUsers(params = {}) {
+        const token = localStorage.getItem('auth-token');
+        const queryString = new URLSearchParams(params).toString();
+        const response = await axios.get(orthancApiUrl + `api/users?${queryString}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async getUser(userId) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.get(orthancApiUrl + `api/users/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async setUserRole(userId, role) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + `api/users/${userId}/role`, { role }, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async blockUser(userId, reason = '') {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + `api/users/${userId}/block`, { reason }, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async unblockUser(userId) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + `api/users/${userId}/unblock`, {}, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async getUserStats() {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.get(orthancApiUrl + 'api/users/stats/overview', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
     }
 }

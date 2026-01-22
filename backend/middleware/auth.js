@@ -29,6 +29,15 @@ exports.protect = async (req, res, next) => {
         return res.status(401).json({ error: 'User not found' });
       }
       
+      // Check if user is blocked by owner
+      if (req.user.blocked && req.user.blockedBy === 'owner') {
+        return res.status(403).json({ 
+          error: 'Your account has been suspended. Please contact the owner for assistance.',
+          blocked: true,
+          blockedBy: 'owner'
+        });
+      }
+      
       next();
     } catch (error) {
       return res.status(401).json({ error: 'Not authorized, invalid token' });

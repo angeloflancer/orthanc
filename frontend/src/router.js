@@ -1,6 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Settings from './components/Settings.vue'
 import AccountSettings from './components/AccountSettings.vue'
+import HospitalSettings from './components/HospitalSettings.vue'
+import MemberManagement from './components/MemberManagement.vue'
+import UserManagement from './components/UserManagement.vue'
 import Worklists from './components/Worklists.vue'
 import StudyList from './components/StudyList.vue'
 import WordFileList from './components/WordFileList.vue'
@@ -11,9 +14,31 @@ import NotFound from './components/NotFound.vue'
 import Login from './components/Login.vue'
 import Register from './components/Register.vue'
 import VerifyEmail from './components/VerifyEmail.vue'
-import { baseOe2Url } from "./globalConfigurations"
+import { baseOe2Url, orthancApiUrl } from "./globalConfigurations"
 
 console.log('Base URL for router: ', baseOe2Url);
+
+// Helper function to get user role from API
+const getUserRole = async () => {
+  const token = localStorage.getItem('auth-token');
+  if (!token) return null;
+  
+  try {
+    const response = await fetch(`${orthancApiUrl}api/auth/me`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.user?.role || 'doctor';
+    }
+  } catch (error) {
+    console.error('Error getting user role:', error);
+  }
+  return null;
+};
 
 // Auth guard - redirect to login if not authenticated
 const requireAuth = (to, from, next) => {
@@ -32,6 +57,38 @@ const requireGuest = (to, from, next) => {
     next('/'); // Redirect to dashboard
   } else {
     next();
+  }
+};
+
+// Admin guard - require admin or owner role
+const requireAdmin = async (to, from, next) => {
+  const token = localStorage.getItem('auth-token');
+  if (!token) {
+    next('/login');
+    return;
+  }
+  
+  const role = await getUserRole();
+  if (role === 'admin' || role === 'owner') {
+    next();
+  } else {
+    next('/'); // Redirect to dashboard if not admin
+  }
+};
+
+// Owner guard - require owner role
+const requireOwner = async (to, from, next) => {
+  const token = localStorage.getItem('auth-token');
+  if (!token) {
+    next('/login');
+    return;
+  }
+  
+  const role = await getUserRole();
+  if (role === 'owner') {
+    next();
+  } else {
+    next('/'); // Redirect to dashboard if not owner
   }
 };
 
@@ -130,6 +187,33 @@ export const router = createRouter({
       },
       name: 'account-settings',
       beforeEnter: requireAuth
+    },
+    {
+      path: '/hospital-settings',
+      components: {
+        SideBarView: SideBar,
+        ContentView: HospitalSettings,
+      },
+      name: 'hospital-settings',
+      beforeEnter: requireAdmin
+    },
+    {
+      path: '/members',
+      components: {
+        SideBarView: SideBar,
+        ContentView: MemberManagement,
+      },
+      name: 'members',
+      beforeEnter: requireAdmin
+    },
+    {
+      path: '/users',
+      components: {
+        SideBarView: SideBar,
+        ContentView: UserManagement,
+      },
+      name: 'users',
+      beforeEnter: requireOwner
     },
     // Catch-all 404 route - must be last
     {

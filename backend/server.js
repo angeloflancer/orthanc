@@ -4,15 +4,25 @@ const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middl
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const jwt = require('jsonwebtoken');
+const axios = require('axios');
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const wordFileRoutes = require('./routes/wordFiles');
 const patientRoutes = require('./routes/patients');
 const dicomStudyRoutes = require('./routes/dicomStudies');
+const hospitalRoutes = require('./routes/hospital');
+const memberRoutes = require('./routes/members');
+const userRoutes = require('./routes/users');
+const User = require('./models/User');
+const DicomStudy = require('./models/DicomStudy');
+const Hospital = require('./models/Hospital');
+const HospitalMember = require('./models/HospitalMember');
 
 const app = express();
 const PORT = process.env.PORT || 5830;
 const TARGET_SERVICE = process.env.TARGET_SERVICE || 'http://localhost:8042';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // Connect to MongoDB
 connectDB();
@@ -43,6 +53,178 @@ app.use('/api/patients', patientRoutes);
 app.use('/api/dicom-studies', express.json());
 app.use('/api/dicom-studies', express.urlencoded({ extended: true }));
 app.use('/api/dicom-studies', dicomStudyRoutes);
+
+// Hospital routes (our own API - don't proxy)
+app.use('/api/hospital', express.json());
+app.use('/api/hospital', express.urlencoded({ extended: true }));
+app.use('/api/hospital', hospitalRoutes);
+
+// Member routes (our own API - don't proxy)
+app.use('/api/members', express.json());
+app.use('/api/members', express.urlencoded({ extended: true }));
+app.use('/api/members', memberRoutes);
+
+// User routes (our own API - don't proxy)
+app.use('/api/users', express.json());
+app.use('/api/users', express.urlencoded({ extended: true }));
+app.use('/api/users', userRoutes);
+
+// Helper function to get user from token
+async function getUserFromToken(req) {
+  try {
+    let token;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.headers.token) {
+      token = req.headers.token;
+    }
+    
+    if (!token) return null;
+    
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    return user;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Helper function to get allowed Orthanc study IDs based on user role
+async function getAllowedOrthancStudyIds(user) {
+  if (!user) return [];
+  
+  if (user.role === 'owner') {
+    // Owner can access all data - return null to indicate no filtering
+    return null;
+  }
+  
+  if (user.role === 'admin') {
+    // Admin can access their own data + all accepted hospital members' data
+    const hospital = await Hospital.findOne({ admin: user._id });
+    
+    if (!hospital) {
+      // Admin without hospital can only see their own data
+      const studies = await DicomStudy.find({ uploadedBy: user._id }).select('orthancStudyId');
+      return studies.map(s => s.orthancStudyId);
+    }
+    
+    // Get all accepted members of the hospital
+    const members = await HospitalMember.find({ 
+      hospital: hospital._id,
+      status: 'accepted'
+    }).select('user');
+    
+    const memberIds = members.map(m => m.user);
+    // Include admin's own ID
+    if (!memberIds.some(id => id.equals(user._id))) {
+      memberIds.push(user._id);
+    }
+    
+    const studies = await DicomStudy.find({ uploadedBy: { $in: memberIds } }).select('orthancStudyId');
+    return studies.map(s => s.orthancStudyId);
+  }
+  
+  // Doctor can only access their own data
+  const studies = await DicomStudy.find({ uploadedBy: user._id }).select('orthancStudyId');
+  return studies.map(s => s.orthancStudyId);
+}
+
+// Custom handler for /tools/find to filter DICOM data based on role
+app.post('/tools/find', express.json(), async (req, res) => {
+  try {
+    const user = await getUserFromToken(req);
+    
+    if (!user) {
+      return res.status(401).json({ error: 'Not authorized' });
+    }
+    
+    // Check if user is blocked
+    if (user.blocked && user.blockedBy === 'owner') {
+      return res.status(403).json({ 
+        error: 'Your account has been suspended.',
+        blocked: true
+      });
+    }
+    
+    // Forward the request to Orthanc
+    const orthancResponse = await axios.post(`${TARGET_SERVICE}/tools/find`, req.body, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    let results = orthancResponse.data;
+    
+    // Get allowed study IDs based on user role
+    const allowedStudyIds = await getAllowedOrthancStudyIds(user);
+    
+    // If allowedStudyIds is null, user is owner - return all results
+    if (allowedStudyIds === null) {
+      return res.json(results);
+    }
+    
+    // Filter results based on the query level
+    const queryLevel = req.body.Level;
+    
+    if (queryLevel === 'Study') {
+      // Filter studies directly
+      results = results.filter(studyId => allowedStudyIds.includes(studyId));
+    } else if (queryLevel === 'Series' || queryLevel === 'Instance') {
+      // For series/instances, we need to get the parent study and check
+      const filteredResults = [];
+      
+      for (const resourceId of results) {
+        try {
+          // Get the resource details to find parent study
+          const resourceResponse = await axios.get(`${TARGET_SERVICE}/${queryLevel.toLowerCase()}s/${resourceId}`);
+          const parentStudyId = resourceResponse.data.ParentStudy;
+          
+          if (allowedStudyIds.includes(parentStudyId)) {
+            filteredResults.push(resourceId);
+          }
+        } catch (err) {
+          // Skip if resource not found
+          console.error(`Error checking resource ${resourceId}:`, err.message);
+        }
+      }
+      
+      results = filteredResults;
+    } else if (queryLevel === 'Patient') {
+      // For patients, we need to check if user has access to any study of the patient
+      const filteredResults = [];
+      
+      for (const patientId of results) {
+        try {
+          // Get patient's studies
+          const patientResponse = await axios.get(`${TARGET_SERVICE}/patients/${patientId}`);
+          const patientStudies = patientResponse.data.Studies || [];
+          
+          // Check if user has access to any of the patient's studies
+          const hasAccess = patientStudies.some(studyId => allowedStudyIds.includes(studyId));
+          
+          if (hasAccess) {
+            filteredResults.push(patientId);
+          }
+        } catch (err) {
+          console.error(`Error checking patient ${patientId}:`, err.message);
+        }
+      }
+      
+      results = filteredResults;
+    }
+    
+    res.json(results);
+  } catch (error) {
+    console.error('DICOM find filter error:', error.message);
+    
+    if (error.response) {
+      // Forward Orthanc error response
+      return res.status(error.response.status).json(error.response.data);
+    }
+    
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Proxy middleware configuration for Orthanc service
 const proxyOptions = {
@@ -174,7 +356,15 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/auth') || 
       req.path.startsWith('/api/wordfiles') ||
       req.path.startsWith('/api/patients') ||
-      req.path.startsWith('/api/dicom-studies')) {
+      req.path.startsWith('/api/dicom-studies') ||
+      req.path.startsWith('/api/hospital') ||
+      req.path.startsWith('/api/members') ||
+      req.path.startsWith('/api/users')) {
+    return next();
+  }
+  
+  // Don't proxy /tools/find - we handle it ourselves with filtering
+  if (req.path === '/tools/find' && req.method === 'POST') {
     return next();
   }
   

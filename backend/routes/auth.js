@@ -2,34 +2,82 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const User = require('../models/User');
+const Hospital = require('../models/Hospital');
+const HospitalMember = require('../models/HospitalMember');
 const { generateToken, protect } = require('../middleware/auth');
 const { sendVerificationEmail } = require('../utils/emailService');
+
+// Check username availability
+router.get('/check-username/:username', async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    // Validate username format
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(username)) {
+      return res.json({ 
+        available: false, 
+        error: 'Username can only contain letters, numbers, and underscores' 
+      });
+    }
+    
+    if (username.length < 3 || username.length > 20) {
+      return res.json({ 
+        available: false, 
+        error: 'Username must be between 3 and 20 characters' 
+      });
+    }
+    
+    const existingUser = await User.findOne({ username: username.toLowerCase() });
+    res.json({ available: !existingUser });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, name } = req.body;
+    const { username, email, password, name } = req.body;
     
     // Validation
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Please provide email, password, and name' });
+    if (!username || !email || !password || !name) {
+      return res.status(400).json({ error: 'Please provide username, email, password, and name' });
     }
     
-    // Check if user exists
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res.status(400).json({ error: 'User already exists' });
+    // Validate username format
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(username)) {
+      return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
+    }
+    
+    if (username.length < 3 || username.length > 20) {
+      return res.status(400).json({ error: 'Username must be between 3 and 20 characters' });
+    }
+    
+    // Check if username exists
+    const usernameExists = await User.findOne({ username: username.toLowerCase() });
+    if (usernameExists) {
+      return res.status(400).json({ error: 'Username already taken' });
+    }
+    
+    // Check if email exists
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
+      return res.status(400).json({ error: 'Email already registered' });
     }
     
     // Generate email verification token
     const emailVerificationToken = crypto.randomBytes(32).toString('hex');
     const emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
     
-    // Create user
+    // Create user with default role 'doctor'
     const user = await User.create({ 
+      username: username.toLowerCase(),
       email, 
       password, 
       name,
+      role: 'doctor',
       emailVerificationToken,
       emailVerificationTokenExpiry
     });
@@ -45,8 +93,10 @@ router.post('/register', async (req, res) => {
       token,
       user: {
         id: user._id,
+        username: user.username,
         email: user.email,
         name: user.name,
+        role: user.role,
         emailVerified: user.emailVerified
       },
       message: 'Registration successful. Please check your email to verify your account.'
@@ -54,6 +104,11 @@ router.post('/register', async (req, res) => {
   } catch (error) {
     if (error.name === 'ValidationError') {
       return res.status(400).json({ error: Object.values(error.errors)[0].message });
+    }
+    if (error.code === 11000) {
+      // Duplicate key error
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ error: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists` });
     }
     res.status(500).json({ error: 'Server error' });
   }
@@ -81,6 +136,15 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
+    // Check if user is blocked by owner
+    if (user.blocked && user.blockedBy === 'owner') {
+      return res.status(403).json({ 
+        error: 'Your account has been suspended. Please contact the owner for assistance.',
+        blocked: true,
+        blockedBy: 'owner'
+      });
+    }
+    
     // Check email verification requirement (read from env per request)
     // Support both REQUIRE_VERIFY_EMAIL and REQUIRE_EMAIL_VERIFY for compatibility
     const envValue = process.env.REQUIRE_VERIFY_EMAIL || process.env.REQUIRE_EMAIL_VERIFY;
@@ -100,14 +164,43 @@ router.post('/login', async (req, res) => {
     // Generate token
     const token = generateToken(user._id);
     
+    // Get hospital info for admin
+    let hospital = null;
+    if (user.role === 'admin') {
+      hospital = await Hospital.findOne({ admin: user._id });
+    }
+    
+    // Get hospital membership for doctor
+    let hospitalMembership = null;
+    if (user.role === 'doctor') {
+      const membership = await HospitalMember.findOne({ 
+        user: user._id 
+      }).populate('hospital', 'hospitalId name');
+      if (membership) {
+        hospitalMembership = {
+          hospitalId: membership.hospital.hospitalId,
+          hospitalName: membership.hospital.name,
+          status: membership.status
+        };
+      }
+    }
+    
     res.json({
       success: true,
       token,
       user: {
         id: user._id,
+        username: user.username,
         email: user.email,
         name: user.name,
-        emailVerified: user.emailVerified
+        role: user.role,
+        emailVerified: user.emailVerified,
+        hospital: hospital ? {
+          id: hospital._id,
+          hospitalId: hospital.hospitalId,
+          name: hospital.name
+        } : null,
+        hospitalMembership
       },
       requireEmailVerify
     });
@@ -119,13 +212,43 @@ router.post('/login', async (req, res) => {
 // Get current user
 router.get('/me', protect, async (req, res) => {
   try {
+    // Get hospital info for admin
+    let hospital = null;
+    if (req.user.role === 'admin') {
+      hospital = await Hospital.findOne({ admin: req.user._id });
+    }
+    
+    // Get hospital membership for doctor
+    let hospitalMembership = null;
+    if (req.user.role === 'doctor') {
+      const membership = await HospitalMember.findOne({ 
+        user: req.user._id 
+      }).populate('hospital', 'hospitalId name');
+      if (membership) {
+        hospitalMembership = {
+          hospitalId: membership.hospital.hospitalId,
+          hospitalName: membership.hospital.name,
+          status: membership.status
+        };
+      }
+    }
+    
     res.json({
       success: true,
       user: {
         id: req.user._id,
+        username: req.user.username,
         email: req.user.email,
         name: req.user.name,
-        emailVerified: req.user.emailVerified
+        role: req.user.role,
+        emailVerified: req.user.emailVerified,
+        hospital: hospital ? {
+          id: hospital._id,
+          hospitalId: hospital.hospitalId,
+          name: hospital.name,
+          address: hospital.address
+        } : null,
+        hospitalMembership
       }
     });
   } catch (error) {
@@ -240,7 +363,7 @@ router.post('/resend-verification-public', async (req, res) => {
 // Update user profile
 router.put('/profile', protect, async (req, res) => {
   try {
-    const { name, email } = req.body;
+    const { name, email, username } = req.body;
     const user = await User.findById(req.user._id).select('+emailVerificationToken +emailVerificationTokenExpiry');
 
     if (!user) {
@@ -248,7 +371,33 @@ router.put('/profile', protect, async (req, res) => {
     }
 
     user.name = name || user.name;
+    
+    let usernameChanged = false;
+    let emailChanged = false;
 
+    // Handle username change
+    if (username && username.toLowerCase() !== user.username) {
+      // Validate username format
+      const usernameRegex = /^[a-zA-Z0-9_]+$/;
+      if (!usernameRegex.test(username)) {
+        return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
+      }
+      
+      if (username.length < 3 || username.length > 20) {
+        return res.status(400).json({ error: 'Username must be between 3 and 20 characters' });
+      }
+      
+      // Check if new username is already taken
+      const usernameExists = await User.findOne({ username: username.toLowerCase() });
+      if (usernameExists && usernameExists._id.toString() !== user._id.toString()) {
+        return res.status(400).json({ error: 'Username already taken' });
+      }
+      
+      user.username = username.toLowerCase();
+      usernameChanged = true;
+    }
+
+    // Handle email change
     if (email && email !== user.email) {
       // Check if new email is already taken
       const emailExists = await User.findOne({ email });
@@ -260,34 +409,39 @@ router.put('/profile', protect, async (req, res) => {
       user.emailVerified = false; // Reset verification status
       user.emailVerificationToken = crypto.randomBytes(32).toString('hex');
       user.emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-      await sendVerificationEmail(user.email, user.name, user.emailVerificationToken);
-      await user.save();
-      return res.json({ 
-        success: true, 
-        message: 'Profile updated. New email requires verification.', 
-        user: { 
-          id: user._id, 
-          name: user.name, 
-          email: user.email, 
-          emailVerified: user.emailVerified 
-        } 
-      });
-    } else {
-      await user.save();
-      return res.json({ 
-        success: true, 
-        message: 'Profile updated successfully', 
-        user: { 
-          id: user._id, 
-          name: user.name, 
-          email: user.email, 
-          emailVerified: user.emailVerified 
-        } 
-      });
+      emailChanged = true;
     }
+
+    await user.save();
+    
+    if (emailChanged) {
+      await sendVerificationEmail(user.email, user.name, user.emailVerificationToken);
+    }
+
+    let message = 'Profile updated successfully';
+    if (emailChanged) {
+      message = 'Profile updated. New email requires verification.';
+    }
+
+    return res.json({ 
+      success: true, 
+      message, 
+      user: { 
+        id: user._id,
+        username: user.username,
+        name: user.name, 
+        email: user.email,
+        role: user.role,
+        emailVerified: user.emailVerified 
+      } 
+    });
   } catch (error) {
     if (error.name === 'ValidationError') {
       return res.status(400).json({ error: Object.values(error.errors)[0].message });
+    }
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ error: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists` });
     }
     res.status(500).json({ error: 'Server error' });
   }

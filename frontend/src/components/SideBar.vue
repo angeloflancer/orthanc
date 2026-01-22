@@ -19,6 +19,8 @@ export default {
             selectedLabel: null,
             modalitiesEchoStatus: {},
             labelsStudyCount: {},
+            userRole: 'doctor',
+            hasHospital: false,
         };
     },
     computed: {
@@ -86,6 +88,31 @@ export default {
         },
         hasLabels() {
             return this.allLabels && this.allLabels.length > 0;
+        },
+        isDoctor() {
+            return this.userRole === 'doctor';
+        },
+        isAdmin() {
+            return this.userRole === 'admin';
+        },
+        isOwner() {
+            return this.userRole === 'owner';
+        },
+        showDicomModalities() {
+            // Hide DICOM Modalities for doctors, show for admin and owner
+            return !this.isDoctor && this.hasQueryableDicomModalities;
+        },
+        showMembersNav() {
+            // Show Members nav only for admin with hospital
+            return this.isAdmin && this.hasHospital;
+        },
+        showUsersNav() {
+            // Show Users nav only for owner
+            return this.isOwner;
+        },
+        showHospitalSettings() {
+            // Show Hospital settings for admin
+            return this.isAdmin;
         }
     },
     methods: {
@@ -190,6 +217,15 @@ export default {
             }
             if (path === '/account-settings') {
                 return this.currentRoutePath === '/account-settings';
+            }
+            if (path === '/hospital-settings') {
+                return this.currentRoutePath === '/hospital-settings';
+            }
+            if (path === '/members') {
+                return this.currentRoutePath === '/members' || this.currentRoutePath.startsWith('/members/');
+            }
+            if (path === '/users') {
+                return this.currentRoutePath === '/users' || this.currentRoutePath.startsWith('/users/');
             }
             return this.currentRoutePath.startsWith(path);
         },
@@ -330,6 +366,36 @@ export default {
             if (this.hasExtendedFind && this.uiOptions.EnableLabelsCount) {
                 this.labelsStudyCount[label] = await api.getLabelStudyCount(label);
             }
+        },
+        async loadUserRole() {
+            try {
+                const token = localStorage.getItem('auth-token');
+                if (!token) return;
+                
+                const response = await fetch(`${this.orthancApiUrl}api/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.user) {
+                        this.userRole = data.user.role || 'doctor';
+                        // Check if admin has a hospital
+                        if (data.user.role === 'admin' && data.user.hospital) {
+                            this.hasHospital = true;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading user role:', error);
+            }
+        },
+        handleLogout() {
+            localStorage.removeItem('auth-token');
+            localStorage.removeItem('user');
+            this.$router.push('/login');
         }
     },
     watch: {
@@ -437,6 +503,8 @@ export default {
     },
     mounted() {
         this.loadLabelsCount();
+        this.loadUserRole();
+        if (this.$refs['modalities-collapsible']) {
         this.$refs['modalities-collapsible'].addEventListener('show.bs.collapse', (e) => {
             for (const modality of Object.keys(this.queryableDicomModalities)) {
                 this.modalitiesEchoStatus[modality] = null;
@@ -449,6 +517,7 @@ export default {
                 })
             }
         });
+        }
     },
     components: { UploadHandler, JobsList, LanguagePicker },
 }
@@ -528,7 +597,23 @@ export default {
                         <UploadHandler :showStudyDetails="true"/>
                     </div>
 
-                    <li v-if="hasQueryableDicomModalities" class="nav-item nav-dropdown" 
+                    <!-- Users Management (Owner only) -->
+                    <li v-if="showUsersNav" class="nav-item" :class="{ 'nav-active': isRouteActive('/users') }" @click="collapseAllDropdowns()">
+                        <router-link class="nav-link" to="/users">
+                            <i class="fa fa-users-cog fa-lg nav-icon"></i>
+                            <span class="nav-text">User Management</span>
+                        </router-link>
+                    </li>
+
+                    <!-- Members Management (Admin with hospital only) -->
+                    <li v-if="showMembersNav" class="nav-item" :class="{ 'nav-active': isRouteActive('/members') }" @click="collapseAllDropdowns()">
+                        <router-link class="nav-link" to="/members">
+                            <i class="fa fa-user-friends fa-lg nav-icon"></i>
+                            <span class="nav-text">Hospital Members</span>
+                        </router-link>
+                    </li>
+
+                    <li v-if="showDicomModalities" class="nav-item nav-dropdown" 
                         :class="{ 'nav-active': isAnyModalitySelected() }"
                         @click="collapseAllDropdowns('modalities-list')"
                         data-bs-toggle="collapse"
@@ -539,7 +624,7 @@ export default {
                             <span class="nav-arrow"></span>
                         </div>
                     </li>
-                    <ul class="sub-menu collapse" id="modalities-list" ref="modalities-collapsible">
+                    <ul v-if="showDicomModalities" class="sub-menu collapse" id="modalities-list" ref="modalities-collapsible">
                         <li v-for="modality of Object.keys(queryableDicomModalities)" :key="modality"
                             v-bind:class="{ 'active': this.isSelectedModality(modality) }" class="modality-item"
                             @click="onModalitySelected(modality)">
@@ -605,7 +690,18 @@ export default {
                         <li :class="{ 'active': isRouteActive('/account-settings') }" @click="onSettingsSubmenuSelected()">
                             <router-link class="router-link" to="/account-settings">Account Settings</router-link>
                         </li>
+                        <li v-if="showHospitalSettings" :class="{ 'active': isRouteActive('/hospital-settings') }" @click="onSettingsSubmenuSelected()">
+                            <router-link class="router-link" to="/hospital-settings">Hospital Settings</router-link>
+                        </li>
                     </ul>
+                    
+                    <!-- Logout button (for auth-token based login) -->
+                    <li v-if="!hasLogout" class="nav-item" @click="handleLogout">
+                        <div class="nav-link">
+                            <i class="fa fa-sign-out-alt fa-lg nav-icon"></i>
+                            <span class="nav-text">Logout</span>
+                        </div>
+                    </li>
                     
                     <li v-if="hasLogout" class="nav-item nav-dropdown" data-bs-toggle="collapse"
                         data-bs-target="#profile-list">

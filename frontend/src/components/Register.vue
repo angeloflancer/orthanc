@@ -14,6 +14,34 @@
           <div v-if="success" class="alert alert-success">{{ success }}</div>
           
           <div class="form-group">
+            <label for="username">Username</label>
+            <div class="input-with-status">
+              <input
+                id="username"
+                v-model="username"
+                type="text"
+                class="form-control"
+                :class="{ 'is-valid': usernameValid, 'is-invalid': usernameError }"
+                placeholder="Choose a username"
+                required
+                autocomplete="username"
+                @input="checkUsernameAvailability"
+              />
+              <span v-if="checkingUsername" class="input-status checking">
+                <i class="bi bi-arrow-repeat spin"></i>
+              </span>
+              <span v-else-if="usernameValid" class="input-status valid">
+                <i class="bi bi-check-circle-fill"></i>
+              </span>
+              <span v-else-if="usernameError" class="input-status invalid">
+                <i class="bi bi-x-circle-fill"></i>
+              </span>
+            </div>
+            <small v-if="usernameError" class="text-danger">{{ usernameError }}</small>
+            <small v-else class="text-muted">3-20 characters, letters, numbers and underscores only</small>
+          </div>
+          
+          <div class="form-group">
             <label for="name">Full Name</label>
             <input
               id="name"
@@ -110,6 +138,7 @@ export default {
   name: 'Register',
   data() {
     return {
+      username: '',
       name: '',
       email: '',
       password: '',
@@ -118,13 +147,82 @@ export default {
       success: '',
       loading: false,
       showPassword: false,
-      showConfirmPassword: false
+      showConfirmPassword: false,
+      checkingUsername: false,
+      usernameValid: false,
+      usernameError: '',
+      usernameCheckTimeout: null
     };
   },
   methods: {
+    async checkUsernameAvailability() {
+      // Clear previous timeout
+      if (this.usernameCheckTimeout) {
+        clearTimeout(this.usernameCheckTimeout);
+      }
+      
+      this.usernameValid = false;
+      this.usernameError = '';
+      
+      const username = this.username.trim();
+      
+      // Basic validation
+      if (!username) {
+        return;
+      }
+      
+      if (username.length < 3) {
+        this.usernameError = 'Username must be at least 3 characters';
+        return;
+      }
+      
+      if (username.length > 20) {
+        this.usernameError = 'Username cannot exceed 20 characters';
+        return;
+      }
+      
+      const usernameRegex = /^[a-zA-Z0-9_]+$/;
+      if (!usernameRegex.test(username)) {
+        this.usernameError = 'Only letters, numbers and underscores allowed';
+        return;
+      }
+      
+      // Debounce the API call
+      this.usernameCheckTimeout = setTimeout(async () => {
+        this.checkingUsername = true;
+        
+        try {
+          const response = await axios.get(`${orthancApiUrl}api/auth/check-username/${encodeURIComponent(username)}`);
+          
+          if (response.data.available) {
+            this.usernameValid = true;
+            this.usernameError = '';
+          } else {
+            this.usernameValid = false;
+            this.usernameError = response.data.error || 'Username is already taken';
+          }
+        } catch (error) {
+          console.error('Username check error:', error);
+        } finally {
+          this.checkingUsername = false;
+        }
+      }, 500);
+    },
+    
     async handleRegister() {
       this.error = '';
       this.success = '';
+      
+      // Username validation
+      if (!this.username.trim()) {
+        this.error = 'Username is required';
+        return;
+      }
+      
+      if (!this.usernameValid) {
+        this.error = this.usernameError || 'Please enter a valid username';
+        return;
+      }
       
       // Validation
       if (this.password !== this.confirmPassword) {
@@ -141,6 +239,7 @@ export default {
       
       try {
         const response = await axios.post(`${orthancApiUrl}api/auth/register`, {
+          username: this.username.trim(),
           name: this.name,
           email: this.email,
           password: this.password
@@ -381,5 +480,74 @@ export default {
 
 .password-toggle i {
   font-size: 18px;
+}
+
+.input-with-status {
+  position: relative;
+}
+
+.input-with-status .form-control {
+  padding-right: 40px;
+}
+
+.input-status {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-status.checking {
+  color: #6b7280;
+}
+
+.input-status.valid {
+  color: #059669;
+}
+
+.input-status.invalid {
+  color: #dc2626;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.form-control.is-valid {
+  border-color: #059669;
+}
+
+.form-control.is-valid:focus {
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+}
+
+.form-control.is-invalid {
+  border-color: #dc2626;
+}
+
+.form-control.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.text-danger {
+  color: #dc2626;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+}
+
+.text-muted {
+  color: #6b7280;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
 }
 </style>

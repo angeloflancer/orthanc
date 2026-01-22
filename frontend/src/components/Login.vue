@@ -10,7 +10,16 @@
           </div>
           
           <form @submit.prevent="handleLogin" class="login-form">
-            <div v-if="error" class="alert alert-danger">
+            <!-- Blocked user alert -->
+            <div v-if="isBlocked" class="alert alert-blocked">
+              <i class="bi bi-slash-circle me-2"></i>
+              <div>
+                <strong>Account Suspended</strong>
+                <p class="mb-0 mt-1">Your account has been suspended. Please contact the owner for assistance.</p>
+              </div>
+            </div>
+            
+            <div v-if="error && !isBlocked" class="alert alert-danger">
               {{ error }}
               <div v-if="unverifiedEmail && !resendSuccess" class="mt-2">
                 <button 
@@ -95,13 +104,15 @@ export default {
       resendSuccess: false,
       unverifiedEmail: null,
       emailNotVerified: false,
-      showPassword: false
+      showPassword: false,
+      isBlocked: false
     };
   },
   methods: {
     async handleLogin() {
       this.error = '';
       this.emailNotVerified = false;
+      this.isBlocked = false;
       this.loading = true;
       
       try {
@@ -141,13 +152,20 @@ export default {
           }
         }
       } catch (error) {
-        this.error = error.response?.data?.error || 'Login failed. Please try again.';
-        
+        // Check if user is blocked
+        if (error.response?.status === 403 && error.response?.data?.blocked) {
+          this.isBlocked = true;
+          this.error = '';
+          this.emailNotVerified = false;
+          this.unverifiedEmail = null;
+        }
         // If backend requires email verification and email is not verified, show resend option
-        if (error.response?.status === 403 && error.response?.data?.requireEmailVerify && !error.response?.data?.emailVerified) {
+        else if (error.response?.status === 403 && error.response?.data?.requireEmailVerify && !error.response?.data?.emailVerified) {
           this.unverifiedEmail = this.email;
           this.emailNotVerified = true;
+          this.error = error.response?.data?.error || 'Email verification required.';
         } else {
+          this.error = error.response?.data?.error || 'Login failed. Please try again.';
           this.emailNotVerified = false;
           this.unverifiedEmail = null;
         }
@@ -333,6 +351,38 @@ export default {
   border-radius: 8px;
   margin-bottom: 24px;
   font-size: 14px;
+}
+
+.alert-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+
+.alert-blocked i {
+  font-size: 24px;
+  color: #dc2626;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.alert-blocked strong {
+  display: block;
+  font-size: 15px;
+  color: #7f1d1d;
+}
+
+.alert-blocked p {
+  font-size: 13px;
+  color: #991b1b;
+  line-height: 1.5;
 }
 
 .alert-success {

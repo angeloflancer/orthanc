@@ -2,6 +2,16 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: [true, 'Username is required'],
+    unique: true,
+    lowercase: true,
+    trim: true,
+    minlength: [3, 'Username must be at least 3 characters'],
+    maxlength: [20, 'Username cannot exceed 20 characters'],
+    match: [/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores']
+  },
   email: {
     type: String,
     required: [true, 'Email is required'],
@@ -20,6 +30,24 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Name is required'],
     trim: true
+  },
+  role: {
+    type: String,
+    enum: ['doctor', 'admin', 'owner'],
+    default: 'doctor'
+  },
+  blocked: {
+    type: Boolean,
+    default: false
+  },
+  blockedBy: {
+    type: String,
+    enum: ['owner', 'admin', null],
+    default: null
+  },
+  blockedReason: {
+    type: String,
+    default: ''
   },
   emailVerified: {
     type: Boolean,
