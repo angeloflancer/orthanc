@@ -5,8 +5,8 @@ const hospitalSchema = new mongoose.Schema({
   hospitalId: {
     type: String,
     unique: true,
-    required: true,
     index: true
+    // Not required - auto-generated in pre-validate hook
   },
   name: {
     type: String,
@@ -34,8 +34,8 @@ const hospitalSchema = new mongoose.Schema({
   }
 });
 
-// Generate unique hospital ID before saving
-hospitalSchema.pre('save', async function(next) {
+// Generate unique hospital ID before validation
+hospitalSchema.pre('validate', async function(next) {
   if (!this.hospitalId) {
     let isUnique = false;
     let hospitalId;
@@ -54,7 +54,11 @@ hospitalSchema.pre('save', async function(next) {
     
     this.hospitalId = hospitalId;
   }
-  
+  next();
+});
+
+// Update timestamp on save
+hospitalSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });

@@ -40,6 +40,14 @@ const hospitalMemberSchema = new mongoose.Schema({
 // Compound index to ensure a user can only have one membership record per hospital
 hospitalMemberSchema.index({ hospital: 1, user: 1 }, { unique: true });
 
+// Validate that both hospital and user are set before saving
+hospitalMemberSchema.pre('save', function(next) {
+  if (!this.hospital || !this.user) {
+    return next(new Error('Hospital and user are required'));
+  }
+  next();
+});
+
 // Update statusChangedAt when status changes
 hospitalMemberSchema.pre('save', function(next) {
   if (this.isModified('status')) {

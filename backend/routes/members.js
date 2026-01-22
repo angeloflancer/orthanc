@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Hospital = require('../models/Hospital');
 const HospitalMember = require('../models/HospitalMember');
@@ -96,6 +97,11 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
       return res.status(400).json({ error: 'Username is required' });
     }
     
+    // Ensure hospital exists
+    if (!req.hospital || !req.hospital._id) {
+      return res.status(404).json({ error: 'No hospital found. Please create a hospital first.' });
+    }
+    
     // Find user by username
     const user = await User.findOne({ username: username.toLowerCase() });
     
@@ -113,10 +119,24 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
       return res.status(400).json({ error: 'This user account is suspended' });
     }
     
+    // Validate ObjectId format and convert to ObjectId
+    if (!mongoose.Types.ObjectId.isValid(req.hospital._id)) {
+      return res.status(400).json({ error: 'Invalid hospital ID format' });
+    }
+    
+    if (!mongoose.Types.ObjectId.isValid(user._id)) {
+      return res.status(400).json({ error: 'Invalid user ID format' });
+    }
+    
+    // Convert to ObjectId to ensure proper type
+    const hospitalId = new mongoose.Types.ObjectId(req.hospital._id);
+    const userId = new mongoose.Types.ObjectId(user._id);
+    const invitedById = new mongoose.Types.ObjectId(req.user._id);
+    
     // Check if membership already exists
     const existingMembership = await HospitalMember.findOne({ 
-      hospital: req.hospital._id,
-      user: user._id
+      hospital: hospitalId,
+      user: userId
     });
     
     if (existingMembership) {
@@ -132,7 +152,7 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
       
       // If kicked, allow re-invite
       existingMembership.status = 'pending';
-      existingMembership.invitedBy = req.user._id;
+      existingMembership.invitedBy = invitedById;
       await existingMembership.save();
       
       return res.json({
@@ -143,7 +163,7 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
     
     // Check if user is already a member of another hospital
     const otherMembership = await HospitalMember.findOne({ 
-      user: user._id,
+      user: userId,
       status: 'accepted'
     });
     
@@ -153,10 +173,10 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
     
     // Create membership
     const membership = await HospitalMember.create({
-      hospital: req.hospital._id,
-      user: user._id,
+      hospital: hospitalId,
+      user: userId,
       status: 'pending',
-      invitedBy: req.user._id
+      invitedBy: invitedById
     });
     
     res.status(201).json({
@@ -169,6 +189,48 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
     });
   } catch (error) {
     console.error('Invite member error:', error);
+    console.error('Error details:', {
+      code: error.code,
+      keyPattern: error.keyPattern,
+      keyValue: error.keyValue,
+      message: error.message
+    });
+    
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      // Check if it's a null duplicate key error (corrupted data or index mismatch)
+      if (error.keyValue && (error.keyValue.hospital === null || error.keyValue.user === null || 
+          error.keyValue.hospitalId === null || error.keyValue.userId === null)) {
+        console.error('Database index mismatch detected. Index uses hospitalId/userId but schema uses hospital/user.');
+        return res.status(500).json({ 
+          error: 'Database configuration error. Please contact administrator to fix the database index.' 
+        });
+      }
+      
+      // Check if the error is due to index field name mismatch
+      if (error.keyPattern && (error.keyPattern.hospitalId || error.keyPattern.userId)) {
+        console.error('Index field name mismatch: database has hospitalId/userId index but schema uses hospital/user');
+        return res.status(500).json({ 
+          error: 'Database index mismatch. Please contact administrator to recreate the index.' 
+        });
+      }
+      
+      // Regular duplicate key error
+      return res.status(400).json({ error: 'This membership already exists' });
+    }
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        error: Object.values(error.errors).map(e => e.message).join(', ') 
+      });
+    }
+    
+    // Handle custom errors
+    if (error.message) {
+      return res.status(400).json({ error: error.message });
+    }
+    
     res.status(500).json({ error: 'Server error' });
   }
 });
