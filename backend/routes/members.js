@@ -14,7 +14,7 @@ router.get('/', protect, requireRole('admin'), requireHospitalAdmin(), async (re
     
     const query = { hospital: req.hospital._id };
     
-    if (status && ['pending', 'accepted', 'kicked', 'blocked'].includes(status)) {
+    if (status && ['pending', 'pending_invitation', 'accepted', 'kicked', 'blocked'].includes(status)) {
       query.status = status;
     }
     
@@ -143,16 +143,20 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
       if (existingMembership.status === 'accepted') {
         return res.status(400).json({ error: 'This doctor is already a member of your hospital' });
       }
-      if (existingMembership.status === 'pending') {
+      if (existingMembership.status === 'pending_invitation') {
+        return res.status(400).json({ error: 'This doctor already has a pending invitation' });
+      }
+      if (existingMembership.status === 'pending' && existingMembership.invitedBy) {
         return res.status(400).json({ error: 'This doctor already has a pending invitation' });
       }
       if (existingMembership.status === 'blocked') {
         return res.status(400).json({ error: 'This doctor is blocked from your hospital' });
       }
       
-      // If kicked, allow re-invite
-      existingMembership.status = 'pending';
+      // If kicked or cancelled, allow re-invite
+      existingMembership.status = 'pending_invitation';
       existingMembership.invitedBy = invitedById;
+      existingMembership.statusChangedAt = Date.now();
       await existingMembership.save();
       
       return res.json({
@@ -171,11 +175,11 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
       return res.status(400).json({ error: 'This doctor is already a member of another hospital' });
     }
     
-    // Create membership
+    // Create membership with pending_invitation status (doctor must accept)
     const membership = await HospitalMember.create({
       hospital: hospitalId,
       user: userId,
-      status: 'pending',
+      status: 'pending_invitation',
       invitedBy: invitedById
     });
     
@@ -235,7 +239,7 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
   }
 });
 
-// Accept pending member (Admin only)
+// Accept pending member (Admin only) - Only for doctor-requested memberships
 router.put('/:id/accept', protect, requireRole('admin'), requireHospitalAdmin(), async (req, res) => {
   try {
     const membership = await HospitalMember.findOne({ 
@@ -247,8 +251,12 @@ router.put('/:id/accept', protect, requireRole('admin'), requireHospitalAdmin(),
       return res.status(404).json({ error: 'Membership not found' });
     }
     
-    if (membership.status !== 'pending') {
-      return res.status(400).json({ error: 'Only pending memberships can be accepted' });
+    // Admin can only accept doctor-requested memberships (invitedBy is null)
+    // Admin-invited memberships (pending_invitation) must be accepted by the doctor
+    if (membership.status !== 'pending' || membership.invitedBy !== null) {
+      return res.status(400).json({ 
+        error: 'Only doctor-requested memberships can be accepted by admin. Invited doctors must accept the invitation themselves.' 
+      });
     }
     
     membership.status = 'accepted';
@@ -456,7 +464,8 @@ router.get('/my-membership', protect, async (req, res) => {
   try {
     const membership = await HospitalMember.findOne({ 
       user: req.user._id
-    }).populate('hospital', 'hospitalId name address');
+    }).populate('hospital', 'hospitalId name address')
+      .populate('invitedBy', 'name username');
     
     if (!membership) {
       return res.json({
@@ -475,12 +484,88 @@ router.get('/my-membership', protect, async (req, res) => {
           address: membership.hospital.address
         },
         status: membership.status,
+        invitedBy: membership.invitedBy ? {
+          id: membership.invitedBy._id,
+          name: membership.invitedBy.name,
+          username: membership.invitedBy.username
+        } : null,
         joinedAt: membership.joinedAt,
         createdAt: membership.createdAt
       }
     });
   } catch (error) {
     console.error('Get membership error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Accept invitation (Doctor only) - For admin-invited memberships
+router.put('/accept-invitation', protect, requireRole('doctor'), async (req, res) => {
+  try {
+    const membership = await HospitalMember.findOne({ 
+      user: req.user._id,
+      status: 'pending_invitation'
+    }).populate('hospital', 'hospitalId name address');
+    
+    if (!membership) {
+      return res.status(404).json({ error: 'No pending invitation found' });
+    }
+    
+    // Check if already a member of another hospital
+    const otherMembership = await HospitalMember.findOne({ 
+      user: req.user._id,
+      status: 'accepted',
+      _id: { $ne: membership._id }
+    });
+    
+    if (otherMembership) {
+      return res.status(400).json({ error: 'You are already a member of another hospital' });
+    }
+    
+    membership.status = 'accepted';
+    await membership.save();
+    
+    res.json({
+      success: true,
+      message: 'Invitation accepted successfully',
+      membership: {
+        id: membership._id,
+        hospital: {
+          hospitalId: membership.hospital.hospitalId,
+          name: membership.hospital.name,
+          address: membership.hospital.address
+        },
+        status: membership.status,
+        joinedAt: membership.joinedAt
+      }
+    });
+  } catch (error) {
+    console.error('Accept invitation error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reject/Cancel invitation (Doctor only)
+router.put('/reject-invitation', protect, requireRole('doctor'), async (req, res) => {
+  try {
+    const membership = await HospitalMember.findOne({ 
+      user: req.user._id,
+      status: 'pending_invitation'
+    });
+    
+    if (!membership) {
+      return res.status(404).json({ error: 'No pending invitation found' });
+    }
+    
+    // Delete the membership record
+    await HospitalMember.findByIdAndDelete(membership._id);
+    
+    res.json({
+      success: true,
+      message: 'Invitation rejected successfully'
+    });
+  } catch (error) {
+    console.error('Reject invitation error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -495,6 +580,13 @@ router.delete('/leave', protect, requireRole('doctor'), async (req, res) => {
     
     if (!membership) {
       return res.status(404).json({ error: 'You are not a member of any hospital' });
+    }
+    
+    // If it's a pending_invitation, use reject endpoint instead
+    if (membership.status === 'pending_invitation') {
+      return res.status(400).json({ 
+        error: 'Please use the reject invitation option to cancel pending invitations' 
+      });
     }
     
     await HospitalMember.findByIdAndDelete(membership._id);

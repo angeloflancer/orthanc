@@ -89,10 +89,17 @@
                       v-if="member.status === 'pending'"
                       class="btn btn-sm btn-success"
                       @click="acceptMember(member)"
-                      title="Accept"
+                      title="Accept Request"
                     >
                       <i class="bi bi-check-lg"></i>
                     </button>
+                    <span 
+                      v-if="member.status === 'pending_invitation'"
+                      class="badge bg-info"
+                      title="Waiting for doctor to accept invitation"
+                    >
+                      <i class="bi bi-hourglass-split me-1"></i>Waiting for Response
+                    </span>
                     <button 
                       v-if="member.status === 'accepted'"
                       class="btn btn-sm btn-warning"
@@ -227,7 +234,8 @@ export default {
       filterStatus: '',
       statuses: [
         { value: '', label: 'All' },
-        { value: 'pending', label: 'Pending' },
+        { value: 'pending', label: 'Pending Request' },
+        { value: 'pending_invitation', label: 'Pending Invitation' },
         { value: 'accepted', label: 'Active' },
         { value: 'kicked', label: 'Kicked' },
         { value: 'blocked', label: 'Blocked' }
@@ -300,7 +308,7 @@ export default {
         const token = localStorage.getItem('auth-token');
         
         // Load counts for each status
-        for (const status of ['pending', 'accepted', 'kicked', 'blocked']) {
+        for (const status of ['pending', 'pending_invitation', 'accepted', 'kicked', 'blocked']) {
           const response = await axios.get(
             `${orthancApiUrl}api/members?status=${status}&limit=1`,
             {
@@ -494,7 +502,8 @@ export default {
     
     formatStatus(status) {
       const statuses = {
-        pending: 'Pending',
+        pending: 'Pending Request',
+        pending_invitation: 'Pending Invitation',
         accepted: 'Active',
         kicked: 'Kicked',
         blocked: 'Blocked'

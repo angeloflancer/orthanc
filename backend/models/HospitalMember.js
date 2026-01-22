@@ -15,7 +15,7 @@ const hospitalMemberSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'accepted', 'kicked', 'blocked'],
+    enum: ['pending', 'pending_invitation', 'accepted', 'kicked', 'blocked', 'cancelled'],
     default: 'pending'
   },
   invitedBy: {

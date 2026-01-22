@@ -117,15 +117,26 @@ router.post('/register', async (req, res) => {
 // Login
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, password } = req.body;
+    
+    // Support both 'email' and 'username' fields, or use 'email' for backward compatibility
+    const identifier = email || username;
     
     // Validation
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Please provide email and password' });
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Please provide email/username and password' });
     }
     
+    // Determine if identifier is email or username
+    const isEmail = identifier.includes('@');
+    
+    // Build query based on identifier type
+    const query = isEmail 
+      ? { email: identifier.toLowerCase() }
+      : { username: identifier.toLowerCase() };
+    
     // Check if user exists (include password field)
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne(query).select('+password');
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -157,7 +168,8 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ 
         error: 'Email verification required',
         emailVerified: false,
-        requireEmailVerify: true
+        requireEmailVerify: true,
+        email: user.email // Include email for resend verification
       });
     }
     
@@ -318,14 +330,25 @@ router.post('/resend-verification', protect, async (req, res) => {
 // Resend verification email (public - requires email and password for security)
 router.post('/resend-verification-public', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, password } = req.body;
     
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Please provide email and password' });
+    // Support both 'email' and 'username' fields
+    const identifier = email || username;
+    
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Please provide email/username and password' });
     }
     
+    // Determine if identifier is email or username
+    const isEmail = identifier.includes('@');
+    
+    // Build query based on identifier type
+    const query = isEmail 
+      ? { email: identifier.toLowerCase() }
+      : { username: identifier.toLowerCase() };
+    
     // Verify credentials
-    const user = await User.findOne({ email }).select('+password +emailVerificationToken +emailVerificationTokenExpiry');
+    const user = await User.findOne(query).select('+password +emailVerificationToken +emailVerificationTokenExpiry');
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }

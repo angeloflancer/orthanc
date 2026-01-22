@@ -123,8 +123,52 @@
             <i class="bi bi-hospital me-2"></i>Hospital Membership
           </h5>
           
+          <!-- Pending Invitation (Admin invited) -->
+          <div v-if="hospitalMembership && hospitalMembership.status === 'pending_invitation'" class="invitation-card mb-4">
+            <div class="alert alert-info d-flex align-items-start">
+              <i class="bi bi-envelope-paper me-3 fs-4"></i>
+              <div class="flex-grow-1">
+                <h6 class="alert-heading mb-2">
+                  <i class="bi bi-bell me-2"></i>Hospital Invitation
+                </h6>
+                <p class="mb-2">
+                  <strong>{{ hospitalMembership.hospital.name }}</strong> has invited you to join their hospital.
+                </p>
+                <div class="invitation-details mb-3">
+                  <p class="mb-1"><strong>Hospital ID:</strong> {{ hospitalMembership.hospital.hospitalId }}</p>
+                  <p v-if="hospitalMembership.hospital.address" class="mb-1">
+                    <strong>Address:</strong> {{ hospitalMembership.hospital.address }}
+                  </p>
+                  <p v-if="hospitalMembership.invitedBy" class="mb-0 text-muted small">
+                    <i class="bi bi-person me-1"></i>Invited by: {{ hospitalMembership.invitedBy.name || hospitalMembership.invitedBy.username }}
+                  </p>
+                </div>
+                <div class="invitation-actions d-flex gap-2">
+                  <button 
+                    class="btn btn-success"
+                    @click="acceptInvitation"
+                    :disabled="invitationLoading"
+                  >
+                    <span v-if="invitationLoading" class="spinner-border spinner-border-sm me-2"></span>
+                    <i v-else class="bi bi-check-circle me-2"></i>
+                    Accept Invitation
+                  </button>
+                  <button 
+                    class="btn btn-outline-danger"
+                    @click="rejectInvitation"
+                    :disabled="invitationLoading"
+                  >
+                    <span v-if="invitationLoading" class="spinner-border spinner-border-sm me-2"></span>
+                    <i v-else class="bi bi-x-circle me-2"></i>
+                    Reject
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Current Membership Status -->
-          <div v-if="hospitalMembership" class="membership-info mb-4">
+          <div v-if="hospitalMembership && hospitalMembership.status !== 'pending_invitation'" class="membership-info mb-4">
             <div class="membership-card" :class="hospitalMembership.status">
               <div class="membership-header">
                 <h6 class="mb-0">{{ hospitalMembership.hospital.name }}</h6>
@@ -154,7 +198,7 @@
             </div>
           </div>
           
-          <!-- Join Hospital Form (only if not a member) -->
+          <!-- Join Hospital Form (only if not a member or kicked) -->
           <div v-if="!hospitalMembership || hospitalMembership.status === 'kicked'">
             <p class="text-muted mb-3">
               <i class="bi bi-info-circle me-1"></i>
@@ -323,6 +367,7 @@ export default {
       resendLoading: false,
       joinLoading: false,
       leaveLoading: false,
+      invitationLoading: false,
       profileSuccess: '',
       profileError: '',
       passwordSuccess: '',
@@ -676,9 +721,82 @@ export default {
       return icons[role] || 'bi bi-person';
     },
     
+    async acceptInvitation() {
+      if (!confirm('Are you sure you want to accept this invitation?')) {
+        return;
+      }
+      
+      this.invitationLoading = true;
+      this.hospitalError = '';
+      this.hospitalSuccess = '';
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(
+          `${orthancApiUrl}api/members/accept-invitation`,
+          {},
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        if (response.data.success) {
+          this.hospitalSuccess = response.data.message || 'Invitation accepted successfully!';
+          await this.loadMembership();
+          
+          setTimeout(() => {
+            this.hospitalSuccess = '';
+          }, 3000);
+        }
+      } catch (error) {
+        this.hospitalError = error.response?.data?.error || 'Failed to accept invitation. Please try again.';
+      } finally {
+        this.invitationLoading = false;
+      }
+    },
+    
+    async rejectInvitation() {
+      if (!confirm('Are you sure you want to reject this invitation? This action cannot be undone.')) {
+        return;
+      }
+      
+      this.invitationLoading = true;
+      this.hospitalError = '';
+      this.hospitalSuccess = '';
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(
+          `${orthancApiUrl}api/members/reject-invitation`,
+          {},
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        if (response.data.success) {
+          this.hospitalMembership = null;
+          this.hospitalSuccess = response.data.message || 'Invitation rejected successfully.';
+          
+          setTimeout(() => {
+            this.hospitalSuccess = '';
+          }, 3000);
+        }
+      } catch (error) {
+        this.hospitalError = error.response?.data?.error || 'Failed to reject invitation. Please try again.';
+      } finally {
+        this.invitationLoading = false;
+      }
+    },
+    
     formatMembershipStatus(status) {
       const statuses = {
         pending: 'Pending Approval',
+        pending_invitation: 'Pending Invitation',
         accepted: 'Active Member',
         kicked: 'Removed',
         blocked: 'Blocked'
@@ -1101,6 +1219,46 @@ export default {
 .membership-status.kicked {
   background-color: #f3f4f6;
   color: #4b5563;
+}
+
+.membership-status.pending_invitation {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.membership-card.pending_invitation {
+  border-left: 4px solid #3b82f6;
+}
+
+.invitation-card {
+  margin-bottom: 24px;
+}
+
+.invitation-card .alert {
+  border-radius: 12px;
+  border: 1px solid #bfdbfe;
+  background-color: #eff6ff;
+}
+
+.invitation-card .alert-heading {
+  color: #1e40af;
+  font-weight: 600;
+}
+
+.invitation-details {
+  background-color: #ffffff;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 12px;
+  border: 1px solid #dbeafe;
+}
+
+.invitation-actions {
+  margin-top: 16px;
+}
+
+.invitation-actions .btn {
+  min-width: 140px;
 }
 
 .membership-details {

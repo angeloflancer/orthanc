@@ -38,15 +38,15 @@
             </div>
             
             <div class="form-group">
-              <label for="email">Email Address</label>
+              <label for="email">Email or Username</label>
               <input
                 id="email"
                 v-model="email"
-                type="email"
+                type="text"
                 class="form-control"
-                placeholder="Enter your email"
+                placeholder="Enter your email or username"
                 required
-                autocomplete="email"
+                autocomplete="username"
               />
             </div>
             
@@ -116,8 +116,11 @@ export default {
       this.loading = true;
       
       try {
+        // Send as both email and username for backward compatibility
+        // Backend will determine which one to use based on the value
         const response = await axios.post(`${orthancApiUrl}api/auth/login`, {
           email: this.email,
+          username: this.email,
           password: this.password
         });
         
@@ -161,11 +164,13 @@ export default {
         }
         // If backend requires email verification and email is not verified, show resend option
         else if (error.response?.status === 403 && error.response?.data?.requireEmailVerify && !error.response?.data?.emailVerified) {
-          this.unverifiedEmail = this.email;
+          // Use the email from response if available (when user logged in with username)
+          // Otherwise use the input value (which might be email or username)
+          this.unverifiedEmail = error.response?.data?.email || this.email;
           this.emailNotVerified = true;
           this.error = error.response?.data?.error || 'Email verification required.';
         } else {
-          this.error = error.response?.data?.error || 'Login failed. Please try again.';
+          this.error = error.response?.data?.error || 'Login failed. Please check your credentials and try again.';
           this.emailNotVerified = false;
           this.unverifiedEmail = null;
         }
@@ -184,8 +189,11 @@ export default {
       this.error = '';
       
       try {
+        // Send as both email and username for backward compatibility
+        // Backend will determine which one to use
         const response = await axios.post(`${orthancApiUrl}api/auth/resend-verification-public`, {
           email: this.unverifiedEmail,
+          username: this.unverifiedEmail,
           password: this.password
         });
         
@@ -196,7 +204,7 @@ export default {
         }
       } catch (error) {
         if (error.response?.status === 401) {
-          this.error = 'Invalid credentials. Please check your email and password.';
+          this.error = 'Invalid credentials. Please check your email/username and password.';
         } else {
           this.error = error.response?.data?.error || 'Failed to resend verification email. Please try again.';
         }

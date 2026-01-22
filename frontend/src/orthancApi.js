@@ -1119,6 +1119,22 @@ export default {
         return response.data;
     },
 
+    async acceptInvitation() {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + 'api/members/accept-invitation', {}, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
+    async rejectInvitation() {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + 'api/members/reject-invitation', {}, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
     async searchUsersForInvite(username) {
         const token = localStorage.getItem('auth-token');
         const response = await axios.get(orthancApiUrl + `api/members/search-users?username=${encodeURIComponent(username)}`, {
