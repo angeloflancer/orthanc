@@ -138,6 +138,7 @@
     "loading_most_recent_studies": "Loading most recent studies",
     "local_studies": "All local Studies",
     "logout": "Logout",
+    "logout_confirm_message": "Are you sure you want to log out?",
     "modalities_in_study": "Modalities in Study",
     "modify": {
         "anonymize_button_title": "Anonymize",

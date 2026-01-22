@@ -58,6 +58,7 @@ export default {
             processingMessage: null,
             processingIsComplete: false,
             processingHasFailed: false,
+            showLogoutConfirm: false,
         };
     },
     mounted() {
@@ -193,6 +194,10 @@ export default {
         },
         logout(event) {
             event.preventDefault();
+            this.showLogoutConfirm = true;
+        },
+        confirmLogout() {
+            this.showLogoutConfirm = false;
             let logoutOptions = {
                 "redirectUri": window.location.href
             }
@@ -386,6 +391,28 @@ export default {
                 <button type="button" class="btn btn-secondary" @click="reload"><i class="bi bi-arrow-clockwise mx-1"></i>{{ $t('inbox.reload_inbox') }}</button>
             </div>
         </div>
+        
+        <!-- Logout Confirmation Dialog -->
+        <div v-if="showLogoutConfirm" class="logout-confirm-overlay" @click.self="showLogoutConfirm = false">
+            <div class="logout-confirm-dialog">
+                <div class="logout-confirm-content">
+                    <div class="logout-confirm-header">
+                        <h5 class="logout-confirm-title">{{ $t('logout') }}</h5>
+                    </div>
+                    <div class="logout-confirm-body">
+                        <p>{{ $t('logout_confirm_message') || 'Are you sure you want to log out?' }}</p>
+                    </div>
+                    <div class="logout-confirm-footer">
+                        <button type="button" class="btn btn-secondary" @click="showLogoutConfirm = false">
+                            {{ $t('cancel') || 'Cancel' }}
+                        </button>
+                        <button type="button" class="btn btn-primary" @click="confirmLogout()">
+                            {{ $t('logout') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -442,6 +469,144 @@ body {
 .menu-icon {
     width: 20px;
     margin-right: 10px;
+}
+
+/* Logout Confirmation Dialog */
+.logout-confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.2s ease;
+}
+
+.logout-confirm-dialog {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    max-width: 400px;
+    width: 90%;
+    animation: slideUp 0.3s ease;
+}
+
+.logout-confirm-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.logout-confirm-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.logout-confirm-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.logout-confirm-body {
+    padding: 20px 24px;
+}
+
+.logout-confirm-body p {
+    margin: 0;
+    font-size: 14px;
+    color: #6b7280;
+    line-height: 1.5;
+}
+
+.logout-confirm-footer {
+    padding: 16px 24px 20px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.logout-confirm-footer .btn {
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    border: none;
+    cursor: pointer;
+}
+
+.logout-confirm-footer .btn-secondary {
+    background-color: #f3f4f6;
+    color: #374151;
+}
+
+.logout-confirm-footer .btn-secondary:hover {
+    background-color: #e5e7eb;
+}
+
+.logout-confirm-footer .btn-primary {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.logout-confirm-footer .btn-primary:hover {
+    background-color: #2563eb;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Dark mode support */
+[data-bs-theme="dark"] .logout-confirm-dialog {
+    background: #1f2937;
+}
+
+[data-bs-theme="dark"] .logout-confirm-header {
+    border-bottom-color: #374151;
+}
+
+[data-bs-theme="dark"] .logout-confirm-title {
+    color: #f9fafb;
+}
+
+[data-bs-theme="dark"] .logout-confirm-body p {
+    color: #d1d5db;
+}
+
+[data-bs-theme="dark"] .logout-confirm-footer {
+    border-top-color: #374151;
+}
+
+[data-bs-theme="dark"] .logout-confirm-footer .btn-secondary {
+    background-color: #374151;
+    color: #f9fafb;
+}
+
+[data-bs-theme="dark"] .logout-confirm-footer .btn-secondary:hover {
+    background-color: #4b5563;
 }
 
 </style>
