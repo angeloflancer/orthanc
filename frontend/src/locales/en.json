@@ -139,6 +139,8 @@
     "local_studies": "All local Studies",
     "logout": "Logout",
     "logout_confirm_message": "Are you sure you want to log out?",
+    "logout_success_message": "Logged out successfully!",
+    "login_success_message": "Sign in successful!",
     "modalities_in_study": "Modalities in Study",
     "modify": {
         "anonymize_button_title": "Anonymize",

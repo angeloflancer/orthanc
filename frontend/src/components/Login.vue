@@ -132,6 +132,13 @@ export default {
           localStorage.setItem('auth-token', response.data.token);
           localStorage.setItem('user', JSON.stringify(response.data.user));
           
+          // Show success notification
+          if (this.messageBus) {
+            this.messageBus.emit('show-success-toast', this.$t('login_success_message') || 'Sign in successful!');
+          } else if (this.$messageBus) {
+            this.$messageBus.emit('show-success-toast', this.$t('login_success_message') || 'Sign in successful!');
+          }
+          
           // Check for URL parameters to preserve them when redirecting
           const urlParams = new URLSearchParams(window.location.search);
           const params = {};
@@ -147,12 +154,15 @@ export default {
             }
           }
           
-          // Redirect to home with preserved parameters if any
-          if (Object.keys(params).length > 0) {
-            this.$router.push({ path: '/', query: params });
-          } else {
-            this.$router.push('/');
-          }
+          // Small delay to show notification before redirect
+          setTimeout(() => {
+            // Redirect to home with preserved parameters if any
+            if (Object.keys(params).length > 0) {
+              this.$router.push({ path: '/', query: params });
+            } else {
+              this.$router.push('/');
+            }
+          }, 300);
         }
       } catch (error) {
         // Check if user is blocked

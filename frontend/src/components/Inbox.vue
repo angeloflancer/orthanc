@@ -198,6 +198,12 @@ export default {
         },
         confirmLogout() {
             this.showLogoutConfirm = false;
+            
+            // Show success notification
+            if (this.messageBus) {
+                this.messageBus.emit('show-success-toast', this.$t('logout_success_message') || 'Logged out successfully!');
+            }
+            
             let logoutOptions = {
                 "redirectUri": window.location.href
             }

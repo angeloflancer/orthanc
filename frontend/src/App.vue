@@ -1,4 +1,6 @@
 <script>
+import Toasts from './components/Toasts.vue'
+
 function applyBootStrapTheme() {
     // hack to switch the theme: get the value from our custom css
     let bootstrapTheme = getComputedStyle(document.documentElement).getPropertyValue('--bootstrap-theme');
@@ -13,6 +15,9 @@ function applyBootStrapTheme() {
 }
 
 export default {
+    components: {
+        Toasts
+    },
     computed: {
         showSidebar() {
             // Hide sidebar on login and register pages
@@ -63,6 +68,7 @@ export default {
             <router-view></router-view>
             <router-view name="ContentView"></router-view>
         </div>
+        <Toasts />
     </div>
 </template>
 
