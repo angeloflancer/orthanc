@@ -12,6 +12,7 @@ export default {
         return {
             toasts: [],
             counter: 0,
+            toastInstances: new Map(), // Store Bootstrap toast instances
         };
     },
     async created() {
@@ -46,16 +47,47 @@ export default {
                     autohide: true,
                     delay: type === 'success' ? 3000 : 5000
                 });
+                
+                // Store the toast instance
+                this.toastInstances.set(this.counter, toast);
+                
                 toast.show();
                 
-                // Remove toast from array after it's hidden
+                // Remove toast from array and instance map after it's hidden
                 toastElement.addEventListener('hidden.bs.toast', () => {
                     const index = this.toasts.findIndex(t => t.id === this.counter);
                     if (index > -1) {
                         this.toasts.splice(index, 1);
                     }
+                    // Remove from instances map
+                    this.toastInstances.delete(this.counter);
                 });
             }
+        },
+        closeToast(toastId) {
+            // Try to hide via Bootstrap Toast instance first
+            const toastInstance = this.toastInstances.get(toastId);
+            if (toastInstance) {
+                try {
+                    toastInstance.hide();
+                } catch (e) {
+                    console.warn('Error hiding toast via Bootstrap:', e);
+                    // Fallback: directly remove from array
+                    this.removeToast(toastId);
+                }
+            } else {
+                // If no instance found, directly remove from array
+                this.removeToast(toastId);
+            }
+        },
+        removeToast(toastId) {
+            // Directly remove toast from array (triggers Vue reactivity)
+            const index = this.toasts.findIndex(t => t.id === toastId);
+            if (index > -1) {
+                this.toasts.splice(index, 1);
+            }
+            // Clean up instance
+            this.toastInstances.delete(toastId);
         },
     }
 
@@ -73,8 +105,9 @@ export default {
                 role="alert" 
                 aria-live="polite" 
                 aria-atomic="true"
-                :class="['modern-toast', `toast-${toast.type}`]"
-                data-bs-autohide="true">
+                :class="['toast', 'modern-toast', `toast-${toast.type}`]"
+                data-bs-autohide="true"
+                data-bs-delay="5000">
                 <div class="toast-content">
                     <div class="toast-icon">
                         <i v-if="toast.type === 'success'" class="bi bi-check-circle-fill"></i>
@@ -85,7 +118,7 @@ export default {
                     <button 
                         type="button" 
                         class="toast-close" 
-                        data-bs-dismiss="toast" 
+                        @click.stop="closeToast(toast.id)"
                         aria-label="Close">
                         <i class="bi bi-x"></i>
                     </button>
@@ -167,6 +200,9 @@ export default {
     font-size: 18px;
     width: 24px;
     height: 24px;
+    pointer-events: auto;
+    position: relative;
+    z-index: 1;
 }
 
 .toast-close:hover {
