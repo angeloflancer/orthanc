@@ -59,6 +59,9 @@ export default {
             <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.patientName">
                 {{ wordFile.patientName }}
             </td>
+            <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.hospitalName || 'N/A'">
+                {{ wordFile.hospitalName || 'N/A' }}
+            </td>
             <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.uploadedByName">
                 {{ wordFile.uploadedByName }}
             </td>

@@ -240,21 +240,49 @@ router.get('/', protect, async (req, res) => {
     const wordFiles = await WordFile.find(query)
       .sort({ uploadedAt: -1 })
       .select('-filePath')
+      .populate('uploadedBy', 'name role')
       .lean();
     
-    res.json({
-      success: true,
-      wordFiles: wordFiles.map(file => ({
+    // Helper function to get hospital name for a user
+    const getHospitalNameForUser = async (user) => {
+      if (!user) return '';
+      
+      try {
+        if (user.role === 'admin') {
+          const hospital = await Hospital.findOne({ admin: user._id });
+          return hospital ? hospital.name : '';
+        } else if (user.role === 'doctor') {
+          const member = await HospitalMember.findOne({ user: user._id, status: 'accepted' })
+            .populate('hospital');
+          return member && member.hospital ? member.hospital.name : '';
+        }
+        return '';
+      } catch (err) {
+        console.error(`Error getting hospital name for user ${user._id}:`, err.message);
+        return '';
+      }
+    };
+    
+    // Enrich word files with hospital name
+    const enrichedWordFiles = await Promise.all(wordFiles.map(async (file) => {
+      const hospitalName = file.uploadedBy ? await getHospitalNameForUser(file.uploadedBy) : '';
+      return {
         id: file._id,
         fileName: file.fileName,
         originalFileName: file.originalFileName,
         fileSize: file.fileSize,
         patientId: file.patientId,
         patientName: file.patientName,
+        hospitalName: hospitalName,
         uploadedByName: file.uploadedByName,
         uploadStatus: file.uploadStatus,
         uploadedAt: file.uploadedAt
-      }))
+      };
+    }));
+    
+    res.json({
+      success: true,
+      wordFiles: enrichedWordFiles
     });
   } catch (error) {
     console.error('Get word files error:', error);

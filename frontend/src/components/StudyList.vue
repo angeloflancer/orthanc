@@ -57,12 +57,12 @@ document._studyColumns = {
     },
     "Hospital": {
         "width": "8%",
-        "placeholder": "Search hospital...",
+        "placeholder": "Hospital",
         "isOrderable": false
     },
     "UploadedBy": {
         "width": "8%",
-        "placeholder": "Search user...",
+        "placeholder": "User",
         "isOrderable": false
     },
     "modalities": {

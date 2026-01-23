@@ -271,9 +271,9 @@ export default {
                 v-bind:title="seriesAndInstancesCount">{{ seriesAndInstancesCount }}
                 </span>
                 <span v-else-if="columnTag == 'Hospital'" data-bs-toggle="tooltip"
-                    v-bind:title="study._hospitalName || 'N/A'">{{ study._hospitalName || 'N/A' }}</span>
+                    v-bind:title="study._hospitalName">{{ study._hospitalName }}</span>
                 <span v-else-if="columnTag == 'UploadedBy'" data-bs-toggle="tooltip"
-                    v-bind:title="study._uploadedBy || 'N/A'">{{ study._uploadedBy || 'N/A' }}</span>
+                    v-bind:title="study._uploadedBy">{{ study._uploadedBy }}</span>
                 <span v-else>{{ study.MainDicomTags[columnTag] }}
                 </span>
             </td>

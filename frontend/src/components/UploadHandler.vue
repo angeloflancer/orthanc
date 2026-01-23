@@ -273,7 +273,8 @@ export default {
                 this.searchPatientById();
             }
         },
-        async confirmPatientAndUpload() {
+        async confirmPatientAndUpload(event) {
+            if (event.key && event.key !== 'Enter') return;
             if (!this.wordPatientId.trim() || !this.wordPatientName.trim()) {
                 this.messageBus.emit('show-toast', 'Please enter Patient ID and Patient Name');
                 return;
@@ -456,6 +457,28 @@ export default {
                 if (wordFilesInput) wordFilesInput.value = null;
                 if (wordFoldersInput) wordFoldersInput.value = null;
             }
+        },
+        async handleWordFilesChange(event) {
+            // Native change handler as fallback for uppie (in case uppie doesn't fire after reset)
+            const fileList = Array.from(event.target.files || []);
+            if (fileList.length > 0) {
+                const { wordFiles } = this.separateFiles(fileList);
+                if (wordFiles.length > 0 && !this.showPatientModal) {
+                    // Only open modal if it's not already open (prevent duplicate calls)
+                    this.wordFilesToUpload = wordFiles;
+                    this.openPatientModal();
+                }
+            }
+            
+            // Reset input value after processing to allow selecting same files again
+            // Use setTimeout to ensure the change event completes first
+            if (!this.singleUse) {
+                setTimeout(() => {
+                    if (event.target) {
+                        event.target.value = null;
+                    }
+                }, 0);
+            }
         }
     },
     components: { UploadReport }
@@ -515,7 +538,8 @@ export default {
                         </label>
                         <label class="upload-btn" :class="{'disabled': uploadDisabled}">
                             <input :disabled="uploadDisabled" type="file" style="display: none;" id="wordFilesUpload" 
-                                accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple>
+                                accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
+                                multiple @change="handleWordFilesChange">
                             <span>Select Files</span>
                         </label>
                     </div>
@@ -552,6 +576,7 @@ export default {
                         <input 
                             type="text" 
                             v-model="wordPatientName" 
+                            @keydown="confirmPatientAndUpload"
                             placeholder="Enter Patient Name"
                         >
                     </div>

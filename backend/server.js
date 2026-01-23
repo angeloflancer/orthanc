@@ -155,20 +155,74 @@ app.post('/tools/find', express.json(), async (req, res) => {
     
     let results = orthancResponse.data;
     
+    // Get query level
+    const queryLevel = req.body.Level;
+    
     // Get allowed study IDs based on user role
     const allowedStudyIds = await getAllowedOrthancStudyIds(user);
     
-    // If allowedStudyIds is null, user is owner - return all results
+    // Helper function to get hospital name for a user
+    const getHospitalNameForUser = async (userId) => {
+      try {
+        const user = await User.findById(userId);
+        if (!user) return '';
+        
+        if (user.role === 'admin') {
+          const hospital = await Hospital.findOne({ admin: user._id });
+          return hospital ? hospital.name : '';
+        } else if (user.role === 'doctor') {
+          const member = await HospitalMember.findOne({ user: user._id, status: 'accepted' })
+            .populate('hospital');
+          return member && member.hospital ? member.hospital.name : '';
+        }
+        return '';
+      } catch (err) {
+        console.error(`Error getting hospital name for user ${userId}:`, err.message);
+        return '';
+      }
+    };
+    
+    // Helper function to enrich study with hospital and uploaded by info
+    const enrichStudy = async (study) => {
+      try {
+        const dicomStudyRecord = await DicomStudy.findOne({ orthancStudyId: study.ID })
+          .populate('uploadedBy', 'name')
+          .lean();
+        
+        if (dicomStudyRecord && dicomStudyRecord.uploadedBy) {
+          const uploaderId = dicomStudyRecord.uploadedBy._id || dicomStudyRecord.uploadedBy;
+          const hospitalName = await getHospitalNameForUser(uploaderId);
+          const uploader = await User.findById(uploaderId);
+          
+          study._hospitalName = hospitalName;
+          study._uploadedBy = dicomStudyRecord.uploadedByName || (uploader ? uploader.name : '');
+        } else {
+          study._hospitalName = '';
+          study._uploadedBy = '';
+        }
+      } catch (err) {
+        console.error(`Error enriching study ${study.ID}:`, err.message);
+        study._hospitalName = '';
+        study._uploadedBy = '';
+      }
+      return study;
+    };
+    
+    // If allowedStudyIds is null, user is owner
     if (allowedStudyIds === null) {
+      if (queryLevel === 'Study') {
+        // Enrich all studies with hospital name and uploaded by info
+        results = await Promise.all(results.map(enrichStudy));
+      }
       return res.json(results);
     }
-    
-    // Filter results based on the query level
-    const queryLevel = req.body.Level;
     
     if (queryLevel === 'Study') {
       // Filter studies directly
       results = results.filter(dicomStudy => allowedStudyIds.includes(dicomStudy?.ID));
+      
+      // Enrich studies with hospital name and uploaded by info
+      results = await Promise.all(results.map(enrichStudy));
     } else if (queryLevel === 'Series' || queryLevel === 'Instance') {
       // For series/instances, we need to get the parent study and check
       const filteredResults = [];

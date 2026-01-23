@@ -18,6 +18,7 @@ export default {
             filterFileName: '',
             filterPatientId: '',
             filterPatientName: '',
+            filterHospital: '',
             filterUploadedBy: '',
             filterUploadedAt: null,
             // Document viewer modal
@@ -49,6 +50,9 @@ export default {
             this.applyFilters();
         },
         filterPatientName() {
+            this.applyFilters();
+        },
+        filterHospital() {
             this.applyFilters();
         },
         filterUploadedBy() {
@@ -109,6 +113,13 @@ export default {
                 );
             }
             
+            if (this.filterHospital.trim()) {
+                const search = this.filterHospital.toLowerCase();
+                filtered = filtered.filter(file => 
+                    (file.hospitalName || '').toLowerCase().includes(search)
+                );
+            }
+            
             if (this.filterUploadedBy.trim()) {
                 const search = this.filterUploadedBy.toLowerCase();
                 filtered = filtered.filter(file => 
@@ -138,12 +149,16 @@ export default {
             }
             
             this.filteredWordFiles = filtered;
+
+            const temp = "";
+            console.log('filteredWordFiles', this.filteredWordFiles, temp.length > 1 ? !(temp[1].hospitalName.length == 0) : '');
             this.updateSelectAll();
         },
         clearFilters() {
             this.filterFileName = '';
             this.filterPatientId = '';
             this.filterPatientName = '';
+            this.filterHospital = '';
             this.filterUploadedBy = '';
             this.filterUploadedAt = null;
         },
@@ -343,9 +358,10 @@ export default {
             <thead class="sticky-top">
                 <tr class="study-column-titles">
                     <th width="3%" scope="col"></th>
-                    <th width="28%" class="study-table-title" scope="col">File Name</th>
-                    <th width="12%" class="study-table-title" scope="col">Patient ID</th>
-                    <th width="18%" class="study-table-title" scope="col">Patient Name</th>
+                    <th width="20%" class="study-table-title" scope="col">File Name</th>
+                    <th width="10%" class="study-table-title" scope="col">Patient ID</th>
+                    <th width="15%" class="study-table-title" scope="col">Patient Name</th>
+                    <th width="12%" class="study-table-title" scope="col">Hospital</th>
                     <th width="12%" class="study-table-title" scope="col">Uploaded By</th>
                     <th width="15%" class="study-table-title" scope="col">Uploaded At</th>
                     <th width="7%" class="study-table-title" scope="col">Delete</th>
@@ -367,6 +383,9 @@ export default {
                         <input type="text" class="form-control study-list-filter" v-model="filterPatientName" placeholder="Search...">
                     </th>
                     <th>
+                        <input type="text" class="form-control study-list-filter" v-model="filterHospital" placeholder="Search hospital...">
+                    </th>
+                    <th>
                         <input type="text" class="form-control study-list-filter" v-model="filterUploadedBy" placeholder="Search...">
                     </th>
                     <th>
@@ -384,7 +403,7 @@ export default {
                             <span style="font-weight: 400; font-size: small;">{{ selectedWordFileIds.length }}</span>
                         </div>
                     </th>
-                    <th width="97%" colspan="6" scope="col">
+                    <th width="97%" colspan="7" scope="col">
                         <div class="container px-0">
                             <div class="row g-1">
                                 <div class="col-6 study-list-bulk-buttons">
@@ -457,6 +476,9 @@ export default {
                     </td>
                     <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.patientName" @click="toggleExpand(wordFile.id)" style="cursor: pointer;">
                         {{ wordFile.patientName }}
+                    </td>
+                    <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.hospitalName" @click="toggleExpand(wordFile.id)" style="cursor: pointer;">
+                        {{ wordFile.hospitalName }}
                     </td>
                     <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.uploadedByName" @click="toggleExpand(wordFile.id)" style="cursor: pointer;">
                         {{ wordFile.uploadedByName }}
