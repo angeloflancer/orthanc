@@ -14,7 +14,7 @@ import api from "../orthancApi";
 import { ref } from 'vue';
 import SourceType from "../helpers/source-type";
 import { ObserveVisibility as vObserveVisibility } from 'vue3-observe-visibility'
-import { nextTick } from 'vue'
+import { nextTick } from 'vue';
 
 const Status = Object.freeze({
     UNDEFINED: 0,
