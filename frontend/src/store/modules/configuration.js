@@ -46,7 +46,7 @@ const state = () => ({
         TranslateDicomTags: false,
         PatientNameFormatting: "{0} {1}",
         PatientNameCapture: "(.+)",
-        StudyListColumns: ["patientName", "studyDate", "studyDescription", "modalities", "studyInstanceUid"],
+        StudyListColumns: ["patientName", "studyDate", "studyDescription", "Hospital", "UploadedBy", "modalities", "studyInstanceUid"],
         EnablePermissionsEdition: true,
     },
     userProfile: null,
@@ -72,13 +72,32 @@ const mutations = {
     setUiOptions(state, { uiOptions }) {
         state.uiOptions = uiOptions;
 
-        if (uiOptions.StudyListColumns.indexOf('modalities') != -1) {
+        // Ensure Hospital and UploadedBy columns are always included before modalities
+        if (state.uiOptions.StudyListColumns && Array.isArray(state.uiOptions.StudyListColumns)) {
+            const modalitiesIndex = state.uiOptions.StudyListColumns.indexOf('modalities');
+            if (modalitiesIndex !== -1) {
+                // Remove Hospital and UploadedBy if they exist elsewhere
+                state.uiOptions.StudyListColumns = state.uiOptions.StudyListColumns.filter(col => col !== 'Hospital' && col !== 'UploadedBy');
+                // Insert Hospital and UploadedBy before modalities
+                state.uiOptions.StudyListColumns.splice(modalitiesIndex, 0, 'Hospital', 'UploadedBy');
+            } else {
+                // If modalities not found, just ensure Hospital and UploadedBy are present
+                if (state.uiOptions.StudyListColumns.indexOf('Hospital') === -1) {
+                    state.uiOptions.StudyListColumns.push('Hospital');
+                }
+                if (state.uiOptions.StudyListColumns.indexOf('UploadedBy') === -1) {
+                    state.uiOptions.StudyListColumns.push('UploadedBy');
+                }
+            }
+        }
+
+        if (state.uiOptions.StudyListColumns.indexOf('modalities') != -1) {
             state.requestedTagsForStudyList.push('ModalitiesInStudy')
         }
-        if (uiOptions.StudyListColumns.indexOf('instancesCount') != -1 || uiOptions.StudyListColumns.indexOf('seriesAndInstancesCount') != -1) {
+        if (state.uiOptions.StudyListColumns.indexOf('instancesCount') != -1 || state.uiOptions.StudyListColumns.indexOf('seriesAndInstancesCount') != -1) {
             state.requestedTagsForStudyList.push('NumberOfStudyRelatedInstances')
         }
-        if (uiOptions.StudyListColumns.indexOf('seriesCount') != -1 || uiOptions.StudyListColumns.indexOf('seriesAndInstancesCount') != -1) {
+        if (state.uiOptions.StudyListColumns.indexOf('seriesCount') != -1 || state.uiOptions.StudyListColumns.indexOf('seriesAndInstancesCount') != -1) {
             state.requestedTagsForStudyList.push('NumberOfStudyRelatedSeries')
         }
         if (uiOptions.EnableReportQuickButton) {

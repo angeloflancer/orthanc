@@ -55,6 +55,16 @@ document._studyColumns = {
         "placeholder": "Chest",
         "isOrderable": true
     },
+    "Hospital": {
+        "width": "8%",
+        "placeholder": "Search hospital...",
+        "isOrderable": false
+    },
+    "UploadedBy": {
+        "width": "8%",
+        "placeholder": "Search user...",
+        "isOrderable": false
+    },
     "modalities": {
         "width": "6%",
         "isOrderable": false
@@ -122,6 +132,8 @@ export default {
             filterGenericTags : {},
             oldFilterGenericTags : {},
             filterLabels: [],
+            filterHospital: '',
+            filterUploadedBy: '',
             currentOrderByTag: null,
             currentOrderDirection: 'ASC',
             filterOrderBy: [{'Type': 'Metadata', 'Key': 'LastUpdate', 'Direction': 'DESC'}],
@@ -150,12 +162,13 @@ export default {
             uiOptions: state => state.configuration.uiOptions,
             allLabels: state => state.labels.allLabels,
             isConfigurationLoaded: state => state.configuration.loaded,
-            studiesIds: state => state.studies.studiesIds,
+            storeStudiesIds: state => state.studies.studiesIds,
             selectedStudiesIds: state => state.studies.selectedStudiesIds,
             isSearching: state => state.studies.isSearching,
             statistics: state => state.studies.statistics,
             hasExtendedFind: state => state.configuration.hasExtendedFind,
-            hasExtendedChanges: state => state.configuration.hasExtendedChanges
+            hasExtendedChanges: state => state.configuration.hasExtendedChanges,
+            storeStudies: state => state.studies.studies
         }),
         ...mapGetters([
             'studies/isFilterEmpty',                // -> this['studies/isFilterEmpty']
@@ -213,6 +226,32 @@ export default {
             } else {
                 return true;
             }
+        },
+        studiesIds() {
+            // Get studies from store and filter by Hospital/UploadedBy if needed
+            if (!this.filterHospital.trim() && !this.filterUploadedBy.trim()) {
+                return this.storeStudiesIds || [];
+            }
+            
+            // Filter by Hospital and UploadedBy
+            const studies = this.storeStudies || [];
+            return studies
+                .filter(study => {
+                    if (this.filterHospital.trim()) {
+                        const hospitalName = study._hospitalName || '';
+                        if (!hospitalName.toLowerCase().includes(this.filterHospital.toLowerCase().trim())) {
+                            return false;
+                        }
+                    }
+                    if (this.filterUploadedBy.trim()) {
+                        const uploadedBy = study._uploadedBy || '';
+                        if (!uploadedBy.toLowerCase().includes(this.filterUploadedBy.toLowerCase().trim())) {
+                            return false;
+                        }
+                    }
+                    return true;
+                })
+                .map(s => s.ID);
         },
         isStudyListEmpty() {
             return this.studiesIds.length == 0;
@@ -298,7 +337,7 @@ export default {
             // console.log("StudyList: Configuration has been loaded, updating study filter: ", this.$route.params.filters);
             this.initModalityFilter();
             for (const tag of this.uiOptions.StudyListColumns) {
-                if (['StudyDate', 'PatientBirthDate', 'modalities', 'seriesCount', 'instancesCount', 'seriesAndInstancesCount'].indexOf(tag) == -1) {
+                if (['StudyDate', 'PatientBirthDate', 'modalities', 'seriesCount', 'instancesCount', 'seriesAndInstancesCount', 'Hospital', 'UploadedBy'].indexOf(tag) == -1) {
                     this.filterGenericTags[tag] = '';
                 }
             }
@@ -433,6 +472,10 @@ export default {
                 return this.$i18n.t('series_and_instances_count_header');
             } else if (tagName == "modalities") {
                 return translateDicomTag(this.$i18n.t, this.$i18n.te, "ModalitiesInStudy");
+            } else if (tagName == "Hospital") {
+                return "Hospital";
+            } else if (tagName == "UploadedBy") {
+                return "Uploaded By";
             } else {
                 return translateDicomTag(this.$i18n.t, this.$i18n.te, tagName);
             }
@@ -754,22 +797,30 @@ export default {
             this.filterGenericTags = {};
             if (this.uiOptions.StudyListColumns) {
                 for (const tag of this.uiOptions.StudyListColumns) {
-                    if (['StudyDate', 'PatientBirthDate', 'modalities', 'seriesCount', 'instancesCount', 'seriesAndInstancesCount'].indexOf(tag) == -1) {
+                    if (['StudyDate', 'PatientBirthDate', 'modalities', 'seriesCount', 'instancesCount', 'seriesAndInstancesCount', 'Hospital', 'UploadedBy'].indexOf(tag) == -1) {
                         this.filterGenericTags[tag] = '';
                     }
                 }
             }
+            this.filterHospital = '';
+            this.filterUploadedBy = '';
             this.filterLabels = [];
             this.clearModalityFilter();
         },
         isFilteringOnlyOnLabels() {
             let hasGenericTagFilter = false;
             for (const tag of this.uiOptions.StudyListColumns) {
-                if (['StudyDate', 'PatientBirthDate', 'modalities', 'seriesCount', 'instancesCount', 'seriesAndInstancesCount'].indexOf(tag) == -1) {
+                if (['StudyDate', 'PatientBirthDate', 'modalities', 'seriesCount', 'instancesCount', 'seriesAndInstancesCount', 'Hospital', 'UploadedBy'].indexOf(tag) == -1) {
                     if (this.filterGenericTags[tag] && this.filterGenericTags[tag] != '') {
                         hasGenericTagFilter = true;
                     }
                 }
+            }
+            if (this.filterHospital && this.filterHospital.trim() !== '') {
+                hasGenericTagFilter = true;
+            }
+            if (this.filterUploadedBy && this.filterUploadedBy.trim() !== '') {
+                hasGenericTagFilter = true;
             }
             return this.filterStudyDate == '' && this.filterPatientBirthDate == '' && !hasGenericTagFilter && this.filterLabels.length > 0 && this.filterOrderBy.length == 0;
         },
@@ -1111,6 +1162,10 @@ export default {
                                 arrow-navigation :highlight="{ weekdays: [6, 0]}" :dark="isDarkMode">
                             </Datepicker>
                         </div>
+                        <input v-else-if="columnTag == 'Hospital'" type="text" class="form-control study-list-filter"
+                            v-model="filterHospital" placeholder="Search hospital..." />
+                        <input v-else-if="columnTag == 'UploadedBy'" type="text" class="form-control study-list-filter"
+                            v-model="filterUploadedBy" placeholder="Search user..." />
                         <input v-else-if="hasFilter(columnTag)" type="text" class="form-control study-list-filter"
                             v-model="this.filterGenericTags[columnTag]" v-bind:placeholder="getFilterPlaceholder(columnTag)"
                             v-bind:class="getFilterClass(columnTag)" />
