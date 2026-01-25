@@ -29,6 +29,11 @@
             placeholder="Search by username, name, or email..."
             v-model="searchQuery"
             @input="debouncedSearch"
+            @focus="handleSearchFocus"
+            autocomplete="nope"
+            name="user-search"
+            id="user-search-input"
+            :readonly="searchInputReadonly"
           />
         </div>
         <div class="filter-row">
@@ -191,6 +196,9 @@
                               type="email" 
                               class="form-control form-control-sm edit-input"
                               v-model="editForms[user.id].email"
+                              autocomplete="email"
+                              :name="`user-email-${user.id}`"
+                              :id="`user-email-input-${user.id}`"
                               required
                             />
                           </div>
@@ -441,7 +449,8 @@ export default {
       expandedUserId: null,
       editingUserId: null,
       editForms: {},
-      editLoading: null
+      editLoading: null,
+      searchInputReadonly: true
     };
   },
   async mounted() {
@@ -513,6 +522,14 @@ export default {
       }
     },
     
+    handleSearchFocus(event) {
+      // Remove readonly attribute to allow typing
+      if (event.target.hasAttribute('readonly')) {
+        event.target.removeAttribute('readonly');
+        this.searchInputReadonly = false;
+      }
+    },
+    
     debouncedSearch() {
       if (this.searchTimeout) {
         clearTimeout(this.searchTimeout);
@@ -568,7 +585,6 @@ export default {
     },
     
     startEdit(user) {
-      console.log("Hellos", user);
       // Ensure row is expanded when starting to edit
       if (this.expandedUserId !== user.id) {
         this.expandedUserId = user.id;
@@ -580,13 +596,31 @@ export default {
         email: user.email,
         password: ''
       };
+      
+      // Prevent browser autofill from filling search box with email
+      // Check immediately and after DOM updates
+      const checkAndClearAutofill = () => {
+        if (this.searchQuery === user.email) {
+          this.searchQuery = '';
+        }
+      };
+      
+      // Check immediately
+      checkAndClearAutofill();
+      
+      // Check after DOM updates (browser autofill might happen asynchronously)
+      this.$nextTick(() => {
+        checkAndClearAutofill();
+        // Also check after a short delay to catch delayed autofill
+        setTimeout(checkAndClearAutofill, 100);
+      });
     },
     
     cancelEdit(userId) {
       this.editingUserId = null;
       delete this.editForms[userId];
       // Optionally collapse the row after canceling
-      // this.expandedUserId = null;
+      this.expandedUserId = null;
     },
     
     async saveUser(user) {
