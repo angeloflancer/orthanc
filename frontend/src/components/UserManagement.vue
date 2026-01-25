@@ -75,13 +75,13 @@
           <table class="table table-hover mb-0">
             <thead>
               <tr>
-                <th>Username</th>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Joined</th>
-                <th class="text-end">Actions</th>
+                <th style="text-align: left;">Username</th>
+                <th style="text-align: left;">Name</th>
+                <th style="text-align: left;">Email</th>
+                <th style="text-align: left;">Role</th>
+                <th style="text-align: left;">Status</th>
+                <th style="text-align: left;">Joined</th>
+                <th style="text-align: left;">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -98,59 +98,238 @@
                   No users found
                 </td>
               </tr>
-              <tr v-for="user in users" :key="user.id" :class="{ 'blocked-row': user.blocked }">
-                <td>
-                  <span class="username">@{{ user.username }}</span>
-                </td>
-                <td>{{ user.name }}</td>
-                <td>{{ user.email }}</td>
-                <td>
-                  <div class="role-select-wrapper" v-if="user.role !== 'owner'">
-                    <select 
-                      class="form-select form-select-sm role-select"
-                      :value="user.role"
-                      @change="changeRole(user, $event.target.value)"
-                      :disabled="changingRole === user.id"
-                    >
-                      <option value="doctor">Doctor</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                  <span v-else class="role-badge owner">
-                    <i class="bi bi-shield-check me-1"></i>Owner
-                  </span>
-                </td>
-                <td>
-                  <span v-if="user.blocked" class="status-badge blocked">
-                    <i class="bi bi-slash-circle me-1"></i>Blocked
-                  </span>
-                  <span v-else class="status-badge active">
-                    <i class="bi bi-check-circle me-1"></i>Active
-                  </span>
-                </td>
-                <td>{{ formatDate(user.createdAt) }}</td>
-                <td class="text-end">
-                  <div class="action-buttons" v-if="user.role !== 'owner'">
-                    <button 
-                      v-if="!user.blocked"
-                      class="btn btn-sm btn-danger"
-                      @click="blockUser(user)"
-                      title="Block User"
-                    >
-                      <i class="bi bi-slash-circle"></i>
-                    </button>
-                    <button 
-                      v-else
-                      class="btn btn-sm btn-success"
-                      @click="unblockUser(user)"
-                      title="Unblock User"
-                    >
-                      <i class="bi bi-unlock"></i>
-                    </button>
-                  </div>
-                  <span v-else class="text-muted">-</span>
-                </td>
-              </tr>
+              <template v-for="user in users" :key="user.id">
+                <tr 
+                  :class="{ 'blocked-row': user.blocked, 'data-row-expanded': isExpanded(user.id) }"
+                  @click="toggleExpand(user.id)"
+                  style="cursor: pointer;"
+                >
+                  <td>
+                    <span class="username">@{{ user.username }}</span>
+                  </td>
+                  <td>{{ user.name }}</td>
+                  <td>{{ user.email }}</td>
+                  <td>
+                    <span v-if="user.role === 'owner'" class="role-badge owner">
+                      <i class="bi bi-shield-check me-1"></i>Owner
+                    </span>
+                    <span v-else-if="user.role === 'admin'" class="role-badge admin">
+                      <i class="bi bi-building me-1"></i>Admin
+                    </span>
+                    <span v-else class="role-badge doctor">
+                      <i class="bi bi-person-badge me-1"></i>Doctor
+                    </span>
+                  </td>
+                  <td>
+                    <span v-if="user.blocked" class="status-badge blocked">
+                      <i class="bi bi-slash-circle me-1"></i>Blocked
+                    </span>
+                    <span v-else class="status-badge active">
+                      <i class="bi bi-check-circle me-1"></i>Active
+                    </span>
+                  </td>
+                  <td>{{ formatDate(user.createdAt) }}</td>
+                  <td @click.stop>
+                    <div class="action-buttons" v-if="user.role !== 'owner'">
+                      <button 
+                        v-if="!user.blocked"
+                        class="btn btn-sm btn-danger"
+                        @click.stop="blockUser(user)"
+                        title="Block User"
+                      >
+                        <i class="bi bi-slash-circle"></i>
+                      </button>
+                      <button 
+                        v-else
+                        class="btn btn-sm btn-success"
+                        @click.stop="unblockUser(user)"
+                        title="Unblock User"
+                      >
+                        <i class="bi bi-unlock"></i>
+                      </button>
+                    </div>
+                    <span v-else class="text-muted">-</span>
+                  </td>
+                </tr>
+                <!-- Expanded row with role editing -->
+                <tr v-if="isExpanded(user.id)" class="details-row" @click.stop>
+                  <td colspan="7">
+                    <div class="details-content">
+                      <div class="details-grid">
+                        <!-- User Info Section -->
+                        <div class="info-section">
+                          <h6><i class="bi bi-person-fill me-2"></i>User Information</h6>
+                          <div class="info-row">
+                            <span class="info-label">Username:</span>
+                            <span v-if="!isEditing(user.id)" class="info-value">@{{ user.username }}</span>
+                            <input 
+                              v-else
+                              type="text" 
+                              class="form-control form-control-sm edit-input"
+                              v-model="editForms[user.id].username"
+                              pattern="[a-zA-Z0-9_]+"
+                              minlength="3"
+                              maxlength="20"
+                            />
+                          </div>
+                          <div class="info-row">
+                            <span class="info-label">Full Name:</span>
+                            <span v-if="!isEditing(user.id)" class="info-value">{{ user.name }}</span>
+                            <input 
+                              v-else
+                              type="text" 
+                              class="form-control form-control-sm edit-input"
+                              v-model="editForms[user.id].name"
+                              required
+                            />
+                          </div>
+                          <div class="info-row">
+                            <span class="info-label">Email:</span>
+                            <span v-if="!isEditing(user.id)" class="info-value">{{ user.email }}</span>
+                            <input 
+                              v-else
+                              type="email" 
+                              class="form-control form-control-sm edit-input"
+                              v-model="editForms[user.id].email"
+                              required
+                            />
+                          </div>
+                          <div class="info-row">
+                            <span class="info-label">Password:</span>
+                            <span v-if="!isEditing(user.id)" class="info-value text-muted">
+                              <i class="bi bi-lock-fill me-1"></i>••••••••
+                            </span>
+                            <input 
+                              v-else
+                              type="password" 
+                              class="form-control form-control-sm edit-input"
+                              v-model="editForms[user.id].password"
+                              placeholder="Leave blank to keep current"
+                              minlength="6"
+                            />
+                          </div>
+                          <div class="info-row">
+                            <span class="info-label">Joined:</span>
+                            <span class="info-value">{{ formatDate(user.createdAt) }}</span>
+                          </div>
+                        </div>
+                        
+                        <!-- Role Management Section -->
+                        <div class="info-section" v-if="user.role !== 'owner'">
+                          <h6><i class="bi bi-shield-check me-2"></i>Role Upgrade</h6>
+                          <div class="info-row">
+                            <span class="info-label">Current Role:</span>
+                            <span class="info-value">
+                              <span v-if="user.role === 'admin'" class="role-badge admin">
+                                <i class="bi bi-building me-1"></i>Admin
+                              </span>
+                              <span v-else class="role-badge doctor">
+                                <i class="bi bi-person-badge me-1"></i>Doctor
+                              </span>
+                            </span>
+                          </div>
+                          <div class="info-row">
+                            <span class="info-label">Upgrade Role:</span>
+                            <div class="role-toggle-wrapper">
+                              <label class="role-toggle" :class="{ 'upgrading': changingRole === user.id }">
+                                <input 
+                                  type="checkbox"
+                                  :key="`role-toggle-${user.id}-${user.role}`"
+                                  :checked="user.role === 'admin'"
+                                  @change="toggleRole(user, $event)"
+                                  :disabled="changingRole === user.id"
+                                />
+                                <span class="role-toggle-slider">
+                                  <span class="role-toggle-glow"></span>
+                                </span>
+                                <span class="role-toggle-label">
+                                  <span v-if="user.role === 'admin'">Admin</span>
+                                  <span v-else>Doctor</span>
+                                </span>
+                              </label>
+                              <span v-if="changingRole === user.id" class="ms-2">
+                                <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <!-- Status Section -->
+                        <div class="info-section">
+                          <h6><i class="bi bi-info-circle me-2"></i>Status</h6>
+                          <div class="info-row">
+                            <span class="info-label">Account Status:</span>
+                            <span class="info-value">
+                              <span v-if="user.blocked" class="status-badge blocked">
+                                <i class="bi bi-slash-circle me-1"></i>Blocked
+                              </span>
+                              <span v-else class="status-badge active">
+                                <i class="bi bi-check-circle me-1"></i>Active
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Actions -->
+                      <div class="actions-section">
+                        <span class="actions-label">Actions:</span>
+                        <div class="action-buttons">
+                          <template v-if="!isEditing(user.id)">
+                            <button 
+                              type="button" 
+                              class="btn btn-sm btn-outline-primary action-btn-edit"
+                              @click="startEdit(user)"
+                              title="Edit User"
+                            >
+                              <i class="bi bi-pencil"></i> Edit
+                            </button>
+                            <button 
+                              v-if="user.role !== 'owner' && !user.blocked"
+                              type="button" 
+                              class="btn btn-sm btn-outline-danger action-btn"
+                              @click="blockUser(user)"
+                              title="Block User"
+                            >
+                              <i class="bi bi-slash-circle"></i> Block
+                            </button>
+                            <button 
+                              v-if="user.role !== 'owner' && user.blocked"
+                              type="button" 
+                              class="btn btn-sm btn-outline-success action-btn"
+                              @click="unblockUser(user)"
+                              title="Unblock User"
+                            >
+                              <i class="bi bi-unlock"></i> Unblock
+                            </button>
+                          </template>
+                          <template v-else>
+                            <button 
+                              type="button" 
+                              class="btn btn-sm btn-success action-btn-save"
+                              @click="saveUser(user)"
+                              :disabled="editLoading === user.id"
+                              title="Save Changes"
+                            >
+                              <span v-if="editLoading === user.id" class="spinner-border spinner-border-sm me-1"></span>
+                              <i v-else class="bi bi-check-lg"></i> Save
+                            </button>
+                            <button 
+                              type="button" 
+                              class="btn btn-sm btn-outline-secondary action-btn-cancel"
+                              @click="cancelEdit(user.id)"
+                              :disabled="editLoading === user.id"
+                              title="Cancel"
+                            >
+                              <i class="bi bi-x-lg"></i> Cancel
+                            </button>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
@@ -216,6 +395,7 @@
           </div>
         </div>
       </div>
+
     </div>
   </div>
 </template>
@@ -257,7 +437,11 @@ export default {
       userToBlock: null,
       blockReason: '',
       blockLoading: false,
-      searchTimeout: null
+      searchTimeout: null,
+      expandedUserId: null,
+      editingUserId: null,
+      editForms: {},
+      editLoading: null
     };
   },
   async mounted() {
@@ -344,14 +528,19 @@ export default {
       this.loadUsers();
     },
     
-    async changeRole(user, newRole) {
-      if (newRole === user.role) return;
+    async toggleRole(user, event) {
+      const currentRole = user.role;
+      const newRole = currentRole === 'admin' ? 'doctor' : 'admin';
       
       const confirmMsg = newRole === 'admin' 
-        ? `Make @${user.username} an admin? They will be able to create and manage a hospital.`
-        : `Change @${user.username} to doctor? If they have a hospital, it will be deleted.`;
+        ? `Upgrade @${user.username} to admin? They will be able to create and manage a hospital.`
+        : `Downgrade @${user.username} to doctor? If they have a hospital, it will be deleted.`;
       
-      if (!confirm(confirmMsg)) return;
+      if (!confirm(confirmMsg)) {
+        // Reset checkbox state if cancelled
+        event.target.checked = currentRole === 'admin';
+        return;
+      }
       
       this.changingRole = user.id;
       
@@ -371,9 +560,78 @@ export default {
         await this.loadStats();
       } catch (error) {
         alert(error.response?.data?.error || 'Failed to change role');
+        // Reset checkbox state on error
+        event.target.checked = currentRole === 'admin';
       } finally {
         this.changingRole = null;
       }
+    },
+    
+    startEdit(user) {
+      console.log("Hellos", user);
+      // Ensure row is expanded when starting to edit
+      if (this.expandedUserId !== user.id) {
+        this.expandedUserId = user.id;
+      }
+      this.editingUserId = user.id;
+      this.editForms[user.id] = {
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        password: ''
+      };
+    },
+    
+    cancelEdit(userId) {
+      this.editingUserId = null;
+      delete this.editForms[userId];
+      // Optionally collapse the row after canceling
+      // this.expandedUserId = null;
+    },
+    
+    async saveUser(user) {
+      this.editLoading = user.id;
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        const editForm = this.editForms[user.id];
+        const updateData = {
+          username: editForm.username,
+          name: editForm.name,
+          email: editForm.email
+        };
+        
+        // Only include password if provided
+        if (editForm.password && editForm.password.trim() !== '') {
+          updateData.password = editForm.password;
+        }
+        
+        await axios.put(
+          `${orthancApiUrl}api/users/${user.id}`,
+          updateData,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        // Update local user data
+        user.username = editForm.username;
+        user.name = editForm.name;
+        user.email = editForm.email;
+        
+        this.cancelEdit(user.id);
+        alert('User updated successfully');
+      } catch (error) {
+        alert(error.response?.data?.error || 'Failed to update user');
+      } finally {
+        this.editLoading = null;
+      }
+    },
+    
+    isEditing(userId) {
+      return this.editingUserId === userId;
     },
     
     blockUser(user) {
@@ -440,6 +698,19 @@ export default {
         month: 'short',
         day: 'numeric'
       });
+    },
+    
+    toggleExpand(userId) {
+      // Don't collapse if user is in edit mode
+      if (this.expandedUserId === userId && this.editingUserId !== userId) {
+        this.expandedUserId = null;
+      } else if (this.expandedUserId !== userId) {
+        this.expandedUserId = userId;
+      }
+    },
+    
+    isExpanded(userId) {
+      return this.expandedUserId === userId;
     }
   }
 };
@@ -563,33 +834,157 @@ export default {
   color: #374151;
   border-bottom: 2px solid #e5e7eb;
   padding: 14px 16px;
-  font-size: 0.875rem;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  text-align: left;
 }
 
 .table td {
   padding: 14px 16px;
   vertical-align: middle;
   border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  text-align: left;
+}
+
+.table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.table tbody tr:hover:not(.data-row-expanded) {
+  background-color: #f9fafb;
 }
 
 .blocked-row {
   background: #fef2f2;
 }
 
+.blocked-row:hover:not(.data-row-expanded) {
+  background-color: #fee2e2 !important;
+}
+
 .username {
   font-weight: 500;
   color: #4a90e2;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-.role-select-wrapper {
-  display: inline-block;
+/* Role Toggle Switch */
+.role-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  flex: 1;
 }
 
-.role-select {
-  border-radius: 6px;
-  font-size: 0.875rem;
-  padding: 4px 28px 4px 10px;
-  min-width: 100px;
+.role-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.role-toggle input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.role-toggle-slider {
+  position: relative;
+  width: 56px;
+  height: 30px;
+  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
+  border-radius: 30px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.role-toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  left: 3px;
+  top: 3px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border-radius: 50%;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.1);
+  z-index: 2;
+}
+
+.role-toggle-glow {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 30px;
+  background: radial-gradient(circle, rgba(74, 144, 226, 0.4) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.role-toggle input[type="checkbox"]:checked + .role-toggle-slider {
+  background: linear-gradient(135deg, #4a90e2 0%, #2563eb 100%);
+  box-shadow: 0 0 20px rgba(74, 144, 226, 0.4), inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.role-toggle input[type="checkbox"]:checked + .role-toggle-slider::before {
+  transform: translateX(26px);
+  box-shadow: 0 2px 12px rgba(74, 144, 226, 0.5), 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.role-toggle input[type="checkbox"]:checked + .role-toggle-slider .role-toggle-glow {
+  opacity: 1;
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+.role-toggle.upgrading .role-toggle-slider {
+  animation: upgrade-pulse 0.6s ease-in-out;
+}
+
+.role-toggle input[type="checkbox"]:disabled + .role-toggle-slider {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.role-toggle-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  user-select: none;
+  transition: color 0.3s ease;
+}
+
+.role-toggle input[type="checkbox"]:checked ~ .role-toggle-label {
+  color: #4a90e2;
+  font-weight: 600;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes upgrade-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(74, 144, 226, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(74, 144, 226, 0.6);
+  }
 }
 
 .role-badge {
@@ -604,6 +999,16 @@ export default {
 .role-badge.owner {
   background: #ede9fe;
   color: #6b21a8;
+}
+
+.role-badge.admin {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.role-badge.doctor {
+  background: #e0f2fe;
+  color: #0369a1;
 }
 
 .status-badge {
@@ -675,6 +1080,10 @@ export default {
   max-width: 500px;
 }
 
+.modal-dialog.modal-lg {
+  max-width: 700px;
+}
+
 .modal-content {
   background: white;
   border-radius: 12px;
@@ -710,6 +1119,201 @@ export default {
   color: #92400e;
 }
 
+/* Expanded row styles */
+.data-row-expanded {
+  background-color: #f8f9fa !important;
+  font-weight: 600;
+}
+
+.data-row-expanded > td {
+  background-color: #f8f9fa !important;
+}
+
+.details-row {
+  background-color: #f8f9fa !important;
+}
+
+.details-row > td {
+  background-color: #f8f9fa !important;
+  padding: 0 !important;
+}
+
+.details-content {
+  padding: 24px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 30px;
+  margin-bottom: 20px;
+}
+
+.info-section h6 {
+  margin-bottom: 16px;
+  color: #374151;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  display: flex;
+  align-items: center;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.info-label {
+  font-weight: 500;
+  color: #6b7280;
+  min-width: 140px;
+  margin-right: 12px;
+  text-align: left;
+}
+
+.info-value {
+  color: #374151;
+  font-weight: 400;
+  flex: 1;
+  text-align: left;
+}
+
+.actions-section {
+  display: flex;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 8px;
+}
+
+.actions-label {
+  font-weight: 600;
+  margin-right: 16px;
+  color: #374151;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.action-btn {
+  margin-right: 8px;
+  border-radius: 6px;
+  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  min-width: 75px;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.action-btn-edit {
+  margin-right: 8px;
+  border-radius: 6px;
+  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: 1px solid #4a90e2;
+  color: #4a90e2;
+  min-width: 75px;
+  background: transparent;
+}
+
+.action-btn-edit:hover {
+  background: #4a90e2;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+}
+
+.action-btn-save {
+  margin-right: 8px;
+  border-radius: 6px;
+  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  background: #10b981;
+  border: 1px solid #10b981;
+  min-width: 75px;
+  color: white;
+}
+
+.action-btn-save:hover:not(:disabled) {
+  background: #059669;
+  border-color: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.action-btn-save:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.action-btn-cancel {
+  margin-right: 8px;
+  border-radius: 6px;
+  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: 1px solid #6b7280;
+  color: #6b7280;
+  min-width: 75px;
+  background: transparent;
+}
+
+.action-btn-cancel:hover:not(:disabled) {
+  background: #6b7280;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(107, 114, 128, 0.3);
+}
+
+.action-btn-cancel:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.edit-input {
+  flex: 1;
+  max-width: 300px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.edit-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
 @media (max-width: 768px) {
   .header-section {
     flex-direction: column;
@@ -727,6 +1331,15 @@ export default {
   
   .table-responsive {
     font-size: 0.875rem;
+  }
+  
+  .details-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .info-label {
+    min-width: 100px;
   }
 }
 </style>

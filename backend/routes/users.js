@@ -270,6 +270,87 @@ router.put('/:id/unblock', protect, requireOwner(), async (req, res) => {
   }
 });
 
+// Update user info (Owner only)
+router.put('/:id', protect, requireOwner(), async (req, res) => {
+  try {
+    const { name, email, username, password } = req.body;
+    
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Can't modify owner
+    if (user.role === 'owner') {
+      return res.status(400).json({ error: 'Cannot modify owner account' });
+    }
+    
+    // Update name
+    if (name !== undefined) {
+      user.name = name;
+    }
+    
+    // Update username
+    if (username !== undefined && username.toLowerCase() !== user.username) {
+      const usernameRegex = /^[a-zA-Z0-9_]+$/;
+      if (!usernameRegex.test(username)) {
+        return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
+      }
+      
+      if (username.length < 3 || username.length > 20) {
+        return res.status(400).json({ error: 'Username must be between 3 and 20 characters' });
+      }
+      
+      const usernameExists = await User.findOne({ username: username.toLowerCase() });
+      if (usernameExists && usernameExists._id.toString() !== user._id.toString()) {
+        return res.status(400).json({ error: 'Username already taken' });
+      }
+      
+      user.username = username.toLowerCase();
+    }
+    
+    // Update email
+    if (email !== undefined && email !== user.email) {
+      const emailExists = await User.findOne({ email });
+      if (emailExists && emailExists._id.toString() !== user._id.toString()) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
+      
+      user.email = email;
+      user.emailVerified = false; // Reset verification when email changes
+    }
+    
+    // Update password
+    if (password !== undefined && password !== '') {
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+      }
+      user.password = password; // Will be hashed by pre-save hook
+    }
+    
+    await user.save();
+    
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      user: {
+        id: user._id,
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Update user error:', error);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ error: Object.values(error.errors)[0].message });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Get user statistics (Owner only)
 router.get('/stats/overview', protect, requireOwner(), async (req, res) => {
   try {
