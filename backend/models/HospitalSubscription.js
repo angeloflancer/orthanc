@@ -55,7 +55,8 @@ hospitalSubscriptionSchema.methods.getDaysUntilExpiration = function() {
   const now = new Date();
   const diffTime = this.expiresAt - now;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
+  // Return 0 instead of negative values when expired
+  return Math.max(0, diffDays);
 };
 
 // Method to check if expiration warning should be shown (≤3 days)

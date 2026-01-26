@@ -139,7 +139,7 @@
               <div class="detail-row">
                 <span class="detail-label"><i class="bi bi-calendar-x me-1"></i>Days Remaining:</span>
                 <span class="detail-value" :class="getDaysRemainingClass()">
-                  {{ subscriptionInfo.daysUntilExpiration !== null ? subscriptionInfo.daysUntilExpiration : 'N/A' }}
+                  {{ subscriptionInfo.daysUntilExpiration !== null ? Math.max(0, subscriptionInfo.daysUntilExpiration) : 'N/A' }}
                 </span>
               </div>
             </div>
@@ -151,7 +151,7 @@
             
             <div v-if="subscriptionInfo.shouldShowWarning" class="warning-alert mt-3">
               <i class="bi bi-exclamation-triangle-fill me-2"></i>
-              <span>There are {{ subscriptionInfo.daysUntilExpiration }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
+              <span>There are {{ Math.max(0, subscriptionInfo.daysUntilExpiration) }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
             </div>
             
             <div v-if="!subscriptionInfo.isActive && subscriptionInfo.planType !== 'forever'" class="expired-alert mt-3">
@@ -256,7 +256,7 @@
                   <div class="detail-row">
                     <span class="detail-label"><i class="bi bi-calendar-x me-1"></i>Days Remaining:</span>
                     <span class="detail-value" :class="getDoctorDaysRemainingClass()">
-                      {{ doctorSubscription.daysUntilExpiration !== null ? doctorSubscription.daysUntilExpiration : 'N/A' }}
+                      {{ doctorSubscription.daysUntilExpiration !== null ? Math.max(0, doctorSubscription.daysUntilExpiration) : 'N/A' }}
                     </span>
                   </div>
                 </div>
@@ -266,7 +266,7 @@
                 </div>
                 <div v-if="doctorSubscription.shouldShowWarning" class="warning-alert mt-2">
                   <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                  <span>There are {{ doctorSubscription.daysUntilExpiration }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
+                  <span>There are {{ Math.max(0, doctorSubscription.daysUntilExpiration) }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
                 </div>
                 <div v-if="!doctorSubscription.isActive && doctorSubscription.planType !== 'forever'" class="expired-alert mt-2">
                   <i class="bi bi-x-circle-fill me-2"></i>
@@ -424,15 +424,31 @@
         </div>
       </div>
     </div>
+    
+    <!-- Confirm Dialog -->
+    <ConfirmDialog
+      :show="showConfirmDialog"
+      :title="confirmDialogTitle"
+      :message="confirmDialogMessage"
+      :confirmText="confirmDialogConfirmText"
+      :cancelText="confirmDialogCancelText"
+      :confirmButtonClass="confirmDialogButtonClass"
+      @confirm="handleConfirmDialogConfirm"
+      @cancel="handleConfirmDialogCancel"
+    />
   </div>
 </template>
 
 <script>
 import axios from 'axios';
 import { orthancApiUrl } from '../globalConfigurations';
+import ConfirmDialog from './ConfirmDialog.vue';
 
 export default {
   name: 'AccountSettings',
+  components: {
+    ConfirmDialog
+  },
   data() {
     return {
       userProfile: {
@@ -470,7 +486,15 @@ export default {
       checkingUsername: false,
       usernameValid: true,
       usernameError: '',
-      usernameCheckTimeout: null
+      usernameCheckTimeout: null,
+      // Confirm dialog state
+      showConfirmDialog: false,
+      confirmDialogTitle: '',
+      confirmDialogMessage: '',
+      confirmDialogConfirmText: 'Confirm',
+      confirmDialogCancelText: 'Cancel',
+      confirmDialogButtonClass: 'btn-primary',
+      confirmDialogAction: null
     };
   },
   async mounted() {
@@ -692,11 +716,17 @@ export default {
       }
     },
     
-    async leaveHospital() {
-      if (!confirm('Are you sure you want to leave this hospital?')) {
-        return;
-      }
-      
+    leaveHospital() {
+      this.showConfirmDialog = true;
+      this.confirmDialogTitle = 'Leave Hospital';
+      this.confirmDialogMessage = 'Are you sure you want to leave this hospital?';
+      this.confirmDialogConfirmText = 'Leave';
+      this.confirmDialogCancelText = 'Cancel';
+      this.confirmDialogButtonClass = 'btn-warning';
+      this.confirmDialogAction = 'leaveHospital';
+    },
+    
+    async executeLeaveHospital() {
       this.leaveLoading = true;
       this.hospitalError = '';
       
@@ -821,11 +851,17 @@ export default {
       return icons[role] || 'bi bi-person';
     },
     
-    async acceptInvitation() {
-      if (!confirm('Are you sure you want to accept this invitation?')) {
-        return;
-      }
-      
+    acceptInvitation() {
+      this.showConfirmDialog = true;
+      this.confirmDialogTitle = 'Accept Invitation';
+      this.confirmDialogMessage = 'Are you sure you want to accept this invitation?';
+      this.confirmDialogConfirmText = 'Accept';
+      this.confirmDialogCancelText = 'Cancel';
+      this.confirmDialogButtonClass = 'btn-success';
+      this.confirmDialogAction = 'acceptInvitation';
+    },
+    
+    async executeAcceptInvitation() {
       this.invitationLoading = true;
       this.hospitalError = '';
       this.hospitalSuccess = '';
@@ -857,11 +893,17 @@ export default {
       }
     },
     
-    async rejectInvitation() {
-      if (!confirm('Are you sure you want to reject this invitation? This action cannot be undone.')) {
-        return;
-      }
-      
+    rejectInvitation() {
+      this.showConfirmDialog = true;
+      this.confirmDialogTitle = 'Reject Invitation';
+      this.confirmDialogMessage = 'Are you sure you want to reject this invitation? This action cannot be undone.';
+      this.confirmDialogConfirmText = 'Reject';
+      this.confirmDialogCancelText = 'Cancel';
+      this.confirmDialogButtonClass = 'btn-danger';
+      this.confirmDialogAction = 'rejectInvitation';
+    },
+    
+    async executeRejectInvitation() {
       this.invitationLoading = true;
       this.hospitalError = '';
       this.hospitalSuccess = '';
@@ -891,6 +933,27 @@ export default {
       } finally {
         this.invitationLoading = false;
       }
+    },
+    
+    handleConfirmDialogConfirm() {
+      this.showConfirmDialog = false;
+      
+      // Execute the appropriate action based on confirmDialogAction
+      if (this.confirmDialogAction === 'acceptInvitation') {
+        this.executeAcceptInvitation();
+      } else if (this.confirmDialogAction === 'rejectInvitation') {
+        this.executeRejectInvitation();
+      } else if (this.confirmDialogAction === 'leaveHospital') {
+        this.executeLeaveHospital();
+      }
+      
+      // Reset dialog state
+      this.confirmDialogAction = null;
+    },
+    
+    handleConfirmDialogCancel() {
+      this.showConfirmDialog = false;
+      this.confirmDialogAction = null;
     },
     
     formatMembershipStatus(status) {
@@ -930,7 +993,7 @@ export default {
     },
     getDaysRemainingClass() {
       if (!this.subscriptionInfo || this.subscriptionInfo.daysUntilExpiration === null) return '';
-      const days = this.subscriptionInfo.daysUntilExpiration;
+      const days = Math.max(0, this.subscriptionInfo.daysUntilExpiration);
       if (days <= 0) return 'text-danger';
       if (days <= 3) return 'text-danger';
       if (days <= 7) return 'text-warning';
@@ -962,7 +1025,7 @@ export default {
     },
     getDoctorDaysRemainingClass() {
       if (!this.doctorSubscription || this.doctorSubscription.daysUntilExpiration === null) return '';
-      const days = this.doctorSubscription.daysUntilExpiration;
+      const days = Math.max(0, this.doctorSubscription.daysUntilExpiration);
       if (days <= 0) return 'text-danger';
       if (days <= 3) return 'text-danger';
       if (days <= 7) return 'text-warning';

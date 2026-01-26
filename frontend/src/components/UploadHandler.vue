@@ -200,6 +200,7 @@ export default {
             const { dicomFiles, wordFiles } = this.separateFiles(files);
             
             if (dicomFiles.length > 0) {
+                // Proceed with upload (browser's native dialog already handled confirmation for folder uploads)
                 await this.uploadDicomFiles(dicomFiles);
             }
             
@@ -429,6 +430,7 @@ export default {
             const fileList = Array.from(event.target.files);
             const { dicomFiles } = this.separateFiles(fileList);
             if (dicomFiles.length > 0) {
+                // Browser's native dialog already handled confirmation, proceed with upload
                 await this.uploadDicomFiles(dicomFiles);
             }
             

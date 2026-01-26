@@ -39,7 +39,7 @@
                 <i class="bi bi-calendar-x me-1"></i>Days Remaining:
               </span>
               <span class="expiration-value" :class="getDaysRemainingClass()">
-                {{ subscription.daysUntilExpiration !== null ? subscription.daysUntilExpiration : 'N/A' }}
+                {{ subscription.daysUntilExpiration !== null ? Math.max(0, subscription.daysUntilExpiration) : 'N/A' }}
               </span>
             </div>
             
@@ -65,7 +65,7 @@
           <!-- Warning Banner -->
           <div v-if="subscription.shouldShowWarning" class="warning-banner mt-3">
             <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            <span>There are {{ subscription.daysUntilExpiration }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
+            <span>There are {{ Math.max(0, subscription.daysUntilExpiration) }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
           </div>
           
           <!-- Expired Banner -->
@@ -158,7 +158,7 @@ export default {
     },
     getDaysRemainingClass() {
       if (!this.subscription || this.subscription.daysUntilExpiration === null) return '';
-      const days = this.subscription.daysUntilExpiration;
+      const days = Math.max(0, this.subscription.daysUntilExpiration);
       if (days <= 0) return 'days-expired';
       if (days <= 3) return 'days-warning';
       if (days <= 7) return 'days-caution';
@@ -169,7 +169,7 @@ export default {
       if (this.subscription.daysUntilExpiration === null) return 0;
       
       const totalDays = this.subscription.planType === 'monthly' ? 30 : 365;
-      const remaining = this.subscription.daysUntilExpiration;
+      const remaining = Math.max(0, this.subscription.daysUntilExpiration);
       const percentage = (remaining / totalDays) * 100;
       return Math.max(0, Math.min(100, percentage));
     },
