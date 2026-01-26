@@ -1,6 +1,8 @@
 <script>
 import { mapState } from "vuex"
 import api from "../orthancApi"
+import axios from 'axios';
+import { orthancApiUrl } from '../globalConfigurations';
 
 export default {
     name: 'Dashboard',
@@ -13,7 +15,8 @@ export default {
                 recentStudies: [],
                 recentDocuments: []
             },
-            loading: true
+            loading: true,
+            expirationWarning: null
         };
     },
     computed: {
@@ -43,6 +46,7 @@ export default {
     },
     async mounted() {
         await this.loadDashboardData();
+        await this.checkExpiration();
     },
     methods: {
         async loadDashboardData() {
@@ -86,6 +90,27 @@ export default {
                 return (mb / 1024).toFixed(2) + ' GB';
             }
             return mb.toFixed(2) + ' MB';
+        },
+        async checkExpiration() {
+            try {
+                const token = localStorage.getItem('auth-token');
+                if (!token) return;
+                
+                const response = await axios.get(`${orthancApiUrl}api/subscriptions/check-expiration`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.data.success && response.data.hasWarning) {
+                    this.expirationWarning = {
+                        days: response.data.daysUntilExpiration,
+                        message: response.data.message
+                    };
+                }
+            } catch (error) {
+                console.error('Error checking expiration:', error);
+            }
         }
     }
 }
@@ -93,6 +118,20 @@ export default {
 
 <template>
     <div class="dashboard-container">
+        <!-- Expiration Warning Banner -->
+        <div v-if="expirationWarning" class="expiration-warning-banner">
+            <div class="warning-content">
+                <i class="bi bi-exclamation-triangle-fill warning-icon"></i>
+                <div class="warning-text">
+                    <strong>Subscription Expiring Soon</strong>
+                    <p>{{ expirationWarning.message }}</p>
+                </div>
+            </div>
+            <button class="warning-close" @click="expirationWarning = null" aria-label="Close">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+
         <!-- Header Section -->
         <div class="dashboard-header">
             <div class="welcome-section">
@@ -562,6 +601,81 @@ export default {
     font-size: 16px;
     font-weight: 600;
     color: #111827;
+}
+
+/* Expiration Warning Banner */
+.expiration-warning-banner {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #fbbf24;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(251, 191, 36, 0.2);
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.warning-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex: 1;
+}
+
+.warning-icon {
+    font-size: 24px;
+    color: #d97706;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.warning-text {
+    flex: 1;
+}
+
+.warning-text strong {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    color: #92400e;
+    margin-bottom: 4px;
+}
+
+.warning-text p {
+    margin: 0;
+    font-size: 14px;
+    color: #78350f;
+    line-height: 1.5;
+}
+
+.warning-close {
+    background: transparent;
+    border: none;
+    color: #92400e;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+.warning-close:hover {
+    background: rgba(146, 64, 14, 0.1);
 }
 
 /* Responsive */

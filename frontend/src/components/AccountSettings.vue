@@ -116,6 +116,57 @@
         </div>
       </div>
 
+      <!-- Subscription Status Section (for admins only) -->
+      <div v-if="userProfile.role === 'admin'" class="card mb-4 shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title mb-4">
+            <i class="bi bi-calendar-check me-2"></i>Subscription Status
+          </h5>
+          
+          <div v-if="subscriptionInfo" class="subscription-details">
+            <div class="subscription-badge mb-3">
+              <span class="badge" :class="getSubscriptionBadgeClass()">
+                <i :class="getSubscriptionIcon()" class="me-1"></i>
+                {{ getSubscriptionPlanName() }}
+              </span>
+            </div>
+            
+            <div v-if="subscriptionInfo.planType !== 'forever'" class="expiration-details">
+              <div class="detail-row">
+                <span class="detail-label"><i class="bi bi-clock me-1"></i>Expires:</span>
+                <span class="detail-value">{{ formatDate(subscriptionInfo.expiresAt) }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label"><i class="bi bi-calendar-x me-1"></i>Days Remaining:</span>
+                <span class="detail-value" :class="getDaysRemainingClass()">
+                  {{ subscriptionInfo.daysUntilExpiration !== null ? subscriptionInfo.daysUntilExpiration : 'N/A' }}
+                </span>
+              </div>
+            </div>
+            
+            <div v-else class="forever-plan-info">
+              <i class="bi bi-infinity me-2"></i>
+              <span>Unlimited access - No expiration</span>
+            </div>
+            
+            <div v-if="subscriptionInfo.shouldShowWarning" class="warning-alert mt-3">
+              <i class="bi bi-exclamation-triangle-fill me-2"></i>
+              <span>There are {{ subscriptionInfo.daysUntilExpiration }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
+            </div>
+            
+            <div v-if="!subscriptionInfo.isActive && subscriptionInfo.planType !== 'forever'" class="expired-alert mt-3">
+              <i class="bi bi-x-circle-fill me-2"></i>
+              <span>Subscription has expired. Contact the owner to renew.</span>
+            </div>
+          </div>
+          
+          <div v-else class="no-subscription-info">
+            <i class="bi bi-info-circle me-2"></i>
+            <span>No subscription found. Please contact the owner.</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Hospital Membership Section (for doctors only) -->
       <div v-if="userProfile.role === 'doctor'" class="card mb-4 shadow-sm">
         <div class="card-body">
@@ -184,6 +235,43 @@
                 <p v-if="hospitalMembership.joinedAt" class="mb-0">
                   <strong>Joined:</strong> {{ formatDate(hospitalMembership.joinedAt) }}
                 </p>
+              </div>
+              
+              <!-- Hospital Subscription Status (for accepted members) -->
+              <div v-if="hospitalMembership.status === 'accepted' && doctorSubscription" class="hospital-subscription-info mt-3 pt-3 border-top">
+                <h6 class="mb-2">
+                  <i class="bi bi-calendar-check me-2"></i>Hospital Subscription
+                </h6>
+                <div class="subscription-badge mb-2">
+                  <span class="badge" :class="getDoctorSubscriptionBadgeClass()">
+                    <i :class="getDoctorSubscriptionIcon()" class="me-1"></i>
+                    {{ getDoctorSubscriptionPlanName() }}
+                  </span>
+                </div>
+                <div v-if="doctorSubscription.planType !== 'forever'" class="expiration-details">
+                  <div class="detail-row">
+                    <span class="detail-label"><i class="bi bi-clock me-1"></i>Expires:</span>
+                    <span class="detail-value">{{ formatDate(doctorSubscription.expiresAt) }}</span>
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label"><i class="bi bi-calendar-x me-1"></i>Days Remaining:</span>
+                    <span class="detail-value" :class="getDoctorDaysRemainingClass()">
+                      {{ doctorSubscription.daysUntilExpiration !== null ? doctorSubscription.daysUntilExpiration : 'N/A' }}
+                    </span>
+                  </div>
+                </div>
+                <div v-else class="forever-plan-info">
+                  <i class="bi bi-infinity me-2"></i>
+                  <span>Unlimited access - No expiration</span>
+                </div>
+                <div v-if="doctorSubscription.shouldShowWarning" class="warning-alert mt-2">
+                  <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                  <span>There are {{ doctorSubscription.daysUntilExpiration }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
+                </div>
+                <div v-if="!doctorSubscription.isActive && doctorSubscription.planType !== 'forever'" class="expired-alert mt-2">
+                  <i class="bi bi-x-circle-fill me-2"></i>
+                  <span>Hospital is currently suspended. Wait for the administrator to renew.</span>
+                </div>
               </div>
               <div class="membership-actions" v-if="hospitalMembership.status === 'pending' || hospitalMembership.status === 'accepted'">
                 <button 
@@ -361,6 +449,8 @@ export default {
         confirmPassword: ''
       },
       hospitalMembership: null,
+      subscriptionInfo: null,
+      doctorSubscription: null,
       joinHospitalId: '',
       profileLoading: false,
       passwordLoading: false,
@@ -477,6 +567,16 @@ export default {
               },
               status: response.data.user.hospitalMembership.status
             };
+          }
+          
+          // Set subscription info for admin
+          if (response.data.user.role === 'admin' && response.data.user.subscription) {
+            this.subscriptionInfo = response.data.user.subscription;
+          }
+          
+          // Set doctor subscription info
+          if (response.data.user.role === 'doctor' && response.data.user.doctorSubscription) {
+            this.doctorSubscription = response.data.user.doctorSubscription;
           }
         }
       } catch (error) {
@@ -804,6 +904,70 @@ export default {
       return statuses[status] || status;
     },
     
+    getSubscriptionPlanName() {
+      if (!this.subscriptionInfo) return '';
+      const planNames = {
+        monthly: 'Monthly Plan',
+        yearly: 'Yearly Plan',
+        forever: 'Forever Plan'
+      };
+      return planNames[this.subscriptionInfo.planType] || this.subscriptionInfo.planType;
+    },
+    getSubscriptionIcon() {
+      if (!this.subscriptionInfo) return 'bi bi-calendar';
+      const icons = {
+        monthly: 'bi bi-calendar-month',
+        yearly: 'bi bi-calendar-year',
+        forever: 'bi bi-infinity'
+      };
+      return icons[this.subscriptionInfo.planType] || 'bi bi-calendar';
+    },
+    getSubscriptionBadgeClass() {
+      if (!this.subscriptionInfo) return 'bg-secondary';
+      if (this.subscriptionInfo.planType === 'forever') return 'bg-success';
+      if (this.subscriptionInfo.isActive) return 'bg-primary';
+      return 'bg-danger';
+    },
+    getDaysRemainingClass() {
+      if (!this.subscriptionInfo || this.subscriptionInfo.daysUntilExpiration === null) return '';
+      const days = this.subscriptionInfo.daysUntilExpiration;
+      if (days <= 0) return 'text-danger';
+      if (days <= 3) return 'text-danger';
+      if (days <= 7) return 'text-warning';
+      return 'text-success';
+    },
+    getDoctorSubscriptionPlanName() {
+      if (!this.doctorSubscription) return '';
+      const planNames = {
+        monthly: 'Monthly Plan',
+        yearly: 'Yearly Plan',
+        forever: 'Forever Plan'
+      };
+      return planNames[this.doctorSubscription.planType] || this.doctorSubscription.planType;
+    },
+    getDoctorSubscriptionIcon() {
+      if (!this.doctorSubscription) return 'bi bi-calendar';
+      const icons = {
+        monthly: 'bi bi-calendar-month',
+        yearly: 'bi bi-calendar-year',
+        forever: 'bi bi-infinity'
+      };
+      return icons[this.doctorSubscription.planType] || 'bi bi-calendar';
+    },
+    getDoctorSubscriptionBadgeClass() {
+      if (!this.doctorSubscription) return 'bg-secondary';
+      if (this.doctorSubscription.planType === 'forever') return 'bg-success';
+      if (this.doctorSubscription.isActive) return 'bg-primary';
+      return 'bg-danger';
+    },
+    getDoctorDaysRemainingClass() {
+      if (!this.doctorSubscription || this.doctorSubscription.daysUntilExpiration === null) return '';
+      const days = this.doctorSubscription.daysUntilExpiration;
+      if (days <= 0) return 'text-danger';
+      if (days <= 3) return 'text-danger';
+      if (days <= 7) return 'text-warning';
+      return 'text-success';
+    },
     formatDate(dateString) {
       if (!dateString) return '';
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -1284,5 +1448,110 @@ export default {
 .btn-outline-danger:hover {
   background-color: #dc2626;
   color: white;
+}
+
+/* Subscription styles */
+.subscription-details {
+  padding: 8px 0;
+}
+
+.subscription-badge {
+  display: flex;
+  align-items: center;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.expiration-details {
+  margin-top: 16px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.detail-label {
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+}
+
+.detail-value {
+  font-weight: 600;
+  color: #111827;
+}
+
+.forever-plan-info {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  color: #166534;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.warning-alert {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 16px;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  color: #92400e;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.warning-alert i {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.expired-alert {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 16px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.expired-alert i {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.no-subscription-info {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.hospital-subscription-info {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
 }
 </style>

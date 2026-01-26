@@ -8,6 +8,7 @@ import { orthancApiUrl, oe2ApiUrl } from "../globalConfigurations";
 import api from "../orthancApi"
 import SourceType from "../helpers/source-type";
 import bootstrap from "bootstrap/dist/js/bootstrap.bundle.min.js"
+import { showAccessDeniedNotification, NotificationMessages } from "../helpers/notifications"
 
 
 export default {
@@ -22,6 +23,9 @@ export default {
             userRole: 'doctor',
             hasHospital: false,
             showLogoutConfirm: false,
+            userProfileData: null,
+            subscriptionInfo: null,
+            hospitalMembership: null,
         };
     },
     computed: {
@@ -114,6 +118,48 @@ export default {
         showHospitalSettings() {
             // Show Hospital settings for admin
             return this.isAdmin;
+        },
+        // Access control computed properties
+        canAccessFeatures() {
+            // Owner always has access
+            if (this.isOwner) return true;
+            
+            // Admin needs active subscription
+            if (this.isAdmin) {
+                return this.subscriptionInfo && this.subscriptionInfo.isActive;
+            }
+            
+            // Doctor needs accepted membership and active subscription
+            if (this.isDoctor) {
+                const hasMembership = this.hospitalMembership && this.hospitalMembership.status === 'accepted';
+                const hasActiveSubscription = this.hospitalMembership && 
+                    this.hospitalMembership.doctorSubscription && 
+                    this.hospitalMembership.doctorSubscription.isActive;
+                return hasMembership && hasActiveSubscription;
+            }
+            
+            return false;
+        },
+        isHospitalExpired() {
+            if (this.isOwner) return false;
+            
+            if (this.isAdmin) {
+                return this.subscriptionInfo && !this.subscriptionInfo.isActive;
+            }
+            
+            if (this.isDoctor) {
+                return this.hospitalMembership && 
+                    this.hospitalMembership.doctorSubscription && 
+                    !this.hospitalMembership.doctorSubscription.isActive;
+            }
+            
+            return false;
+        },
+        hasMembership() {
+            if (this.isDoctor) {
+                return this.hospitalMembership && this.hospitalMembership.status === 'accepted';
+            }
+            return true; // Admin and owner don't need membership
         }
     },
     methods: {
@@ -393,9 +439,24 @@ export default {
                     const data = await response.json();
                     if (data.success && data.user) {
                         this.userRole = data.user.role || 'doctor';
+                        this.userProfileData = data.user;
+                        
                         // Check if admin has a hospital
                         if (data.user.role === 'admin' && data.user.hospital) {
                             this.hasHospital = true;
+                        }
+                        
+                        // Store subscription info for admin
+                        if (data.user.role === 'admin' && data.user.subscription) {
+                            this.subscriptionInfo = data.user.subscription;
+                        }
+                        
+                        // Store membership info for doctor
+                        if (data.user.role === 'doctor') {
+                            this.hospitalMembership = {
+                                ...data.user.hospitalMembership,
+                                doctorSubscription: data.user.doctorSubscription
+                            };
                         }
                     }
                 }
@@ -421,6 +482,40 @@ export default {
             setTimeout(() => {
                 this.$router.push('/login');
             }, 100);
+        },
+        handleDisabledNavClick(feature) {
+            let message = NotificationMessages.ACCESS_DENIED;
+            
+            if (this.isDoctor) {
+                if (!this.hasMembership) {
+                    message = NotificationMessages.DOCTOR_NO_MEMBERSHIP;
+                } else if (this.isHospitalExpired) {
+                    message = NotificationMessages.DOCTOR_HOSPITAL_SUSPENDED;
+                }
+            } else if (this.isAdmin) {
+                if (!this.subscriptionInfo) {
+                    message = NotificationMessages.ADMIN_NO_SUBSCRIPTION;
+                } else if (this.isHospitalExpired) {
+                    message = NotificationMessages.ADMIN_EXPIRED_SUBSCRIPTION;
+                }
+            }
+            
+            if (this.messageBus) {
+                this.messageBus.emit('show-error-toast', message);
+            }
+        },
+        handleNavClick(event, feature) {
+            if (!this.canAccessFeatures) {
+                event.preventDefault();
+                event.stopPropagation();
+                this.handleDisabledNavClick(feature);
+                return false;
+            }
+            return true;
+        },
+        handleStudiesNavClick() {
+            this.onAllLocalStudiesClick();
+            this.collapseAllDropdowns('studies-labels-list');
         }
     },
     watch: {
@@ -573,9 +668,14 @@ export default {
                     </li>
                     
                     <!-- All local Studies with Labels as submenu -->
-                    <li class="nav-item nav-dropdown" :class="{ 'nav-active': isRouteActive('/studies') }" 
-                        @click="onAllLocalStudiesClick(); collapseAllDropdowns('studies-labels-list')"
-                        data-bs-toggle="collapse" data-bs-target="#studies-labels-list">
+                    <li class="nav-item nav-dropdown" 
+                        :class="{ 
+                            'nav-active': isRouteActive('/studies'),
+                            'nav-disabled': !canAccessFeatures
+                        }" 
+                        @click="!canAccessFeatures ? handleDisabledNavClick('studies') : handleStudiesNavClick()"
+                        :data-bs-toggle="canAccessFeatures ? 'collapse' : null"
+                        :data-bs-target="canAccessFeatures ? '#studies-labels-list' : null">
                         <div class="nav-link">
                             <i class="fa fa-x-ray fa-lg nav-icon"></i>
                             <span class="nav-text">{{ $t('local_studies') }}</span>
@@ -596,21 +696,49 @@ export default {
                         </li>
                     </ul>
                     
-                    <li class="nav-item" :class="{ 'nav-active': isRouteActive('/word-files') }" @click="collapseAllDropdowns()">
-                        <router-link class="nav-link" to="/word-files">
+                    <li class="nav-item" 
+                        :class="{ 
+                            'nav-active': isRouteActive('/word-files'),
+                            'nav-disabled': !canAccessFeatures
+                        }" 
+                        @click="!canAccessFeatures ? handleDisabledNavClick('documents') : collapseAllDropdowns()">
+                        <router-link 
+                            v-if="canAccessFeatures"
+                            class="nav-link" 
+                            to="/word-files">
                             <i class="fa fa-file-word fa-lg nav-icon"></i>
                             <span class="nav-text">All Documents</span>
                         </router-link>
+                        <div v-else class="nav-link" @click.prevent="handleDisabledNavClick('documents')">
+                            <i class="fa fa-file-word fa-lg nav-icon"></i>
+                            <span class="nav-text">All Documents</span>
+                        </div>
                     </li>
-                    <li class="nav-item" :class="{ 'nav-active': isRouteActive('/patients') }" @click="collapseAllDropdowns()">
-                        <router-link class="nav-link" to="/patients">
+                    <li class="nav-item" 
+                        :class="{ 
+                            'nav-active': isRouteActive('/patients'),
+                            'nav-disabled': !canAccessFeatures
+                        }" 
+                        @click="!canAccessFeatures ? handleDisabledNavClick('patients') : collapseAllDropdowns()">
+                        <router-link 
+                            v-if="canAccessFeatures"
+                            class="nav-link" 
+                            to="/patients">
                             <i class="fa fa-users fa-lg nav-icon"></i>
                             <span class="nav-text">All Patients</span>
                         </router-link>
+                        <div v-else class="nav-link" @click.prevent="handleDisabledNavClick('patients')">
+                            <i class="fa fa-users fa-lg nav-icon"></i>
+                            <span class="nav-text">All Patients</span>
+                        </div>
                     </li>
 
-                    <li v-if="uiOptions.EnableUpload" class="nav-item nav-dropdown" data-bs-toggle="collapse"
-                        data-bs-target="#upload-handler">
+                    <li v-if="uiOptions.EnableUpload" 
+                        class="nav-item nav-dropdown" 
+                        :class="{ 'nav-disabled': !canAccessFeatures }"
+                        :data-bs-toggle="canAccessFeatures ? 'collapse' : null"
+                        :data-bs-target="canAccessFeatures ? '#upload-handler' : null"
+                        @click="!canAccessFeatures ? handleDisabledNavClick('upload') : null">
                         <div class="nav-link">
                             <i class="fa fa-file-upload fa-lg nav-icon"></i>
                             <span class="nav-text">{{ $t('upload') }}</span>
@@ -630,11 +758,24 @@ export default {
                     </li>
 
                     <!-- Members Management (Admin with hospital only) -->
-                    <li v-if="showMembersNav" class="nav-item" :class="{ 'nav-active': isRouteActive('/members') }" @click="collapseAllDropdowns()">
-                        <router-link class="nav-link" to="/members">
+                    <li v-if="showMembersNav" 
+                        class="nav-item" 
+                        :class="{ 
+                            'nav-active': isRouteActive('/members'),
+                            'nav-disabled': isHospitalExpired
+                        }" 
+                        @click="isHospitalExpired ? handleDisabledNavClick('members') : collapseAllDropdowns()">
+                        <router-link 
+                            v-if="!isHospitalExpired"
+                            class="nav-link" 
+                            to="/members">
                             <i class="fa fa-user-friends fa-lg nav-icon"></i>
                             <span class="nav-text">Hospital Members</span>
                         </router-link>
+                        <div v-else class="nav-link" @click.prevent="handleDisabledNavClick('members')">
+                            <i class="fa fa-user-friends fa-lg nav-icon"></i>
+                            <span class="nav-text">Hospital Members</span>
+                        </div>
                     </li>
 
                     <li v-if="showDicomModalities" class="nav-item nav-dropdown" 
@@ -874,6 +1015,28 @@ export default {
 
 .nav-item.nav-active .nav-link {
     padding-left: 12px; /* Compensate for border */
+}
+
+/* Disabled nav item */
+.nav-item.nav-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: auto;
+}
+
+.nav-item.nav-disabled .nav-link {
+    cursor: not-allowed;
+    pointer-events: auto;
+}
+
+.nav-item.nav-disabled:hover {
+    opacity: 0.6;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item.nav-disabled .nav-icon,
+.nav-item.nav-disabled .nav-text {
+    opacity: 0.6;
 }
 
 /* Nav link - full width */

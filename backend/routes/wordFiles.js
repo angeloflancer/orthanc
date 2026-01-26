@@ -9,6 +9,7 @@ const User = require('../models/User');
 const Hospital = require('../models/Hospital');
 const HospitalMember = require('../models/HospitalMember');
 const { protect } = require('../middleware/auth');
+const { checkFeatureAccess } = require('../middleware/accessControl');
 
 // Get upload directory from environment variable or use default
 const uploadsDir = process.env.WORD_FILES_UPLOAD_PATH 
@@ -57,7 +58,7 @@ const upload = multer({
 });
 
 // Upload Word file
-router.post('/upload', protect, upload.single('file'), async (req, res) => {
+router.post('/upload', protect, checkFeatureAccess(), upload.single('file'), async (req, res) => {
   try {
     const { patientId, patientName } = req.body;
     
@@ -219,7 +220,7 @@ async function getAllowedWordFileUserIds(user) {
 }
 
 // Get all Word files
-router.get('/', protect, async (req, res) => {
+router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -291,7 +292,7 @@ router.get('/', protect, async (req, res) => {
 });
 
 // Get single Word file
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const wordFile = await WordFile.findById(req.params.id);
     
@@ -333,7 +334,7 @@ router.get('/:id', protect, async (req, res) => {
 });
 
 // Download/View Word file
-router.get('/:id/download', protect, async (req, res) => {
+router.get('/:id/download', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const wordFile = await WordFile.findById(req.params.id);
     

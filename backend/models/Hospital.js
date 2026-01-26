@@ -63,4 +63,30 @@ hospitalSchema.pre('save', function(next) {
   next();
 });
 
+// Method to check if hospital has active subscription
+hospitalSchema.methods.hasActiveSubscription = async function() {
+  const HospitalSubscription = mongoose.model('HospitalSubscription');
+  const subscription = await HospitalSubscription.findOne({ hospital: this._id });
+  if (!subscription) {
+    return false;
+  }
+  return subscription.isActive;
+};
+
+// Method to get subscription info
+hospitalSchema.methods.getSubscriptionInfo = async function() {
+  const HospitalSubscription = mongoose.model('HospitalSubscription');
+  const subscription = await HospitalSubscription.findOne({ hospital: this._id });
+  if (!subscription) {
+    return null;
+  }
+  return {
+    planType: subscription.planType,
+    expiresAt: subscription.expiresAt,
+    isActive: subscription.isActive,
+    daysUntilExpiration: subscription.getDaysUntilExpiration(),
+    shouldShowWarning: subscription.shouldShowWarning()
+  };
+};
+
 module.exports = mongoose.model('Hospital', hospitalSchema);

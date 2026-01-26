@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require('../models/User');
 const Hospital = require('../models/Hospital');
 const HospitalMember = require('../models/HospitalMember');
+const HospitalSubscription = require('../models/HospitalSubscription');
 const { protect } = require('../middleware/auth');
 const { requireOwner } = require('../middleware/roleAuth');
 
@@ -133,7 +134,7 @@ router.get('/:id', protect, requireOwner(), async (req, res) => {
 // Set user role (Owner only)
 router.put('/:id/role', protect, requireOwner(), async (req, res) => {
   try {
-    const { role } = req.body;
+    const { role, planType } = req.body;
     
     if (!role || !['doctor', 'admin'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role. Must be doctor or admin.' });
@@ -156,20 +157,98 @@ router.put('/:id/role', protect, requireOwner(), async (req, res) => {
     }
     
     const previousRole = user.role;
+    
+    // If upgrading to admin, require planType
+    if (role === 'admin' && previousRole !== 'admin') {
+      if (!planType || !['monthly', 'yearly', 'forever'].includes(planType)) {
+        return res.status(400).json({ 
+          error: 'Plan type is required when upgrading to admin. Must be monthly, yearly, or forever.' 
+        });
+      }
+    }
+    
     user.role = role;
     
-    // If changing from admin to doctor, delete their hospital
+    // If changing from admin to doctor, delete their hospital and subscription
     if (previousRole === 'admin' && role === 'doctor') {
       const hospital = await Hospital.findOne({ admin: user._id });
       if (hospital) {
+        // Delete subscription
+        await HospitalSubscription.deleteOne({ hospital: hospital._id });
+        // Delete members
         await HospitalMember.deleteMany({ hospital: hospital._id });
+        // Delete hospital
         await Hospital.findByIdAndDelete(hospital._id);
       }
     }
     
-    // If changing from doctor to admin, remove from hospital membership
+    // If changing from doctor to admin, remove from hospital membership and create subscription
     if (previousRole === 'doctor' && role === 'admin') {
+      // Remove from hospital membership
       await HospitalMember.deleteMany({ user: user._id });
+      
+      // Check if hospital already exists (shouldn't happen, but handle it)
+      let hospital = await Hospital.findOne({ admin: user._id });
+      
+      if (!hospital) {
+        // Create a new hospital for the admin
+        hospital = await Hospital.create({
+          name: `${user.name}'s Hospital`,
+          admin: user._id
+        });
+      }
+      
+      // Create or update subscription
+      let expiresAt = null;
+      if (planType === 'monthly') {
+        expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 30);
+      } else if (planType === 'yearly') {
+        expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 365);
+      }
+      // forever plans have expiresAt = null
+      
+      let subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+      if (subscription) {
+        subscription.planType = planType;
+        subscription.expiresAt = expiresAt;
+        await subscription.save();
+      } else {
+        await HospitalSubscription.create({
+          hospital: hospital._id,
+          planType,
+          expiresAt
+        });
+      }
+    }
+    
+    // If already admin and planType is provided, update subscription
+    if (role === 'admin' && previousRole === 'admin' && planType) {
+      const hospital = await Hospital.findOne({ admin: user._id });
+      if (hospital) {
+        let expiresAt = null;
+        if (planType === 'monthly') {
+          expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 30);
+        } else if (planType === 'yearly') {
+          expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 365);
+        }
+        
+        let subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+        if (subscription) {
+          subscription.planType = planType;
+          subscription.expiresAt = expiresAt;
+          await subscription.save();
+        } else {
+          await HospitalSubscription.create({
+            hospital: hospital._id,
+            planType,
+            expiresAt
+          });
+        }
+      }
     }
     
     await user.save();

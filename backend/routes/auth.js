@@ -224,14 +224,21 @@ router.post('/login', async (req, res) => {
 // Get current user
 router.get('/me', protect, async (req, res) => {
   try {
+    const HospitalSubscription = require('../models/HospitalSubscription');
+    
     // Get hospital info for admin
     let hospital = null;
+    let subscription = null;
     if (req.user.role === 'admin') {
       hospital = await Hospital.findOne({ admin: req.user._id });
+      if (hospital) {
+        subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+      }
     }
     
     // Get hospital membership for doctor
     let hospitalMembership = null;
+    let doctorSubscription = null;
     if (req.user.role === 'doctor') {
       const membership = await HospitalMember.findOne({ 
         user: req.user._id 
@@ -242,7 +249,38 @@ router.get('/me', protect, async (req, res) => {
           hospitalName: membership.hospital.name,
           status: membership.status
         };
+        
+        // Get subscription info if membership is accepted
+        if (membership.status === 'accepted' && membership.hospital) {
+          doctorSubscription = await HospitalSubscription.findOne({ 
+            hospital: membership.hospital._id 
+          });
+        }
       }
+    }
+    
+    // Format subscription info for admin
+    let subscriptionInfo = null;
+    if (subscription) {
+      subscriptionInfo = {
+        planType: subscription.planType,
+        expiresAt: subscription.expiresAt,
+        isActive: subscription.isActive,
+        daysUntilExpiration: subscription.getDaysUntilExpiration(),
+        shouldShowWarning: subscription.shouldShowWarning()
+      };
+    }
+    
+    // Format subscription info for doctor
+    let doctorSubscriptionInfo = null;
+    if (doctorSubscription) {
+      doctorSubscriptionInfo = {
+        planType: doctorSubscription.planType,
+        expiresAt: doctorSubscription.expiresAt,
+        isActive: doctorSubscription.isActive,
+        daysUntilExpiration: doctorSubscription.getDaysUntilExpiration(),
+        shouldShowWarning: doctorSubscription.shouldShowWarning()
+      };
     }
     
     res.json({
@@ -260,10 +298,13 @@ router.get('/me', protect, async (req, res) => {
           name: hospital.name,
           address: hospital.address
         } : null,
-        hospitalMembership
+        subscription: subscriptionInfo,
+        hospitalMembership,
+        doctorSubscription: doctorSubscriptionInfo
       }
     });
   } catch (error) {
+    console.error('Get me error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Hospital = require('../models/Hospital');
 const HospitalMember = require('../models/HospitalMember');
 const { protect } = require('../middleware/auth');
+const { checkFeatureAccess } = require('../middleware/accessControl');
 
 // Helper function to get allowed user IDs based on role (same as word files)
 async function getAllowedUserIds(user) {
@@ -46,7 +47,7 @@ async function getAllowedUserIds(user) {
 }
 
 // Get all patients
-router.get('/', protect, async (req, res) => {
+router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -125,7 +126,7 @@ router.get('/', protect, async (req, res) => {
 });
 
 // Get patient by patientId (DICOM Patient ID) - must come before /:id
-router.get('/by-patient-id/:patientId', protect, async (req, res) => {
+router.get('/by-patient-id/:patientId', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const patient = await Patient.findOne({ patientId: req.params.patientId });
     
@@ -194,7 +195,7 @@ router.get('/by-patient-id/:patientId', protect, async (req, res) => {
 });
 
 // Get DICOM studies for a patient
-router.get('/:patientId/dicom-studies', protect, async (req, res) => {
+router.get('/:patientId/dicom-studies', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -239,7 +240,7 @@ router.get('/:patientId/dicom-studies', protect, async (req, res) => {
 });
 
 // Get Word files for a patient - must come before /:id
-router.get('/:patientId/word-files', protect, async (req, res) => {
+router.get('/:patientId/word-files', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -280,7 +281,7 @@ router.get('/:patientId/word-files', protect, async (req, res) => {
 });
 
 // Get single patient by MongoDB ID - must be last to avoid route conflicts
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const patient = await Patient.findById(req.params.id);
     

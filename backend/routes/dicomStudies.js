@@ -4,9 +4,10 @@ const DicomStudy = require('../models/DicomStudy');
 const Patient = require('../models/Patient');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
+const { checkFeatureAccess } = require('../middleware/accessControl');
 
 // Save DICOM study info after upload
-router.post('/save', protect, async (req, res) => {
+router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const { studyInfo } = req.body;
     
@@ -134,7 +135,7 @@ router.post('/save', protect, async (req, res) => {
 });
 
 // Get all DICOM studies
-router.get('/', protect, async (req, res) => {
+router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const studies = await DicomStudy.find()
       .sort({ uploadedAt: -1 })

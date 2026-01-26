@@ -92,6 +92,79 @@ const requireOwner = async (to, from, next) => {
   }
 };
 
+// Check if user has access to features (membership for doctors, subscription for admins)
+const checkFeatureAccess = async (to, from, next) => {
+  const token = localStorage.getItem('auth-token');
+  if (!token) {
+    next('/login');
+    return;
+  }
+  
+  try {
+    const axios = (await import('axios')).default;
+    
+    const response = await axios.get(`${orthancApiUrl}api/auth/me`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (response.data.success && response.data.user) {
+      const user = response.data.user;
+      
+      // Owner always has access
+      if (user.role === 'owner') {
+        next();
+        return;
+      }
+      
+      // Admin needs active subscription
+      if (user.role === 'admin') {
+        if (user.subscription && user.subscription.isActive) {
+          next();
+        } else {
+          // Show notification and redirect
+          if (window.messageBus) {
+            window.messageBus.emit('show-error-toast', 
+              user.subscription 
+                ? 'Contact the owner to extend the subscription.'
+                : 'Contact the owner to set up your hospital subscription.'
+            );
+          }
+          next('/');
+        }
+        return;
+      }
+      
+      // Doctor needs accepted membership and active subscription
+      if (user.role === 'doctor') {
+        const hasMembership = user.hospitalMembership && user.hospitalMembership.status === 'accepted';
+        const hasActiveSubscription = user.doctorSubscription && user.doctorSubscription.isActive;
+        
+        if (hasMembership && hasActiveSubscription) {
+          next();
+        } else {
+          // Show notification and redirect
+          if (window.messageBus) {
+            let message = 'You can\'t use this before join the hospital.';
+            if (hasMembership && !hasActiveSubscription) {
+              message = 'Hospital is currently suspended, wait for the administrator to renew.';
+            }
+            window.messageBus.emit('show-error-toast', message);
+          }
+          next('/');
+        }
+        return;
+      }
+    }
+    
+    next('/');
+  } catch (error) {
+    console.error('Error checking feature access:', error);
+    next('/');
+  }
+};
+
 export const router = createRouter({
   history: createWebHistory(baseOe2Url),
   routes: [
@@ -132,7 +205,7 @@ export const router = createRouter({
         ContentView: StudyList,
       },
       name: 'studies-list',
-      beforeEnter: requireAuth
+      beforeEnter: [requireAuth, checkFeatureAccess]
     },
     {
       path: '/filtered-studies',
@@ -150,7 +223,7 @@ export const router = createRouter({
         ContentView: WordFileList,
       },
       name: 'word-files-list',
-      beforeEnter: requireAuth
+      beforeEnter: [requireAuth, checkFeatureAccess]
     },
     {
       path: '/patients',
@@ -159,7 +232,7 @@ export const router = createRouter({
         ContentView: PatientList,
       },
       name: 'patients-list',
-      beforeEnter: requireAuth
+      beforeEnter: [requireAuth, checkFeatureAccess]
     },
     {
       path: '/worklists',

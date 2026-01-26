@@ -455,6 +455,37 @@
             </div>
             <div class="modal-body upgrade-modal-body">
               <p class="upgrade-message">{{ getUpgradeModalMessage() }}</p>
+              
+              <!-- Plan Selection (only when upgrading to admin) -->
+              <div v-if="pendingUpgradeRole && pendingUpgradeRole.newRole === 'admin'" class="plan-selection-section">
+                <h6 class="plan-selection-title">
+                  <i class="bi bi-calendar-check me-2"></i>Select Subscription Plan
+                </h6>
+                <p class="plan-selection-subtitle">Choose a subscription plan for this admin's hospital:</p>
+                <div class="plan-options">
+                  <div 
+                    v-for="plan in subscriptionPlans" 
+                    :key="plan.value"
+                    class="plan-card"
+                    :class="{ 'selected': selectedPlanType === plan.value }"
+                    @click="selectedPlanType = plan.value"
+                  >
+                    <div class="plan-icon">
+                      <i :class="plan.icon"></i>
+                    </div>
+                    <div class="plan-info">
+                      <h6 class="plan-name">{{ plan.name }}</h6>
+                      <p class="plan-description">{{ plan.description }}</p>
+                    </div>
+                    <div class="plan-check" v-if="selectedPlanType === plan.value">
+                      <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="!selectedPlanType && pendingUpgradeRole.newRole === 'admin'" class="plan-error">
+                  <i class="bi bi-exclamation-circle me-1"></i>Please select a subscription plan
+                </div>
+              </div>
             </div>
             <div class="modal-footer upgrade-modal-footer">
               <button type="button" class="btn btn-secondary upgrade-btn-cancel" @click="cancelRoleChange">
@@ -464,6 +495,7 @@
                 type="button" 
                 class="btn upgrade-btn-action" 
                 :class="getUpgradeButtonClass()"
+                :disabled="pendingUpgradeRole && pendingUpgradeRole.newRole === 'admin' && !selectedPlanType"
                 @click="executeRoleChange"
               >
                 {{ getUpgradeButtonText() }}
@@ -525,8 +557,33 @@ export default {
       showUpgradeModal: false,
       userToUpgrade: null,
       pendingUpgradeEvent: null,
-      pendingUpgradeRole: null
+      pendingUpgradeRole: null,
+      selectedPlanType: null
     };
+  },
+  computed: {
+    subscriptionPlans() {
+      return [
+        {
+          value: 'monthly',
+          name: 'Monthly',
+          description: '30 days access',
+          icon: 'bi bi-calendar-month'
+        },
+        {
+          value: 'yearly',
+          name: 'Yearly',
+          description: '365 days access',
+          icon: 'bi bi-calendar-year'
+        },
+        {
+          value: 'forever',
+          name: 'Forever',
+          description: 'Unlimited access',
+          icon: 'bi bi-infinity'
+        }
+      ];
+    }
   },
   async mounted() {
     await this.loadUsers();
@@ -628,6 +685,7 @@ export default {
       this.userToUpgrade = user;
       this.pendingUpgradeEvent = event;
       this.pendingUpgradeRole = { currentRole, newRole };
+      this.selectedPlanType = null; // Reset plan selection
       
       // Show custom confirmation modal
       this.showUpgradeModal = true;
@@ -650,10 +708,21 @@ export default {
       this.changingRole = user.id;
       
       try {
+        // If upgrading to admin, require planType
+        if (newRole === 'admin' && !this.selectedPlanType) {
+          alert('Please select a subscription plan');
+          return;
+        }
+        
         const token = localStorage.getItem('auth-token');
+        const requestBody = { role: newRole };
+        if (newRole === 'admin' && this.selectedPlanType) {
+          requestBody.planType = this.selectedPlanType;
+        }
+        
         await axios.put(
           `${orthancApiUrl}api/users/${user.id}/role`,
-          { role: newRole },
+          requestBody,
           {
             headers: {
               'Authorization': `Bearer ${token}`
@@ -706,6 +775,7 @@ export default {
       this.userToUpgrade = null;
       this.pendingUpgradeEvent = null;
       this.pendingUpgradeRole = null;
+      this.selectedPlanType = null;
     },
     
     getUpgradeModalTitle() {
@@ -2032,6 +2102,116 @@ export default {
 .upgrade-message strong {
   color: #111827;
   font-weight: 600;
+}
+
+.plan-selection-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.plan-selection-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+}
+
+.plan-selection-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 16px 0;
+}
+
+.plan-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.plan-card:hover {
+  border-color: #3b82f6;
+  background: #f8fafc;
+}
+
+.plan-card.selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.plan-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  border-radius: 10px;
+  margin-right: 16px;
+  font-size: 24px;
+  color: #6b7280;
+  transition: all 0.2s ease;
+}
+
+.plan-card.selected .plan-icon {
+  background: #3b82f6;
+  color: white;
+}
+
+.plan-info {
+  flex: 1;
+}
+
+.plan-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 4px 0;
+}
+
+.plan-description {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.plan-check {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  color: #3b82f6;
+  font-size: 20px;
+}
+
+.plan-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+}
+
+.upgrade-btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .upgrade-modal-footer {

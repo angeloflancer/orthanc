@@ -1,38 +1,55 @@
 const nodemailer = require('nodemailer');
 
-// Create transporter for Outlook/SMTP
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp-mail.outlook.com',
-    port: parseInt(process.env.EMAIL_PORT || '587'),
-    secure: false, // true for 465, false for other ports
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD
-    },
-    tls: {
-      ciphers: 'SSLv3'
-    }
-  });
-};
-
-// Send verification email
+/**
+ * Send verification email using Gmail SMTP
+ * Gmail allows sending to any email address without domain verification
+ * 
+ * Setup required:
+ * 1. Enable 2-Factor Authentication on your Gmail account
+ * 2. Generate an App Password: https://myaccount.google.com/apppasswords
+ * 3. Add GMAIL_USER and GMAIL_APP_PASSWORD to your .env file
+ * 
+ * Note: The "from" address will be your Gmail address. This works for
+ * verification emails and doesn't require domain verification.
+ */
 const sendVerificationEmail = async (email, name, token) => {
   try {
-    // Check if email is configured
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-      console.warn('Email credentials not configured. Skipping email send.');
-      return { success: false, error: 'Email service not configured' };
+    // Check if Gmail credentials are configured
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+    
+    if (!gmailUser || !gmailAppPassword) {
+      console.warn('⚠️  Gmail credentials not found in .env');
+      console.warn('   To send real emails, please:');
+      console.warn('   1. Enable 2-Factor Authentication on your Gmail account');
+      console.warn('   2. Generate an App Password: https://myaccount.google.com/apppasswords');
+      console.warn('   3. Add GMAIL_USER=your.email@gmail.com to backend/.env');
+      console.warn('   4. Add GMAIL_APP_PASSWORD=your_app_password to backend/.env');
+      console.warn('   For now, email sending is disabled.');
+      return { 
+        success: false, 
+        error: 'Gmail credentials not configured. Please add GMAIL_USER and GMAIL_APP_PASSWORD to .env file.' 
+      };
     }
 
-    const transporter = createTransporter();
-    
-    // Get base URL from environment or use default
+    // Get base URL and create verification URL
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5829';
-    const verificationUrl = `${baseUrl}/#/verify-email/${token}`;
+    const verificationUrl = `${baseUrl}/verify-email/${token}`;
     
+    // Use Gmail SMTP via nodemailer
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: gmailUser,
+        pass: gmailAppPassword
+      }
+    });
+
+    const fromName = process.env.EMAIL_FROM_NAME || 'EMEDX';
+    const fromAddress = `"${fromName}" <${gmailUser}>`;
+
     const mailOptions = {
-      from: `"${process.env.EMAIL_FROM_NAME || 'EMEDX'}" <service@mdecx.com>`,
+      from: fromAddress,
       to: email,
       subject: 'Verify your email',
       html: `
@@ -118,11 +135,16 @@ EMEDX Team
       `
     };
 
+    // Send email
     const info = await transporter.sendMail(mailOptions);
-    console.log('Verification email sent:', info.messageId);
+    console.log('✅ Verification email sent successfully');
+    console.log('   From:', gmailUser);
+    console.log('   To:', email);
+    console.log('   Message ID:', info.messageId);
+    
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Error sending verification email:', error);
+    console.error('❌ Error sending verification email:', error);
     return { success: false, error: error.message };
   }
 };

@@ -14,6 +14,7 @@ const dicomStudyRoutes = require('./routes/dicomStudies');
 const hospitalRoutes = require('./routes/hospital');
 const memberRoutes = require('./routes/members');
 const userRoutes = require('./routes/users');
+const subscriptionRoutes = require('./routes/subscriptions');
 const User = require('./models/User');
 const DicomStudy = require('./models/DicomStudy');
 const Hospital = require('./models/Hospital');
@@ -68,6 +69,11 @@ app.use('/api/members', memberRoutes);
 app.use('/api/users', express.json());
 app.use('/api/users', express.urlencoded({ extended: true }));
 app.use('/api/users', userRoutes);
+
+// Subscription routes (our own API - don't proxy)
+app.use('/api/subscriptions', express.json());
+app.use('/api/subscriptions', express.urlencoded({ extended: true }));
+app.use('/api/subscriptions', subscriptionRoutes);
 
 // Helper function to get user from token
 async function getUserFromToken(req) {
