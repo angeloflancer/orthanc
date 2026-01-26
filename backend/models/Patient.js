@@ -4,7 +4,14 @@ const patientSchema = new mongoose.Schema({
   patientId: {
     type: String,
     required: true,
-    unique: true,
+    index: true
+    // Removed unique: true - now unique per hospital
+  },
+  // Hospital ownership (required for access control)
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Hospital',
+    required: true,
     index: true
   },
   patientName: {
@@ -23,7 +30,7 @@ const patientSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
-  // Track sources of patient info
+  // Track sources of patient info (hospital-specific)
   dicomStudyCount: {
     type: Number,
     default: 0
@@ -41,6 +48,9 @@ const patientSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+// Compound unique index: patientId + hospital (same patient ID can exist in different hospitals)
+patientSchema.index({ patientId: 1, hospital: 1 }, { unique: true });
 
 // Update timestamp on save
 patientSchema.pre('save', function(next) {

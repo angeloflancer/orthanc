@@ -84,8 +84,6 @@ router.post('/register', async (req, res) => {
     
     // Send verification email
     await sendVerificationEmail(user.email, user.name, emailVerificationToken);
-
-    console.log("Hellos", process.env.REQUIRE_VERIFY_EMAIL, process.env.REQUIRE_VERIFY_EMAIL === "false" ? generateToken(user._id) : null)
     
     res.status(201).json({
       success: true,

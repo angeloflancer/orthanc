@@ -74,6 +74,16 @@ router.post('/upload', protect, checkFeatureAccess(), upload.single('file'), asy
       return res.status(400).json({ error: 'Patient ID and Patient Name are required' });
     }
     
+    // Get hospital from middleware (set by checkFeatureAccess)
+    const hospital = req.hospital;
+    if (!hospital) {
+      // Delete uploaded file if no hospital
+      if (req.file && req.file.path) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(403).json({ error: 'Hospital not found. You must be a member of a hospital to upload data.' });
+    }
+    
     const user = await User.findById(req.user._id);
     
     // Fix Arabic filename encoding issue
@@ -136,15 +146,17 @@ router.post('/upload', protect, checkFeatureAccess(), upload.single('file'), asy
       mimeType: req.file.mimetype,
       patientId: patientId.trim(),
       patientName: patientName.trim(),
+      hospital: hospital._id,
       uploadedBy: req.user._id,
       uploadedByName: user.name
     });
     
-    // Update or create patient record
-    let patient = await Patient.findOne({ patientId: patientId.trim() });
+    // Update or create patient record for this hospital
+    let patient = await Patient.findOne({ patientId: patientId.trim(), hospital: hospital._id });
     if (!patient) {
       patient = await Patient.create({
         patientId: patientId.trim(),
+        hospital: hospital._id,
         patientName: patientName.trim(),
         dicomStudyCount: 0,
         wordFileCount: 1
@@ -182,41 +194,29 @@ router.post('/upload', protect, checkFeatureAccess(), upload.single('file'), asy
   }
 });
 
-// Helper function to get allowed user IDs for word files based on role
-async function getAllowedWordFileUserIds(user) {
-  if (!user) return [];
+// Helper function to get user's hospital ID for filtering
+// Returns null for owner (all access), hospital._id for admin/doctor, or null if no hospital
+async function getUserHospitalId(user) {
+  if (!user) return null;
   
   if (user.role === 'owner') {
-    // Owner can access all documents - return null to indicate no filtering
-    return null;
+    return null; // Owner can access all data
   }
   
   if (user.role === 'admin') {
-    // Admin can access their own documents + all accepted hospital members' documents
     const hospital = await Hospital.findOne({ admin: user._id });
-    
-    if (!hospital) {
-      // Admin without hospital can only see their own documents
-      return [user._id];
-    }
-    
-    // Get all accepted members of the hospital
-    const members = await HospitalMember.find({ 
-      hospital: hospital._id,
-      status: 'accepted'
-    }).select('user');
-    
-    const memberIds = members.map(m => m.user);
-    // Include admin's own ID
-    if (!memberIds.some(id => id.equals(user._id))) {
-      memberIds.push(user._id);
-    }
-    
-    return memberIds;
+    return hospital ? hospital._id : null;
   }
   
-  // Doctor can only access their own documents
-  return [user._id];
+  if (user.role === 'doctor') {
+    const membership = await HospitalMember.findOne({ 
+      user: user._id,
+      status: 'accepted'
+    });
+    return membership ? membership.hospital : null;
+  }
+  
+  return null;
 }
 
 // Get all Word files
@@ -227,63 +227,42 @@ router.get('/', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
     
-    // Get allowed user IDs based on role
-    const allowedUserIds = await getAllowedWordFileUserIds(user);
-    
-    // Build query based on allowed user IDs
+    // Build query based on hospital
     let query = {};
-    if (allowedUserIds !== null) {
-      // Filter by allowed user IDs
-      query.uploadedBy = { $in: allowedUserIds };
+    if (user.role !== 'owner') {
+      const hospital = req.hospital;
+      if (!hospital) {
+        return res.json({ success: true, wordFiles: [] });
+      }
+      query.hospital = hospital._id;
+      
+      // Doctors can only see their own data
+      if (user.role === 'doctor') {
+        query.uploadedBy = req.user._id;
+      }
     }
-    // If allowedUserIds is null (owner), query remains empty (all documents)
+    // If owner, query remains empty (all documents)
     
     const wordFiles = await WordFile.find(query)
       .sort({ uploadedAt: -1 })
       .select('-filePath')
-      .populate('uploadedBy', 'name role')
+      .populate('hospital', 'name')
       .lean();
     
-    // Helper function to get hospital name for a user
-    const getHospitalNameForUser = async (user) => {
-      if (!user) return '';
-      
-      try {
-        if (user.role === 'admin') {
-          const hospital = await Hospital.findOne({ admin: user._id });
-          return hospital ? hospital.name : '';
-        } else if (user.role === 'doctor') {
-          const member = await HospitalMember.findOne({ user: user._id, status: 'accepted' })
-            .populate('hospital');
-          return member && member.hospital ? member.hospital.name : '';
-        }
-        return '';
-      } catch (err) {
-        console.error(`Error getting hospital name for user ${user._id}:`, err.message);
-        return '';
-      }
-    };
-    
-    // Enrich word files with hospital name
-    const enrichedWordFiles = await Promise.all(wordFiles.map(async (file) => {
-      const hospitalName = file.uploadedBy ? await getHospitalNameForUser(file.uploadedBy) : '';
-      return {
+    res.json({
+      success: true,
+      wordFiles: wordFiles.map(file => ({
         id: file._id,
         fileName: file.fileName,
         originalFileName: file.originalFileName,
         fileSize: file.fileSize,
         patientId: file.patientId,
         patientName: file.patientName,
-        hospitalName: hospitalName,
+        hospitalName: file.hospital ? file.hospital.name : '',
         uploadedByName: file.uploadedByName,
         uploadStatus: file.uploadStatus,
         uploadedAt: file.uploadedAt
-      };
-    }));
-    
-    res.json({
-      success: true,
-      wordFiles: enrichedWordFiles
+      }))
     });
   } catch (error) {
     console.error('Get word files error:', error);
@@ -300,17 +279,23 @@ router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(404).json({ error: 'Word file not found' });
     }
     
-    // Check if user has permission to access this file
+    // Check if user has permission to access this file (check hospital)
     const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
     
-    const allowedUserIds = await getAllowedWordFileUserIds(user);
-    
-    // Check permission
-    if (allowedUserIds !== null && !allowedUserIds.some(id => id.equals(wordFile.uploadedBy))) {
-      return res.status(403).json({ error: 'Access denied' });
+    // Check hospital access
+    if (user.role !== 'owner') {
+      const hospital = req.hospital;
+      if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      // Doctors can only access their own files
+      if (user.role === 'doctor' && (!wordFile.uploadedBy || !wordFile.uploadedBy.equals(req.user._id))) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
     }
     
     res.json({
@@ -342,17 +327,23 @@ router.get('/:id/download', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(404).json({ error: 'Word file not found' });
     }
     
-    // Check if user has permission to access this file
+    // Check if user has permission to access this file (check hospital)
     const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
     
-    const allowedUserIds = await getAllowedWordFileUserIds(user);
-    
-    // Check permission
-    if (allowedUserIds !== null && !allowedUserIds.some(id => id.equals(wordFile.uploadedBy))) {
-      return res.status(403).json({ error: 'Access denied' });
+    // Check hospital access
+    if (user.role !== 'owner') {
+      const hospital = req.hospital;
+      if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      // Doctors can only access their own files
+      if (user.role === 'doctor' && (!wordFile.uploadedBy || !wordFile.uploadedBy.equals(req.user._id))) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
     }
     
     if (!fs.existsSync(wordFile.filePath)) {
@@ -377,17 +368,23 @@ router.delete('/:id', protect, async (req, res) => {
       return res.status(404).json({ error: 'Word file not found' });
     }
     
-    // Check if user has permission to delete this file
+    // Check if user has permission to delete this file (check hospital)
     const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
     
-    const allowedUserIds = await getAllowedWordFileUserIds(user);
-    
-    // Check permission
-    if (allowedUserIds !== null && !allowedUserIds.some(id => id.equals(wordFile.uploadedBy))) {
-      return res.status(403).json({ error: 'Access denied' });
+    // Check hospital access
+    if (user.role !== 'owner') {
+      const hospital = req.hospital;
+      if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      // Doctors can only delete their own files
+      if (user.role === 'doctor' && (!wordFile.uploadedBy || !wordFile.uploadedBy.equals(req.user._id))) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
     }
     
     // Delete file from filesystem
@@ -395,8 +392,8 @@ router.delete('/:id', protect, async (req, res) => {
       fs.unlinkSync(wordFile.filePath);
     }
     
-    // Decrement patient word file count
-    const patient = await Patient.findOne({ patientId: wordFile.patientId });
+    // Decrement patient word file count (hospital-specific)
+    const patient = await Patient.findOne({ patientId: wordFile.patientId, hospital: wordFile.hospital });
     if (patient) {
       patient.wordFileCount = Math.max(0, patient.wordFileCount - 1);
       await patient.save();

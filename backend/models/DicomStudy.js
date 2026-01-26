@@ -66,7 +66,14 @@ const dicomStudySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  // Upload tracking
+  // Hospital ownership (required for access control)
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Hospital',
+    required: true,
+    index: true
+  },
+  // Upload tracking (kept for audit trail)
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -84,6 +91,9 @@ const dicomStudySchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+// Compound index for efficient hospital + patientId queries
+dicomStudySchema.index({ hospital: 1, patientId: 1 });
 
 // Update timestamp on save
 dicomStudySchema.pre('save', function(next) {

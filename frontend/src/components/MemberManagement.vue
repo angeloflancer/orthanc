@@ -49,12 +49,12 @@
           <table class="table table-hover mb-0">
             <thead>
               <tr>
-                <th>Username</th>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Status</th>
-                <th>Joined</th>
-                <th class="text-end">Actions</th>
+                <th style="text-align: left;">Username</th>
+                <th style="text-align: left;">Name</th>
+                <th style="text-align: left;">Email</th>
+                <th style="text-align: left;">Status</th>
+                <th style="text-align: left;">Joined</th>
+                <th style="text-align: left;">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -83,7 +83,7 @@
                   </span>
                 </td>
                 <td>{{ member.joinedAt ? formatDate(member.joinedAt) : '-' }}</td>
-                <td class="text-end">
+                <td>
                   <div class="action-buttons">
                     <button 
                       v-if="member.status === 'pending'"
@@ -615,18 +615,25 @@ export default {
   color: #374151;
   border-bottom: 2px solid #e5e7eb;
   padding: 14px 16px;
-  font-size: 0.875rem;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  text-align: left;
 }
 
 .table td {
   padding: 14px 16px;
   vertical-align: middle;
   border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  text-align: left;
 }
 
 .username {
   font-weight: 500;
   color: #4a90e2;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 .status-badge {
@@ -661,7 +668,7 @@ export default {
 .action-buttons {
   display: flex;
   gap: 6px;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .action-buttons .btn {

@@ -160,10 +160,50 @@ router.put('/:id/role', protect, requireOwner(), async (req, res) => {
     
     user.role = role;
     
-    // If changing from admin to doctor, delete their hospital and subscription
+    // If changing from admin to doctor, delete their hospital and all associated data
     if (previousRole === 'admin' && role === 'doctor') {
       const hospital = await Hospital.findOne({ admin: user._id });
       if (hospital) {
+        const DicomStudy = require('../models/DicomStudy');
+        const WordFile = require('../models/WordFile');
+        const Patient = require('../models/Patient');
+        const axios = require('axios');
+        const fs = require('fs');
+        const TARGET_SERVICE = process.env.TARGET_SERVICE || 'http://localhost:8042';
+        
+        // Get all DICOM studies for this hospital
+        const dicomStudies = await DicomStudy.find({ hospital: hospital._id }).select('orthancStudyId');
+        
+        // Delete studies from Orthanc
+        for (const study of dicomStudies) {
+          if (study.orthancStudyId) {
+            try {
+              await axios.delete(`${TARGET_SERVICE}/studies/${study.orthancStudyId}`);
+            } catch (err) {
+              console.error(`Error deleting study ${study.orthancStudyId} from Orthanc:`, err.message);
+            }
+          }
+        }
+        
+        // Get all Word files for this hospital
+        const wordFiles = await WordFile.find({ hospital: hospital._id }).select('filePath');
+        
+        // Delete physical Word files from filesystem
+        for (const wordFile of wordFiles) {
+          if (wordFile.filePath && fs.existsSync(wordFile.filePath)) {
+            try {
+              fs.unlinkSync(wordFile.filePath);
+            } catch (err) {
+              console.error(`Error deleting file ${wordFile.filePath}:`, err.message);
+            }
+          }
+        }
+        
+        // Delete all data records
+        await DicomStudy.deleteMany({ hospital: hospital._id });
+        await WordFile.deleteMany({ hospital: hospital._id });
+        await Patient.deleteMany({ hospital: hospital._id });
+        
         // Delete subscription
         await HospitalSubscription.deleteOne({ hospital: hospital._id });
         // Delete members
@@ -419,23 +459,16 @@ router.get('/:id/hospital-info', protect, requireOwner(), async (req, res) => {
     const HospitalSubscription = require('../models/HospitalSubscription');
     const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
     
-    // Get DICOM study count (all studies uploaded by hospital members)
+    // Get DICOM study count (all studies for this hospital)
     const DicomStudy = require('../models/DicomStudy');
-    const hospitalMembers = await HospitalMember.find({ 
-      hospital: hospital._id,
-      status: 'accepted'
-    }).select('user');
-    const memberUserIds = hospitalMembers.map(m => m.user);
-    memberUserIds.push(user._id); // Include admin
-    
     const dicomCount = await DicomStudy.countDocuments({
-      uploadedBy: { $in: memberUserIds }
+      hospital: hospital._id
     });
     
-    // Get document count (all word files uploaded by hospital members)
+    // Get document count (all word files for this hospital)
     const WordFile = require('../models/WordFile');
     const documentCount = await WordFile.countDocuments({
-      uploadedBy: { $in: memberUserIds }
+      hospital: hospital._id
     });
     
     res.json({

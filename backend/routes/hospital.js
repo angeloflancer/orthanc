@@ -137,6 +137,53 @@ router.delete('/', protect, requireRole('admin'), async (req, res) => {
       return res.status(404).json({ error: 'Hospital not found' });
     }
     
+    const DicomStudy = require('../models/DicomStudy');
+    const WordFile = require('../models/WordFile');
+    const Patient = require('../models/Patient');
+    const axios = require('axios');
+    const fs = require('fs');
+    const path = require('path');
+    const TARGET_SERVICE = process.env.TARGET_SERVICE || 'http://localhost:8042';
+    
+    // Get all DICOM studies for this hospital
+    const dicomStudies = await DicomStudy.find({ hospital: hospital._id }).select('orthancStudyId');
+    
+    // Delete studies from Orthanc
+    for (const study of dicomStudies) {
+      if (study.orthancStudyId) {
+        try {
+          await axios.delete(`${TARGET_SERVICE}/studies/${study.orthancStudyId}`);
+        } catch (err) {
+          console.error(`Error deleting study ${study.orthancStudyId} from Orthanc:`, err.message);
+          // Continue with deletion even if Orthanc deletion fails
+        }
+      }
+    }
+    
+    // Get all Word files for this hospital
+    const wordFiles = await WordFile.find({ hospital: hospital._id }).select('filePath');
+    
+    // Delete physical Word files from filesystem
+    for (const wordFile of wordFiles) {
+      if (wordFile.filePath && fs.existsSync(wordFile.filePath)) {
+        try {
+          fs.unlinkSync(wordFile.filePath);
+        } catch (err) {
+          console.error(`Error deleting file ${wordFile.filePath}:`, err.message);
+          // Continue with deletion even if file deletion fails
+        }
+      }
+    }
+    
+    // Delete all data records
+    await DicomStudy.deleteMany({ hospital: hospital._id });
+    await WordFile.deleteMany({ hospital: hospital._id });
+    await Patient.deleteMany({ hospital: hospital._id });
+    
+    // Delete subscription
+    const HospitalSubscription = require('../models/HospitalSubscription');
+    await HospitalSubscription.deleteOne({ hospital: hospital._id });
+    
     // Delete all memberships associated with this hospital
     await HospitalMember.deleteMany({ hospital: hospital._id });
     
@@ -145,7 +192,7 @@ router.delete('/', protect, requireRole('admin'), async (req, res) => {
     
     res.json({
       success: true,
-      message: 'Hospital and all memberships deleted successfully'
+      message: 'Hospital and all associated data deleted successfully'
     });
   } catch (error) {
     console.error('Delete hospital error:', error);

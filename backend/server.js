@@ -95,7 +95,7 @@ async function getUserFromToken(req) {
   }
 }
 
-// Helper function to get allowed Orthanc study IDs based on user role
+// Helper function to get allowed Orthanc study IDs based on user role and hospital
 async function getAllowedOrthancStudyIds(user) {
   if (!user) return [];
   
@@ -105,34 +105,40 @@ async function getAllowedOrthancStudyIds(user) {
   }
   
   if (user.role === 'admin') {
-    // Admin can access their own data + all accepted hospital members' data
+    // Admin can access all data from their hospital
     const hospital = await Hospital.findOne({ admin: user._id });
     
     if (!hospital) {
-      // Admin without hospital can only see their own data
-      const studies = await DicomStudy.find({ uploadedBy: user._id }).select('orthancStudyId');
-      return studies.map(s => s.orthancStudyId);
+      // Admin without hospital has no data
+      return [];
     }
     
-    // Get all accepted members of the hospital
-    const members = await HospitalMember.find({ 
-      hospital: hospital._id,
-      status: 'accepted'
-    }).select('user');
-    
-    const memberIds = members.map(m => m.user);
-    // Include admin's own ID
-    if (!memberIds.some(id => id.equals(user._id))) {
-      memberIds.push(user._id);
-    }
-    
-    const studies = await DicomStudy.find({ uploadedBy: { $in: memberIds } }).select('orthancStudyId');
+    // Get all studies for this hospital
+    const studies = await DicomStudy.find({ hospital: hospital._id }).select('orthancStudyId');
     return studies.map(s => s.orthancStudyId);
   }
   
-  // Doctor can only access their own data
-  const studies = await DicomStudy.find({ uploadedBy: user._id }).select('orthancStudyId');
-  return studies.map(s => s.orthancStudyId);
+  if (user.role === 'doctor') {
+    // Doctor can only access their own data from their hospital
+    const membership = await HospitalMember.findOne({ 
+      user: user._id,
+      status: 'accepted'
+    });
+    
+    if (!membership) {
+      // Doctor without hospital membership has no data
+      return [];
+    }
+    
+    // Get only studies uploaded by this doctor for this hospital
+    const studies = await DicomStudy.find({ 
+      hospital: membership.hospital,
+      uploadedBy: user._id
+    }).select('orthancStudyId');
+    return studies.map(s => s.orthancStudyId);
+  }
+  
+  return [];
 }
 
 // Custom handler for /tools/find to filter DICOM data based on role
@@ -192,16 +198,14 @@ app.post('/tools/find', express.json(), async (req, res) => {
     const enrichStudy = async (study) => {
       try {
         const dicomStudyRecord = await DicomStudy.findOne({ orthancStudyId: study.ID })
+          .populate('hospital', 'name')
           .populate('uploadedBy', 'name')
           .lean();
         
-        if (dicomStudyRecord && dicomStudyRecord.uploadedBy) {
-          const uploaderId = dicomStudyRecord.uploadedBy._id || dicomStudyRecord.uploadedBy;
-          const hospitalName = await getHospitalNameForUser(uploaderId);
-          const uploader = await User.findById(uploaderId);
-          
-          study._hospitalName = hospitalName;
-          study._uploadedBy = dicomStudyRecord.uploadedByName || (uploader ? uploader.name : '');
+        if (dicomStudyRecord) {
+          // Get hospital name from hospital field
+          study._hospitalName = dicomStudyRecord.hospital ? dicomStudyRecord.hospital.name : '';
+          study._uploadedBy = dicomStudyRecord.uploadedByName || '';
         } else {
           study._hospitalName = '';
           study._uploadedBy = '';

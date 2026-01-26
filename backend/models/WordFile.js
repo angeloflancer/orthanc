@@ -29,6 +29,14 @@ const wordFileSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Hospital ownership (required for access control)
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Hospital',
+    required: true,
+    index: true
+  },
+  // Upload tracking (kept for audit trail)
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

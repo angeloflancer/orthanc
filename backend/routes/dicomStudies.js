@@ -58,6 +58,12 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       });
     }
     
+    // Get hospital from middleware (set by checkFeatureAccess)
+    const hospital = req.hospital;
+    if (!hospital) {
+      return res.status(403).json({ error: 'Hospital not found. You must be a member of a hospital to upload data.' });
+    }
+    
     // Get user info
     const user = await User.findById(req.user._id);
     
@@ -77,15 +83,17 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       modalitiesInStudy: modalitiesInStudy || '',
       seriesCount: seriesCount || 0,
       instancesCount: instancesCount || 0,
+      hospital: hospital._id,
       uploadedBy: req.user._id,
       uploadedByName: user ? user.name : ''
     });
     
-    // Check if patient already exists, if not create one
-    let patient = await Patient.findOne({ patientId });
+    // Check if patient already exists for this hospital, if not create one
+    let patient = await Patient.findOne({ patientId, hospital: hospital._id });
     if (!patient) {
       patient = await Patient.create({
         patientId,
+        hospital: hospital._id,
         patientName: patientName || '',
         patientBirthDate: patientBirthDate || '',
         patientSex: patientSex || '',
@@ -137,7 +145,32 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
 // Get all DICOM studies
 router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const studies = await DicomStudy.find()
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    // Build query based on user role and hospital
+    let query = {};
+    
+    if (user.role === 'owner') {
+      // Owner can see all studies
+      query = {};
+    } else {
+      // Admin and doctor can only see their hospital's studies
+      const hospital = req.hospital;
+      if (!hospital) {
+        return res.status(403).json({ error: 'Hospital not found' });
+      }
+      query.hospital = hospital._id;
+      
+      // Doctors can only see their own data
+      if (user.role === 'doctor') {
+        query.uploadedBy = req.user._id;
+      }
+    }
+    
+    const studies = await DicomStudy.find(query)
       .sort({ uploadedAt: -1 })
       .lean();
     
