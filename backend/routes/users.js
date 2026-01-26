@@ -134,7 +134,7 @@ router.get('/:id', protect, requireOwner(), async (req, res) => {
 // Set user role (Owner only)
 router.put('/:id/role', protect, requireOwner(), async (req, res) => {
   try {
-    const { role, planType } = req.body;
+    const { role } = req.body;
     
     if (!role || !['doctor', 'admin'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role. Must be doctor or admin.' });
@@ -158,15 +158,6 @@ router.put('/:id/role', protect, requireOwner(), async (req, res) => {
     
     const previousRole = user.role;
     
-    // If upgrading to admin, require planType
-    if (role === 'admin' && previousRole !== 'admin') {
-      if (!planType || !['monthly', 'yearly', 'forever'].includes(planType)) {
-        return res.status(400).json({ 
-          error: 'Plan type is required when upgrading to admin. Must be monthly, yearly, or forever.' 
-        });
-      }
-    }
-    
     user.role = role;
     
     // If changing from admin to doctor, delete their hospital and subscription
@@ -182,73 +173,11 @@ router.put('/:id/role', protect, requireOwner(), async (req, res) => {
       }
     }
     
-    // If changing from doctor to admin, remove from hospital membership and create subscription
+    // If changing from doctor to admin, remove from hospital membership (don't create hospital - admin must create it)
     if (previousRole === 'doctor' && role === 'admin') {
       // Remove from hospital membership
       await HospitalMember.deleteMany({ user: user._id });
-      
-      // Check if hospital already exists (shouldn't happen, but handle it)
-      let hospital = await Hospital.findOne({ admin: user._id });
-      
-      if (!hospital) {
-        // Create a new hospital for the admin
-        hospital = await Hospital.create({
-          name: `${user.name}'s Hospital`,
-          admin: user._id
-        });
-      }
-      
-      // Create or update subscription
-      let expiresAt = null;
-      if (planType === 'monthly') {
-        expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 30);
-      } else if (planType === 'yearly') {
-        expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 365);
-      }
-      // forever plans have expiresAt = null
-      
-      let subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
-      if (subscription) {
-        subscription.planType = planType;
-        subscription.expiresAt = expiresAt;
-        await subscription.save();
-      } else {
-        await HospitalSubscription.create({
-          hospital: hospital._id,
-          planType,
-          expiresAt
-        });
-      }
-    }
-    
-    // If already admin and planType is provided, update subscription
-    if (role === 'admin' && previousRole === 'admin' && planType) {
-      const hospital = await Hospital.findOne({ admin: user._id });
-      if (hospital) {
-        let expiresAt = null;
-        if (planType === 'monthly') {
-          expiresAt = new Date();
-          expiresAt.setDate(expiresAt.getDate() + 30);
-        } else if (planType === 'yearly') {
-          expiresAt = new Date();
-          expiresAt.setDate(expiresAt.getDate() + 365);
-        }
-        
-        let subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
-        if (subscription) {
-          subscription.planType = planType;
-          subscription.expiresAt = expiresAt;
-          await subscription.save();
-        } else {
-          await HospitalSubscription.create({
-            hospital: hospital._id,
-            planType,
-            expiresAt
-          });
-        }
-      }
+      // Hospital will be created by admin when they set up their hospital
     }
     
     await user.save();
@@ -453,6 +382,131 @@ router.get('/stats/overview', protect, requireOwner(), async (req, res) => {
     });
   } catch (error) {
     console.error('Get stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get hospital info for admin user (Owner only)
+router.get('/:id/hospital-info', protect, requireOwner(), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (user.role !== 'admin') {
+      return res.status(400).json({ error: 'User is not an admin' });
+    }
+    
+    const hospital = await Hospital.findOne({ admin: user._id });
+    
+    if (!hospital) {
+      return res.json({
+        success: true,
+        hospital: null,
+        message: 'Admin does not have a hospital'
+      });
+    }
+    
+    // Get member count
+    const memberCount = await HospitalMember.countDocuments({ 
+      hospital: hospital._id,
+      status: 'accepted'
+    });
+    
+    // Get subscription info
+    const HospitalSubscription = require('../models/HospitalSubscription');
+    const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+    
+    // Get DICOM study count (all studies uploaded by hospital members)
+    const DicomStudy = require('../models/DicomStudy');
+    const hospitalMembers = await HospitalMember.find({ 
+      hospital: hospital._id,
+      status: 'accepted'
+    }).select('user');
+    const memberUserIds = hospitalMembers.map(m => m.user);
+    memberUserIds.push(user._id); // Include admin
+    
+    const dicomCount = await DicomStudy.countDocuments({
+      uploadedBy: { $in: memberUserIds }
+    });
+    
+    // Get document count (all word files uploaded by hospital members)
+    const WordFile = require('../models/WordFile');
+    const documentCount = await WordFile.countDocuments({
+      uploadedBy: { $in: memberUserIds }
+    });
+    
+    res.json({
+      success: true,
+      hospital: {
+        id: hospital._id,
+        hospitalId: hospital.hospitalId,
+        name: hospital.name,
+        address: hospital.address,
+        memberCount,
+        dicomCount,
+        documentCount,
+        subscription: subscription ? {
+          planType: subscription.planType,
+          expiresAt: subscription.expiresAt,
+          isActive: subscription.isActive,
+          daysUntilExpiration: subscription.getDaysUntilExpiration(),
+          shouldShowWarning: subscription.shouldShowWarning()
+        } : null
+      }
+    });
+  } catch (error) {
+    console.error('Get hospital info error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Expire hospital subscription (Owner only)
+router.post('/:id/expire-hospital', protect, requireOwner(), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (user.role !== 'admin') {
+      return res.status(400).json({ error: 'User is not an admin' });
+    }
+    
+    const hospital = await Hospital.findOne({ admin: user._id });
+    
+    if (!hospital) {
+      return res.status(404).json({ error: 'Admin does not have a hospital' });
+    }
+    
+    const HospitalSubscription = require('../models/HospitalSubscription');
+    const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+    
+    if (!subscription) {
+      return res.status(404).json({ error: 'No subscription found for this hospital' });
+    }
+    
+    // Set expiration to past date (1 day ago)
+    subscription.expiresAt = new Date();
+    subscription.expiresAt.setDate(subscription.expiresAt.getDate() - 1);
+    await subscription.save();
+    
+    res.json({
+      success: true,
+      message: 'Hospital subscription expired successfully',
+      subscription: {
+        id: subscription._id,
+        planType: subscription.planType,
+        expiresAt: subscription.expiresAt,
+        isActive: subscription.isActive,
+        daysUntilExpiration: subscription.getDaysUntilExpiration()
+      }
+    });
+  } catch (error) {
+    console.error('Expire hospital error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

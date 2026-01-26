@@ -289,6 +289,23 @@
                               </div>
                             </div>
                           </div>
+                          
+                          <!-- Hospital Info Button (for admins) -->
+                          <div v-if="user.role === 'admin'" class="info-row mt-3">
+                            <div class="hospital-info-badge-wrapper">
+                              <button 
+                                type="button" 
+                                class="hospital-info-badge"
+                                @click="checkHospitalInfo(user)"
+                                title="Check Hospital Information"
+                              >
+                                <div class="hospital-badge-icon">
+                                  <i class="bi bi-hospital"></i>
+                                </div>
+                                <span class="hospital-badge-text">Hospital Info</span>
+                              </button>
+                            </div>
+                          </div>
                         </div>
                         
                         <!-- Status Section -->
@@ -455,37 +472,6 @@
             </div>
             <div class="modal-body upgrade-modal-body">
               <p class="upgrade-message">{{ getUpgradeModalMessage() }}</p>
-              
-              <!-- Plan Selection (only when upgrading to admin) -->
-              <div v-if="pendingUpgradeRole && pendingUpgradeRole.newRole === 'admin'" class="plan-selection-section">
-                <h6 class="plan-selection-title">
-                  <i class="bi bi-calendar-check me-2"></i>Select Subscription Plan
-                </h6>
-                <p class="plan-selection-subtitle">Choose a subscription plan for this admin's hospital:</p>
-                <div class="plan-options">
-                  <div 
-                    v-for="plan in subscriptionPlans" 
-                    :key="plan.value"
-                    class="plan-card"
-                    :class="{ 'selected': selectedPlanType === plan.value }"
-                    @click="selectedPlanType = plan.value"
-                  >
-                    <div class="plan-icon">
-                      <i :class="plan.icon"></i>
-                    </div>
-                    <div class="plan-info">
-                      <h6 class="plan-name">{{ plan.name }}</h6>
-                      <p class="plan-description">{{ plan.description }}</p>
-                    </div>
-                    <div class="plan-check" v-if="selectedPlanType === plan.value">
-                      <i class="bi bi-check-circle-fill"></i>
-                    </div>
-                  </div>
-                </div>
-                <div v-if="!selectedPlanType && pendingUpgradeRole.newRole === 'admin'" class="plan-error">
-                  <i class="bi bi-exclamation-circle me-1"></i>Please select a subscription plan
-                </div>
-              </div>
             </div>
             <div class="modal-footer upgrade-modal-footer">
               <button type="button" class="btn btn-secondary upgrade-btn-cancel" @click="cancelRoleChange">
@@ -495,10 +481,189 @@
                 type="button" 
                 class="btn upgrade-btn-action" 
                 :class="getUpgradeButtonClass()"
-                :disabled="pendingUpgradeRole && pendingUpgradeRole.newRole === 'admin' && !selectedPlanType"
                 @click="executeRoleChange"
               >
                 {{ getUpgradeButtonText() }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hospital Info Modal -->
+      <div v-if="showHospitalInfoModal" class="modal-overlay" @click.self="closeHospitalInfoModal">
+        <div class="modal-dialog hospital-info-modal-dialog">
+          <div class="modal-content hospital-info-modal-content">
+            <div class="modal-header hospital-info-modal-header">
+              <div class="hospital-info-header-content">
+                <h5 class="modal-title">
+                  <i class="bi bi-hospital me-2"></i>Hospital Information
+                </h5>
+                <button type="button" class="hospital-info-close-btn" @click="closeHospitalInfoModal" aria-label="Close">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+            </div>
+            <div class="modal-body hospital-info-modal-body">
+              <div v-if="hospitalInfoLoading" class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+              </div>
+              <div v-else-if="hospitalInfo">
+                <!-- Hospital Basic Info -->
+                <div class="hospital-info-section">
+                  <h6 class="section-title">
+                    <i class="bi bi-building me-2"></i>Basic Information
+                  </h6>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">Hospital ID:</span>
+                      <span class="info-value">{{ hospitalInfo.hospitalId }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Hospital Name:</span>
+                      <span class="info-value">{{ hospitalInfo.name }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Address:</span>
+                      <span class="info-value">{{ hospitalInfo.address || 'N/A' }}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Statistics -->
+                <div class="hospital-info-section">
+                  <h6 class="section-title">
+                    <i class="bi bi-graph-up me-2"></i>Statistics
+                  </h6>
+                  <div class="stats-grid">
+                    <div class="stat-card">
+                      <div class="stat-icon">
+                        <i class="bi bi-people"></i>
+                      </div>
+                      <div class="stat-content">
+                        <div class="stat-value">{{ hospitalInfo.memberCount || 0 }}</div>
+                        <div class="stat-label">Members</div>
+                      </div>
+                    </div>
+                    <div class="stat-card">
+                      <div class="stat-icon dicom">
+                        <i class="bi bi-file-earmark-medical"></i>
+                      </div>
+                      <div class="stat-content">
+                        <div class="stat-value">{{ hospitalInfo.dicomCount || 0 }}</div>
+                        <div class="stat-label">DICOM Files</div>
+                      </div>
+                    </div>
+                    <div class="stat-card">
+                      <div class="stat-icon document">
+                        <i class="bi bi-file-earmark-word"></i>
+                      </div>
+                      <div class="stat-content">
+                        <div class="stat-value">{{ hospitalInfo.documentCount || 0 }}</div>
+                        <div class="stat-label">Documents</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Subscription Info -->
+                <div class="hospital-info-section">
+                  <h6 class="section-title">
+                    <i class="bi bi-calendar-check me-2"></i>Subscription
+                  </h6>
+                  <div v-if="hospitalInfo.subscription" class="subscription-info">
+                    <div class="subscription-badge" :class="{
+                      'badge-active': hospitalInfo.subscription.isActive,
+                      'badge-expired': !hospitalInfo.subscription.isActive
+                    }">
+                      <i :class="hospitalInfo.subscription.planType === 'forever' ? 'bi bi-award-fill' : 
+                                 hospitalInfo.subscription.planType === 'monthly' ? 'bi bi-calendar-week' : 
+                                 'bi bi-calendar-range'" class="me-1"></i>
+                      {{ hospitalInfo.subscription.planType === 'forever' ? 'Forever' : 
+                         hospitalInfo.subscription.planType === 'monthly' ? 'Monthly' : 'Yearly' }} Plan
+                    </div>
+                    <div v-if="hospitalInfo.subscription.planType !== 'forever'" class="expiration-info">
+                      <div class="expiration-row">
+                        <span class="expiration-label">Expires:</span>
+                        <span class="expiration-value">{{ formatDate(hospitalInfo.subscription.expiresAt) }}</span>
+                      </div>
+                      <div class="expiration-row">
+                        <span class="expiration-label">Days Remaining:</span>
+                        <span class="expiration-value" :class="{
+                          'text-danger': hospitalInfo.subscription.daysUntilExpiration <= 3,
+                          'text-warning': hospitalInfo.subscription.daysUntilExpiration > 3 && hospitalInfo.subscription.daysUntilExpiration <= 7
+                        }">
+                          {{ Math.max(0, hospitalInfo.subscription.daysUntilExpiration) }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="no-subscription-message">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <span>No subscription plan applied yet</span>
+                  </div>
+                </div>
+                
+                <!-- Apply Plan Section -->
+                <div v-if="canApplyPlan" class="hospital-info-section plan-section">
+                  <h6 class="section-title">
+                    <i class="bi bi-magic me-2"></i>Apply New Plan
+                  </h6>
+                  <p class="plan-section-description">Select a new subscription plan to extend the hospital's access:</p>
+                  <div class="plan-options">
+                    <div 
+                      v-for="plan in subscriptionPlans" 
+                      :key="plan.value"
+                      class="plan-card"
+                      :class="{ 'selected': selectedHospitalPlan === plan.value }"
+                      @click="selectedHospitalPlan = plan.value"
+                    >
+                      <div class="plan-icon">
+                        <i :class="plan.icon"></i>
+                      </div>
+                      <div class="plan-info">
+                        <h6 class="plan-name">{{ plan.name }}</h6>
+                        <p class="plan-description">{{ plan.description }}</p>
+                      </div>
+                      <div class="plan-check" v-if="selectedHospitalPlan === plan.value">
+                        <i class="bi bi-check-circle-fill"></i>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="apply-plan-button-wrapper">
+                    <button 
+                      class="btn apply-plan-btn"
+                      :disabled="!selectedHospitalPlan || applyingPlan"
+                      @click="applyHospitalPlan"
+                    >
+                      <span v-if="applyingPlan" class="spinner-border spinner-border-sm me-2"></span>
+                      <i v-else class="bi bi-sparkles me-2"></i>
+                      {{ applyingPlan ? 'Applying...' : 'Apply Plan' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer hospital-info-modal-footer">
+              <button 
+                v-if="hospitalInfo && hospitalInfo.subscription && hospitalInfo.subscription.isActive"
+                type="button" 
+                class="btn btn-outline-danger expire-btn"
+                :disabled="expiringHospital"
+                @click="expireHospital"
+              >
+                <span v-if="expiringHospital" class="spinner-border spinner-border-sm me-2"></span>
+                <i v-else class="bi bi-x-circle me-2"></i>
+                {{ expiringHospital ? 'Expiring...' : 'Expire Hospital' }}
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-secondary"
+                @click="closeHospitalInfoModal"
+              >
+                Close
               </button>
             </div>
           </div>
@@ -558,7 +723,14 @@ export default {
       userToUpgrade: null,
       pendingUpgradeEvent: null,
       pendingUpgradeRole: null,
-      selectedPlanType: null
+      // Hospital info modal
+      showHospitalInfoModal: false,
+      hospitalInfo: null,
+      hospitalInfoLoading: false,
+      selectedHospitalPlan: null,
+      applyingPlan: false,
+      expiringHospital: false,
+      currentAdminUser: null
     };
   },
   computed: {
@@ -568,21 +740,28 @@ export default {
           value: 'monthly',
           name: 'Monthly',
           description: '30 days access',
-          icon: 'bi bi-calendar-month'
+          icon: 'bi bi-calendar-week'
         },
         {
           value: 'yearly',
           name: 'Yearly',
           description: '365 days access',
-          icon: 'bi bi-calendar-year'
+          icon: 'bi bi-calendar-range'
         },
         {
           value: 'forever',
           name: 'Forever',
           description: 'Unlimited access',
-          icon: 'bi bi-infinity'
+          icon: 'bi bi-award-fill'
         }
       ];
+    },
+    canApplyPlan() {
+      if (!this.hospitalInfo) return false;
+      // Allow if no subscription (new hospital) or expired or ≤3 days remaining
+      if (!this.hospitalInfo.subscription) return true;
+      const days = this.hospitalInfo.subscription.daysUntilExpiration;
+      return days <= 3 || !this.hospitalInfo.subscription.isActive;
     }
   },
   async mounted() {
@@ -685,7 +864,6 @@ export default {
       this.userToUpgrade = user;
       this.pendingUpgradeEvent = event;
       this.pendingUpgradeRole = { currentRole, newRole };
-      this.selectedPlanType = null; // Reset plan selection
       
       // Show custom confirmation modal
       this.showUpgradeModal = true;
@@ -708,21 +886,11 @@ export default {
       this.changingRole = user.id;
       
       try {
-        // If upgrading to admin, require planType
-        if (newRole === 'admin' && !this.selectedPlanType) {
-          alert('Please select a subscription plan');
-          return;
-        }
-        
         const token = localStorage.getItem('auth-token');
-        const requestBody = { role: newRole };
-        if (newRole === 'admin' && this.selectedPlanType) {
-          requestBody.planType = this.selectedPlanType;
-        }
         
         await axios.put(
           `${orthancApiUrl}api/users/${user.id}/role`,
-          requestBody,
+          { role: newRole },
           {
             headers: {
               'Authorization': `Bearer ${token}`
@@ -775,7 +943,6 @@ export default {
       this.userToUpgrade = null;
       this.pendingUpgradeEvent = null;
       this.pendingUpgradeRole = null;
-      this.selectedPlanType = null;
     },
     
     getUpgradeModalTitle() {
@@ -801,6 +968,139 @@ export default {
     getUpgradeButtonText() {
       if (!this.pendingUpgradeRole) return 'Confirm';
       return this.pendingUpgradeRole.newRole === 'admin' ? 'Upgrade' : 'Downgrade';
+    },
+    
+    async checkHospitalInfo(user) {
+      this.hospitalInfoLoading = true;
+      this.showHospitalInfoModal = true;
+      this.hospitalInfo = null;
+      this.selectedHospitalPlan = null;
+      this.currentAdminUser = user;
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.get(
+          `${orthancApiUrl}api/users/${user.id}/hospital-info`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        if (response.data.success) {
+          if (response.data.hospital) {
+            this.hospitalInfo = response.data.hospital;
+          } else {
+            // Show toast notification
+            if (this.messageBus) {
+              this.messageBus.emit('show-info-toast', 'The user didn\'t create the hospital yet.');
+            } else {
+              alert('The user didn\'t create the hospital yet.');
+            }
+            this.showHospitalInfoModal = false;
+          }
+        }
+      } catch (error) {
+        console.error('Error loading hospital info:', error);
+        if (error.response?.status === 404 || error.response?.data?.message) {
+          // Show toast notification
+          if (this.messageBus) {
+            this.messageBus.emit('show-info-toast', 'The user didn\'t create the hospital yet.');
+          } else {
+            alert('The user didn\'t create the hospital yet.');
+          }
+        } else {
+          if (this.messageBus) {
+            this.messageBus.emit('show-error-toast', error.response?.data?.error || 'Failed to load hospital info');
+          } else {
+            alert(error.response?.data?.error || 'Failed to load hospital info');
+          }
+        }
+        this.showHospitalInfoModal = false;
+      } finally {
+        this.hospitalInfoLoading = false;
+      }
+    },
+    
+    closeHospitalInfoModal() {
+      this.showHospitalInfoModal = false;
+      this.hospitalInfo = null;
+      this.selectedHospitalPlan = null;
+      this.currentAdminUser = null;
+    },
+    
+    async applyHospitalPlan() {
+      if (!this.selectedHospitalPlan) {
+        alert('Please select a plan');
+        return;
+      }
+      
+      if (!this.hospitalInfo) return;
+      
+      this.applyingPlan = true;
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        // Use hospital MongoDB _id for the subscription endpoint
+        const response = await axios.post(
+          `${orthancApiUrl}api/subscriptions/${this.hospitalInfo.id}`,
+          { planType: this.selectedHospitalPlan },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        if (response.data.success) {
+          // Reload hospital info
+          if (this.currentAdminUser) {
+            await this.checkHospitalInfo(this.currentAdminUser);
+          }
+          this.selectedHospitalPlan = null;
+          alert('Plan applied successfully!');
+        }
+      } catch (error) {
+        console.error('Error applying plan:', error);
+        alert(error.response?.data?.error || 'Failed to apply plan');
+      } finally {
+        this.applyingPlan = false;
+      }
+    },
+    
+    async expireHospital() {
+      if (!confirm('Are you sure you want to expire this hospital? This will suspend the hospital immediately.')) {
+        return;
+      }
+      
+      if (!this.hospitalInfo || !this.currentAdminUser) return;
+      
+      this.expiringHospital = true;
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.post(
+          `${orthancApiUrl}api/users/${this.currentAdminUser.id}/expire-hospital`,
+          {},
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        if (response.data.success) {
+          // Reload hospital info
+          await this.checkHospitalInfo(this.currentAdminUser);
+          alert('Hospital expired successfully!');
+        }
+      } catch (error) {
+        console.error('Error expiring hospital:', error);
+        alert(error.response?.data?.error || 'Failed to expire hospital');
+      } finally {
+        this.expiringHospital = false;
+      }
     },
     
     startEdit(user) {
@@ -2319,6 +2619,80 @@ export default {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+.hospital-info-badge-wrapper {
+  width: 100%;
+}
+
+.hospital-info-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+  border: 2px solid #0ea5e9;
+  border-radius: 12px;
+  color: #0369a1;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.hospital-info-badge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transition: left 0.5s ease;
+}
+
+.hospital-info-badge:hover::before {
+  left: 100%;
+}
+
+.hospital-info-badge:hover {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  border-color: #0284c7;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+}
+
+.hospital-info-badge:active {
+  transform: translateY(0);
+}
+
+.hospital-badge-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(14, 165, 233, 0.15);
+  border-radius: 8px;
+  font-size: 18px;
+  color: #0ea5e9;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.hospital-info-badge:hover .hospital-badge-icon {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  transform: scale(1.1);
+}
+
+.hospital-badge-text {
+  flex: 1;
+  text-align: left;
+}
+
 .info-label {
   font-weight: 500;
   color: #6b7280;
@@ -2492,4 +2866,364 @@ export default {
     min-width: 100px;
   }
 }
+/* Hospital Info Modal Styles */
+.hospital-info-modal-dialog {
+  max-width: 700px;
+  animation: modal-fade-in 0.2s ease-out;
+}
+
+.hospital-info-modal-content {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  background: white;
+}
+
+.hospital-info-modal-header {
+  padding: 0;
+  border-bottom: 1px solid #e5e7eb;
+  background: white;
+}
+
+.hospital-info-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 20px 24px;
+  gap: 16px;
+}
+
+.hospital-info-modal-header .modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  color: #111827;
+  display: flex;
+  align-items: center;
+}
+
+.hospital-info-close-btn {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  color: #6b7280;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.hospital-info-close-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.hospital-info-modal-body {
+  padding: 24px;
+  background: white;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.hospital-info-section {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.hospital-info-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 15px;
+  color: #111827;
+  font-weight: 500;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  background: #f1f3f5;
+  border-color: #d1d5db;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #3b82f6;
+  border-radius: 10px;
+  margin-right: 12px;
+  font-size: 24px;
+  color: white;
+}
+
+.stat-icon.dicom {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.stat-icon.document {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.subscription-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.subscription-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.subscription-badge.badge-active {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.subscription-badge.badge-expired {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.expiration-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.expiration-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.expiration-label {
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.expiration-value {
+  font-size: 14px;
+  color: #111827;
+  font-weight: 600;
+}
+
+.plan-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  border-radius: 12px;
+  margin-top: 20px;
+}
+
+.plan-section .section-title {
+  color: white;
+}
+
+.plan-section-description {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  margin: 0 0 16px 0;
+}
+
+.plan-section .plan-options {
+  margin-bottom: 20px;
+}
+
+.plan-section .plan-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.plan-section .plan-card:hover {
+  background: white;
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.plan-section .plan-card.selected {
+  background: white;
+  border-color: white;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.apply-plan-btn {
+  width: 100%;
+  padding: 14px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
+}
+
+.apply-plan-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s ease;
+}
+
+.apply-plan-btn:hover::before {
+  left: 100%;
+}
+
+.apply-plan-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(245, 87, 108, 0.5);
+  background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+}
+
+.apply-plan-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.apply-plan-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.apply-plan-button-wrapper {
+  margin-top: 24px;
+}
+
+.hospital-info-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.expire-btn {
+  padding: 8px 16px;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.expire-btn:hover:not(:disabled) {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: white;
+}
+
+.expire-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.no-subscription-message {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.no-subscription-message i {
+  color: #9ca3af;
+}
+
 </style>
