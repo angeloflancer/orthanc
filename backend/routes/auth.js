@@ -82,15 +82,14 @@ router.post('/register', async (req, res) => {
       emailVerificationTokenExpiry
     });
     
-    // Generate token
-    const token = generateToken(user._id);
-    
     // Send verification email
     await sendVerificationEmail(user.email, user.name, emailVerificationToken);
+
+    console.log("Hellos", process.env.REQUIRE_VERIFY_EMAIL, process.env.REQUIRE_VERIFY_EMAIL === "false" ? generateToken(user._id) : null)
     
     res.status(201).json({
       success: true,
-      token,
+      token: process.env.REQUIRE_VERIFY_EMAIL === "false" ? generateToken(user._id) : null,
       user: {
         id: user._id,
         username: user.username,
@@ -158,7 +157,7 @@ router.post('/login', async (req, res) => {
     
     // Check email verification requirement (read from env per request)
     // Support both REQUIRE_VERIFY_EMAIL and REQUIRE_EMAIL_VERIFY for compatibility
-    const envValue = process.env.REQUIRE_VERIFY_EMAIL || process.env.REQUIRE_EMAIL_VERIFY;
+    const envValue = process.env.REQUIRE_VERIFY_EMAIL;
     console.log("EnValue", envValue)
     const requireEmailVerify = envValue 
       ? envValue.toString().trim().toLowerCase() === 'true'

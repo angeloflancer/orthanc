@@ -247,8 +247,10 @@ export default {
         
         if (response.data.success) {
           // Store token and user data
-          localStorage.setItem('auth-token', response.data.token);
-          localStorage.setItem('user', JSON.stringify(response.data.user));
+          if (response.data.token) {
+            localStorage.setItem('auth-token', response.data.token);
+            localStorage.setItem('user', JSON.stringify(response.data.user));
+          }
           
           this.success = response.data.message || 'Account created successfully! Please check your email to verify your account.';
           
