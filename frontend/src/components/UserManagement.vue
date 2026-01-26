@@ -239,7 +239,11 @@
                           <div class="info-row">
                             <span class="info-label">Upgrade Role:</span>
                             <div class="role-toggle-wrapper">
-                              <label class="role-toggle" :class="{ 'upgrading': changingRole === user.id }">
+                              <label class="role-toggle" :data-user-id="user.id" :class="{ 
+                                'upgrading': changingRole === user.id,
+                                'upgraded': recentlyUpgraded === user.id,
+                                'admin-active': user.role === 'admin' && changingRole !== user.id && !recentlyUpgraded
+                              }">
                                 <input 
                                   type="checkbox"
                                   :key="`role-toggle-${user.id}-${user.role}`"
@@ -247,17 +251,42 @@
                                   @change="toggleRole(user, $event)"
                                   :disabled="changingRole === user.id"
                                 />
-                                <span class="role-toggle-slider">
-                                  <span class="role-toggle-glow"></span>
+                                <span class="upgrade-button">
+                                  <span class="upgrade-button-bg"></span>
+                                  <span class="upgrade-button-content">
+                                    <span class="upgrade-icon" v-if="user.role === 'doctor'">
+                                      <i class="bi bi-arrow-up-circle-fill"></i>
+                                    </span>
+                                    <span class="upgrade-text" v-if="user.role === 'doctor'">Upgrade</span>
+                                    <span class="upgrade-icon active" v-if="user.role === 'admin'">
+                                      <i class="bi bi-check-circle-fill"></i>
+                                    </span>
+                                    <span class="upgrade-text active" v-if="user.role === 'admin'">Admin</span>
+                                  </span>
+                                  <span class="upgrade-button-shine"></span>
                                 </span>
                                 <span class="role-toggle-label">
-                                  <span v-if="user.role === 'admin'">Admin</span>
-                                  <span v-else>Doctor</span>
+                                  <span v-if="user.role === 'admin'" class="role-label-active">
+                                    <i class="bi bi-building me-1"></i>Admin
+                                  </span>
+                                  <span v-else class="role-label-inactive">
+                                    <i class="bi bi-person-badge me-1"></i>Doctor
+                                  </span>
                                 </span>
                               </label>
-                              <span v-if="changingRole === user.id" class="ms-2">
-                                <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
-                              </span>
+                              <div v-if="changingRole === user.id" class="upgrade-status">
+                                <span class="upgrade-spinner">
+                                  <i class="bi bi-arrow-repeat"></i>
+                                </span>
+                                <span class="upgrade-text">Upgrading...</span>
+                              </div>
+                              <div v-if="recentlyUpgraded === user.id" class="upgrade-success">
+                                <span class="success-icon">
+                                  <i class="bi bi-check-circle-fill"></i>
+                                </span>
+                                <span class="success-text">Upgraded!</span>
+                                <span class="success-confetti">✨</span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -366,40 +395,80 @@
 
       <!-- Block Confirmation Modal -->
       <div v-if="showBlockModal" class="modal-overlay" @click.self="showBlockModal = false">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title text-danger">
-                <i class="bi bi-slash-circle me-2"></i>Block User
-              </h5>
-              <button type="button" class="btn-close" @click="showBlockModal = false"></button>
+        <div class="modal-dialog block-modal-dialog">
+          <div class="modal-content block-modal-content">
+            <div class="modal-header block-modal-header">
+              <div class="block-header-content">
+                <h5 class="modal-title">
+                  Block User
+                </h5>
+                <button type="button" class="block-close-btn" @click="showBlockModal = false" aria-label="Close">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
             </div>
             <form @submit.prevent="confirmBlock">
-              <div class="modal-body">
-                <p>Are you sure you want to block <strong>@{{ userToBlock?.username }}</strong>?</p>
-                <div class="mb-3">
-                  <label for="blockReason" class="form-label">Reason (optional)</label>
+              <div class="modal-body block-modal-body">
+                <p class="block-message">Are you sure you want to block <strong>@{{ userToBlock?.username }}</strong>?</p>
+                <div class="block-reason-section">
+                  <label for="blockReason" class="block-reason-label">Reason (optional)</label>
                   <textarea 
-                    class="form-control" 
+                    class="block-reason-input" 
                     id="blockReason" 
                     v-model="blockReason"
-                    rows="2"
+                    rows="3"
                     placeholder="Enter reason for blocking..."
                   ></textarea>
                 </div>
-                <div class="alert alert-warning mb-0">
-                  <i class="bi bi-exclamation-triangle me-1"></i>
-                  This user will not be able to log in until unblocked.
+                <div class="block-warning">
+                  <i class="bi bi-info-circle me-2"></i>
+                  <span>This user will not be able to log in until unblocked.</span>
                 </div>
               </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @click="showBlockModal = false">Cancel</button>
-                <button type="submit" class="btn btn-danger" :disabled="blockLoading">
+              <div class="modal-footer block-modal-footer">
+                <button type="button" class="btn btn-secondary block-btn-cancel" @click="showBlockModal = false">
+                  Cancel
+                </button>
+                <button type="submit" class="btn block-btn-action" :disabled="blockLoading">
                   <span v-if="blockLoading" class="spinner-border spinner-border-sm me-2"></span>
                   {{ blockLoading ? 'Blocking...' : 'Block User' }}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upgrade Confirmation Modal -->
+      <div v-if="showUpgradeModal" class="modal-overlay" @click.self="cancelRoleChange">
+        <div class="modal-dialog upgrade-modal-dialog">
+          <div class="modal-content upgrade-modal-content">
+            <div class="modal-header upgrade-modal-header">
+              <div class="upgrade-header-content">
+                <h5 class="modal-title">
+                  {{ getUpgradeModalTitle() }}
+                </h5>
+                <button type="button" class="upgrade-close-btn" @click="cancelRoleChange" aria-label="Close">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+            </div>
+            <div class="modal-body upgrade-modal-body">
+              <p class="upgrade-message">{{ getUpgradeModalMessage() }}</p>
+            </div>
+            <div class="modal-footer upgrade-modal-footer">
+              <button type="button" class="btn btn-secondary upgrade-btn-cancel" @click="cancelRoleChange">
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                class="btn upgrade-btn-action" 
+                :class="getUpgradeButtonClass()"
+                @click="executeRoleChange"
+              >
+                {{ getUpgradeButtonText() }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -450,7 +519,13 @@ export default {
       editingUserId: null,
       editForms: {},
       editLoading: null,
-      searchInputReadonly: true
+      searchInputReadonly: true,
+      recentlyUpgraded: null,
+      // Upgrade confirmation modal
+      showUpgradeModal: false,
+      userToUpgrade: null,
+      pendingUpgradeEvent: null,
+      pendingUpgradeRole: null
     };
   },
   async mounted() {
@@ -549,16 +624,29 @@ export default {
       const currentRole = user.role;
       const newRole = currentRole === 'admin' ? 'doctor' : 'admin';
       
-      const confirmMsg = newRole === 'admin' 
-        ? `Upgrade @${user.username} to admin? They will be able to create and manage a hospital.`
-        : `Downgrade @${user.username} to doctor? If they have a hospital, it will be deleted.`;
+      // Store the user and event for later execution
+      this.userToUpgrade = user;
+      this.pendingUpgradeEvent = event;
+      this.pendingUpgradeRole = { currentRole, newRole };
       
-      if (!confirm(confirmMsg)) {
-        // Reset checkbox state if cancelled
-        event.target.checked = currentRole === 'admin';
+      // Show custom confirmation modal
+      this.showUpgradeModal = true;
+    },
+    
+    async executeRoleChange() {
+      if (!this.userToUpgrade || !this.pendingUpgradeEvent || !this.pendingUpgradeRole) {
         return;
       }
       
+      const { currentRole, newRole } = this.pendingUpgradeRole;
+      const user = this.userToUpgrade;
+      const event = this.pendingUpgradeEvent;
+      
+      // Close modal
+      this.showUpgradeModal = false;
+      
+      // Clear any previous success state
+      this.recentlyUpgraded = null;
       this.changingRole = user.id;
       
       try {
@@ -575,13 +663,74 @@ export default {
         
         user.role = newRole;
         await this.loadStats();
+        
+        // Show success animation with smooth fade-out
+        this.recentlyUpgraded = user.id;
+        
+        // Smooth fade-out: start fading after 1.5s, complete by 3s
+        setTimeout(() => {
+          if (this.recentlyUpgraded === user.id) {
+            // Add fade-out class for smooth transition
+            const toggleElement = document.querySelector(`[data-user-id="${user.id}"] .role-toggle`);
+            if (toggleElement) {
+              toggleElement.classList.add('fading-out');
+            }
+          }
+        }, 1500);
+        
+        // Remove success animation after smooth fade-out
+        setTimeout(() => {
+          if (this.recentlyUpgraded === user.id) {
+            this.recentlyUpgraded = null;
+          }
+        }, 3000);
       } catch (error) {
         alert(error.response?.data?.error || 'Failed to change role');
         // Reset checkbox state on error
         event.target.checked = currentRole === 'admin';
       } finally {
         this.changingRole = null;
+        // Clear pending upgrade data
+        this.userToUpgrade = null;
+        this.pendingUpgradeEvent = null;
+        this.pendingUpgradeRole = null;
       }
+    },
+    
+    cancelRoleChange() {
+      if (this.pendingUpgradeEvent && this.pendingUpgradeRole) {
+        // Reset checkbox state if cancelled
+        this.pendingUpgradeEvent.target.checked = this.pendingUpgradeRole.currentRole === 'admin';
+      }
+      this.showUpgradeModal = false;
+      this.userToUpgrade = null;
+      this.pendingUpgradeEvent = null;
+      this.pendingUpgradeRole = null;
+    },
+    
+    getUpgradeModalTitle() {
+      if (!this.pendingUpgradeRole) return 'Change Role';
+      return this.pendingUpgradeRole.newRole === 'admin' 
+        ? 'Upgrade to Admin' 
+        : 'Downgrade to Doctor';
+    },
+    
+    getUpgradeModalMessage() {
+      if (!this.userToUpgrade || !this.pendingUpgradeRole) return '';
+      const { newRole } = this.pendingUpgradeRole;
+      return newRole === 'admin' 
+        ? `Upgrade @${this.userToUpgrade.username} to admin? They will be able to create and manage a hospital.`
+        : `Downgrade @${this.userToUpgrade.username} to doctor? If they have a hospital, it will be deleted.`;
+    },
+    
+    getUpgradeButtonClass() {
+      if (!this.pendingUpgradeRole) return 'btn-primary';
+      return this.pendingUpgradeRole.newRole === 'admin' ? 'btn-primary' : 'btn-warning';
+    },
+    
+    getUpgradeButtonText() {
+      if (!this.pendingUpgradeRole) return 'Confirm';
+      return this.pendingUpgradeRole.newRole === 'admin' ? 'Upgrade' : 'Downgrade';
     },
     
     startEdit(user) {
@@ -905,19 +1054,21 @@ export default {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* Role Toggle Switch */
+/* Creative Upgrade Button Design */
 .role-toggle-wrapper {
   display: flex;
   align-items: center;
   flex: 1;
+  gap: 14px;
 }
 
 .role-toggle {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   cursor: pointer;
+  user-select: none;
 }
 
 .role-toggle input[type="checkbox"] {
@@ -927,97 +1078,543 @@ export default {
   height: 0;
 }
 
-.role-toggle-slider {
+.upgrade-button {
   position: relative;
-  width: 56px;
-  height: 30px;
-  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
-  border-radius: 30px;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  min-width: 120px;
+  height: 40px;
+  padding: 0 20px;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  border-radius: 20px;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
 }
 
-.role-toggle-slider::before {
-  content: '';
-  position: absolute;
-  width: 24px;
-  height: 24px;
-  left: 3px;
-  top: 3px;
-  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-  border-radius: 50%;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.1);
-  z-index: 2;
-}
-
-.role-toggle-glow {
+.upgrade-button-bg {
   position: absolute;
   width: 100%;
   height: 100%;
-  border-radius: 30px;
-  background: radial-gradient(circle, rgba(74, 144, 226, 0.4) 0%, transparent 70%);
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1;
+}
+
+.upgrade-button-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.upgrade-icon {
+  font-size: 16px;
+  color: #6b7280;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  align-items: center;
+}
+
+.upgrade-icon.active {
+  color: #ffffff;
+}
+
+.upgrade-text {
+  color: #6b7280;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  letter-spacing: 0.3px;
+}
+
+.upgrade-text.active {
+  color: #ffffff;
+}
+
+.upgrade-button-shine {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, 
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+  z-index: 3;
   pointer-events: none;
 }
 
-.role-toggle input[type="checkbox"]:checked + .role-toggle-slider {
-  background: linear-gradient(135deg, #4a90e2 0%, #2563eb 100%);
-  box-shadow: 0 0 20px rgba(74, 144, 226, 0.4), inset 0 2px 4px rgba(0, 0, 0, 0.1);
+.upgrade-button:hover .upgrade-button-shine {
+  transform: translateX(100%);
 }
 
-.role-toggle input[type="checkbox"]:checked + .role-toggle-slider::before {
-  transform: translateX(26px);
-  box-shadow: 0 2px 12px rgba(74, 144, 226, 0.5), 0 1px 4px rgba(0, 0, 0, 0.2);
+/* Checked State - Admin Active */
+.role-toggle input[type="checkbox"]:checked ~ .upgrade-button {
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 
+    0 0 20px rgba(59, 130, 246, 0.4),
+    0 4px 12px rgba(59, 130, 246, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-.role-toggle input[type="checkbox"]:checked + .role-toggle-slider .role-toggle-glow {
+.role-toggle input[type="checkbox"]:checked ~ .upgrade-button .upgrade-button-bg {
   opacity: 1;
-  animation: pulse-glow 1.5s ease-in-out infinite;
 }
 
-.role-toggle.upgrading .role-toggle-slider {
-  animation: upgrade-pulse 0.6s ease-in-out;
+/* Admin Active State - Subtle Breathing */
+.role-toggle.admin-active input[type="checkbox"]:checked ~ .upgrade-button {
+  animation: button-breathe 4s ease-in-out infinite;
+}
+
+/* Upgrading State - Smooth Flow */
+.role-toggle.upgrading .upgrade-button {
+  animation: button-flow 1.5s ease-in-out infinite;
+  box-shadow: 
+    0 0 25px rgba(59, 130, 246, 0.5),
+    0 6px 16px rgba(59, 130, 246, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.role-toggle.upgrading .upgrade-button-content {
+  animation: content-pulse 1.5s ease-in-out infinite;
+}
+
+/* Upgraded Success State - Fun & Fantastic Celebration */
+.role-toggle.upgraded .upgrade-button {
+  animation: button-celebration 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+
+.role-toggle.upgraded .upgrade-button::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  background: linear-gradient(45deg, 
+    rgba(16, 185, 129, 0.3) 0%,
+    rgba(59, 130, 246, 0.3) 25%,
+    rgba(168, 85, 247, 0.3) 50%,
+    rgba(236, 72, 153, 0.3) 75%,
+    rgba(251, 191, 36, 0.3) 100%
+  );
+  animation: rainbow-shimmer 1.5s ease-in-out;
+  z-index: 0;
+}
+
+.role-toggle.upgraded .upgrade-button-content {
+  animation: content-bounce 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.role-toggle.upgraded .upgrade-icon::after {
+  content: '✨';
+  position: absolute;
+  font-size: 12px;
+  animation: sparkle-pop 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+  margin-left: 4px;
+}
+
+/* Smooth Fade-Out Transition */
+.role-toggle.fading-out .upgrade-button {
+  animation: button-fade-out 1.5s ease-out forwards;
+}
+
+.role-toggle.fading-out .upgrade-button::before {
+  animation: rainbow-fade-out 1.5s ease-out forwards;
+}
+
+.role-toggle.fading-out .upgrade-success {
+  animation: success-fade-out 1.5s ease-out forwards;
+}
+
+.role-toggle input[type="checkbox"]:disabled ~ .upgrade-button {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: grayscale(0.3);
 }
 
 .role-toggle input[type="checkbox"]:disabled + .role-toggle-slider {
-  opacity: 0.6;
+  opacity: 0.7;
   cursor: not-allowed;
+  filter: grayscale(0.3);
 }
 
 .role-toggle-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  color: #374151;
   user-select: none;
-  transition: color 0.3s ease;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
 }
 
-.role-toggle input[type="checkbox"]:checked ~ .role-toggle-label {
+.role-label-active {
+  color: #3b82f6;
+}
+
+.role-label-inactive {
+  color: #6b7280;
+}
+
+.role-toggle input[type="checkbox"]:checked ~ .role-toggle-label .role-label-active {
+  animation: natural-glow 2.5s ease-in-out infinite;
+}
+
+/* Upgrade Status Indicators */
+.upgrade-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
   color: #4a90e2;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.upgrade-spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+  font-size: 16px;
+}
+
+.upgrade-text {
+  color: #4a90e2;
+}
+
+.upgrade-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+  animation: success-fade-in 0.5s ease-out;
+  position: relative;
+}
+
+.upgrade-success::before {
+  content: '🎉';
+  position: absolute;
+  left: -20px;
+  font-size: 14px;
+  animation: confetti-burst 1.5s ease-out;
+  pointer-events: none;
+}
+
+.upgrade-success::after {
+  content: '✨';
+  position: absolute;
+  right: -20px;
+  font-size: 14px;
+  animation: confetti-burst 1.5s ease-out 0.2s;
+  pointer-events: none;
+}
+
+.success-icon {
+  color: #10b981;
+  font-size: 18px;
+  animation: success-scale 0.5s ease-out;
+}
+
+.success-text {
+  color: #10b981;
+  font-size: 13px;
   font-weight: 600;
 }
 
-@keyframes pulse-glow {
+.success-confetti {
+  font-size: 16px;
+  animation: confetti-float 2s ease-out infinite;
+  display: inline-block;
+}
+
+/* Natural Animations */
+@keyframes natural-pulse {
   0%, 100% {
-    opacity: 0.6;
-    transform: scale(1);
+    opacity: 0.3;
   }
   50% {
-    opacity: 1;
-    transform: scale(1.1);
+    opacity: 0.6;
   }
 }
 
-@keyframes upgrade-pulse {
+@keyframes button-breathe {
+  0%, 100% {
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    box-shadow: 
+      0 0 28px rgba(59, 130, 246, 0.5),
+      0 6px 16px rgba(59, 130, 246, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes button-flow {
   0%, 100% {
     transform: scale(1);
-    box-shadow: 0 0 20px rgba(74, 144, 226, 0.4);
+    box-shadow: 
+      0 0 25px rgba(59, 130, 246, 0.5),
+      0 6px 16px rgba(59, 130, 246, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 
+      0 0 35px rgba(59, 130, 246, 0.6),
+      0 8px 20px rgba(59, 130, 246, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes content-pulse {
+  0%, 100% {
+    transform: scale(1);
   }
   50% {
     transform: scale(1.05);
-    box-shadow: 0 0 30px rgba(74, 144, 226, 0.6);
+  }
+}
+
+@keyframes button-celebration {
+  0% {
+    transform: scale(1) rotate(0deg);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  20% {
+    transform: scale(1.1) rotate(2deg);
+    box-shadow: 
+      0 0 45px rgba(16, 185, 129, 0.7),
+      0 8px 24px rgba(16, 185, 129, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  40% {
+    transform: scale(1.06) rotate(-1deg);
+    box-shadow: 
+      0 0 40px rgba(168, 85, 247, 0.6),
+      0 7px 22px rgba(168, 85, 247, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  60% {
+    transform: scale(1.08) rotate(1deg);
+    box-shadow: 
+      0 0 42px rgba(236, 72, 153, 0.6),
+      0 7px 23px rgba(236, 72, 153, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  80% {
+    transform: scale(1.04) rotate(-0.5deg);
+    box-shadow: 
+      0 0 32px rgba(251, 191, 36, 0.5),
+      0 6px 20px rgba(251, 191, 36, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes content-bounce {
+  0%, 100% {
+    transform: scale(1) translateY(0);
+  }
+  15% {
+    transform: scale(1.15) translateY(-2px);
+  }
+  30% {
+    transform: scale(1.08) translateY(0);
+  }
+  45% {
+    transform: scale(1.12) translateY(-1px);
+  }
+  60% {
+    transform: scale(1.06) translateY(0);
+  }
+  75% {
+    transform: scale(1.09) translateY(-0.5px);
+  }
+  90% {
+    transform: scale(1.03) translateY(0);
+  }
+}
+
+@keyframes button-fade-out {
+  0% {
+    transform: scale(1);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes rainbow-shimmer {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
+  60% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes sparkle-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0) rotate(0deg);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-15px) scale(1.5) rotate(180deg);
+  }
+  60% {
+    opacity: 0.8;
+    transform: translateY(-25px) scale(1.2) rotate(360deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-35px) scale(0.8) rotate(540deg);
+  }
+}
+
+@keyframes smooth-fade-out {
+  0% {
+    transform: scale(1);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      inset 0 2px 4px rgba(0, 0, 0, 0.06);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      inset 0 2px 4px rgba(0, 0, 0, 0.06);
+  }
+}
+
+@keyframes rainbow-fade-out {
+  0% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes success-fade-out {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-10px) scale(0.9);
+  }
+}
+
+@keyframes natural-glow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes success-fade-in {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes success-scale {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes confetti-float {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-20px) rotate(360deg);
+    opacity: 0.5;
+  }
+}
+
+@keyframes confetti-burst {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0) rotate(0deg);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(-10px, -10px) scale(1.2) rotate(120deg);
+  }
+  60% {
+    opacity: 0.8;
+    transform: translate(-15px, -20px) scale(1) rotate(240deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-20px, -30px) scale(0.8) rotate(360deg);
   }
 }
 
@@ -1107,6 +1704,7 @@ export default {
   justify-content: center;
   z-index: 1050;
   padding: 20px;
+  animation: fade-in 0.2s ease-out;
 }
 
 .modal-dialog {
@@ -1151,6 +1749,344 @@ export default {
   border: none;
   background-color: #fef3c7;
   color: #92400e;
+}
+
+/* Block Modal - Modern & Simple */
+.block-modal-dialog {
+  max-width: 450px;
+  animation: modal-fade-in 0.2s ease-out;
+}
+
+.block-modal-content {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  background: white;
+}
+
+.block-modal-header {
+  padding: 0;
+  border-bottom: 1px solid #e5e7eb;
+  background: white;
+}
+
+.block-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 20px 24px;
+  gap: 16px;
+}
+
+.block-modal-header .modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  color: #111827;
+}
+
+.block-close-btn {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  color: #6b7280;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.block-close-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.block-close-btn:active {
+  background: #e5e7eb;
+}
+
+.block-modal-body {
+  padding: 24px;
+  background: white;
+}
+
+.block-message {
+  margin: 0 0 20px 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #374151;
+}
+
+.block-message strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.block-reason-section {
+  margin-bottom: 20px;
+}
+
+.block-reason-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.block-reason-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  transition: all 0.2s ease;
+  background: white;
+  color: #374151;
+}
+
+.block-reason-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.block-reason-input::placeholder {
+  color: #9ca3af;
+}
+
+.block-warning {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 16px;
+  background: #fef3c7;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.block-warning i {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.block-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: white;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.block-btn-cancel {
+  min-width: 90px;
+  padding: 8px 16px;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  background: white;
+  border: 1px solid #d1d5db;
+  color: #374151;
+}
+
+.block-btn-cancel:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #111827;
+}
+
+.block-btn-action {
+  min-width: 110px;
+  padding: 8px 16px;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  border: none;
+  background: #ef4444;
+  color: white;
+}
+
+.block-btn-action:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.block-btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Upgrade Modal - Modern & Simple */
+.upgrade-modal-dialog {
+  max-width: 450px;
+  animation: modal-fade-in 0.2s ease-out;
+}
+
+.upgrade-modal-content {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  background: white;
+}
+
+.upgrade-modal-header {
+  padding: 0;
+  border-bottom: 1px solid #e5e7eb;
+  background: white;
+}
+
+.upgrade-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 20px 24px;
+  gap: 16px;
+}
+
+.upgrade-modal-header .modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  color: #111827;
+}
+
+.upgrade-close-btn {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  color: #6b7280;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.upgrade-close-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.upgrade-close-btn:active {
+  background: #e5e7eb;
+}
+
+.upgrade-modal-body {
+  padding: 24px;
+  background: white;
+}
+
+.upgrade-message {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #374151;
+}
+
+.upgrade-message strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.upgrade-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: white;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.upgrade-btn-cancel {
+  min-width: 90px;
+  padding: 8px 16px;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  background: white;
+  border: 1px solid #d1d5db;
+  color: #374151;
+}
+
+.upgrade-btn-cancel:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #111827;
+}
+
+.upgrade-btn-action {
+  min-width: 110px;
+  padding: 8px 16px;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.upgrade-btn-action.btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.upgrade-btn-action.btn-primary:hover {
+  background: #2563eb;
+}
+
+.upgrade-btn-action.btn-warning {
+  background: #f59e0b;
+  color: white;
+}
+
+.upgrade-btn-action.btn-warning:hover {
+  background: #d97706;
 }
 
 /* Expanded row styles */
