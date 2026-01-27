@@ -104,8 +104,8 @@ export default {
             return this.userRole === 'owner';
         },
         showDicomModalities() {
-            // Hide DICOM Modalities for doctors, show for admin and owner
-            return !this.isDoctor && this.hasQueryableDicomModalities;
+            // Hide DICOM Modalities for doctors and admins, show only for owner
+            return this.isOwner && this.hasQueryableDicomModalities;
         },
         showMembersNav() {
             // Show Members nav only for admin with hospital

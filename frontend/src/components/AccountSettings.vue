@@ -12,7 +12,10 @@
           <form @submit.prevent="updateProfile">
             <div class="form-row mb-3">
               <label for="username" class="form-label">Username</label>
-              <div class="input-with-status">
+              <div v-if="!isEditingProfile" class="field-display">
+                <span class="field-value">{{ userProfile.username }}</span>
+              </div>
+              <div v-else class="input-with-status">
                 <input 
                   type="text" 
                   class="form-control" 
@@ -33,11 +36,15 @@
                   <i class="bi bi-x-circle-fill"></i>
                 </span>
               </div>
-              <small v-if="usernameError" class="text-danger">{{ usernameError }}</small>
+              <small v-if="isEditingProfile && usernameError" class="text-danger">{{ usernameError }}</small>
             </div>
             <div class="form-row mb-3">
               <label for="name" class="form-label">Name</label>
+              <div v-if="!isEditingProfile" class="field-display">
+                <span class="field-value">{{ userProfile.name }}</span>
+              </div>
               <input 
+                v-else
                 type="text" 
                 class="form-control" 
                 id="name" 
@@ -48,7 +55,11 @@
             </div>
             <div class="form-row mb-3">
               <label for="email" class="form-label">Email Address</label>
+              <div v-if="!isEditingProfile" class="field-display">
+                <span class="field-value">{{ userProfile.email }}</span>
+              </div>
               <input 
+                v-else
                 type="email" 
                 class="form-control" 
                 id="email" 
@@ -59,7 +70,57 @@
             </div>
             <div class="form-row mb-3">
               <label class="form-label">Role</label>
-              <div class="role-display">
+              <div class="role-toggle-wrapper" v-if="userProfile.role !== 'owner'">
+                <label class="role-toggle" :class="{ 
+                  'upgrading': roleLoading,
+                  'upgraded': roleUpgraded,
+                  'admin-active': userProfile.role === 'admin' && !roleLoading && !roleUpgraded,
+                  'disabled': !userProfile.emailVerified
+                }">
+                  <input 
+                    type="checkbox"
+                    :key="`role-toggle-${userProfile.role}`"
+                    :checked="userProfile.role === 'admin'"
+                    @change="toggleRole($event)"
+                    :disabled="roleLoading || !userProfile.emailVerified"
+                  />
+                  <span class="upgrade-button">
+                    <span class="upgrade-button-bg"></span>
+                    <span class="upgrade-button-content">
+                      <span class="upgrade-icon" v-if="userProfile.role === 'doctor'">
+                        <i class="bi bi-arrow-up-circle-fill"></i>
+                      </span>
+                      <span class="upgrade-text" v-if="userProfile.role === 'doctor'">Upgrade</span>
+                      <span class="upgrade-icon active" v-if="userProfile.role === 'admin'">
+                        <i class="bi bi-check-circle-fill"></i>
+                      </span>
+                      <span class="upgrade-text active" v-if="userProfile.role === 'admin'">Admin</span>
+                    </span>
+                    <span class="upgrade-button-shine"></span>
+                  </span>
+                  <span class="role-toggle-label">
+                    <span v-if="userProfile.role === 'admin'" class="role-label-active">
+                      <i class="bi bi-building me-1"></i>Admin
+                    </span>
+                    <span v-else class="role-label-inactive">
+                      <i class="bi bi-person-badge me-1"></i>Doctor
+                    </span>
+                  </span>
+                </label>
+                <div v-if="roleLoading" class="upgrade-status">
+                  <span class="upgrade-spinner">
+                    <i class="bi bi-arrow-repeat"></i>
+                  </span>
+                  <span class="upgrade-text">Upgrading...</span>
+                </div>
+                <div v-if="roleUpgraded" class="upgrade-success">
+                  <span class="success-icon">
+                    <i class="bi bi-check-circle-fill"></i>
+                  </span>
+                  <span class="success-text">Upgraded!</span>
+                </div>
+              </div>
+              <div class="role-display" v-else>
                 <span class="role-badge" :class="userProfile.role">
                   <i :class="getRoleIcon(userProfile.role)" class="me-1"></i>
                   {{ formatRole(userProfile.role) }}
@@ -88,8 +149,17 @@
                 </div>
                 <div v-if="!userProfile.emailVerified" class="verification-hint">
                   <i class="bi bi-info-circle me-1"></i>
-                  Please verify your email address to access all features.
+                  Please verify your email address to edit your profile, change your role, join a hospital, or change your password.
                 </div>
+              </div>
+            </div>
+            <!-- Email Verification Warning for Edit Button -->
+            <div v-if="!userProfile.emailVerified && !isEditingProfile" class="verification-notice mb-3">
+              <div class="verification-notice-content">
+                <i class="bi bi-shield-exclamation verification-notice-icon"></i>
+                <span class="verification-notice-text">
+                  Verify your email to edit your profile
+                </span>
               </div>
             </div>
             <div v-if="profileSuccess || profileError" class="form-row">
@@ -107,10 +177,36 @@
             </div>
             <div class="form-row">
               <div class="form-label"></div>
-              <button type="submit" class="btn btn-primary" :disabled="profileLoading || (usernameError && userProfile.username !== originalUsername)">
-                <span v-if="profileLoading" class="spinner-border spinner-border-sm me-2"></span>
-                {{ profileLoading ? 'Updating...' : 'Update Profile' }}
-              </button>
+              <div class="profile-actions">
+                <button 
+                  v-if="!isEditingProfile"
+                  type="button" 
+                  class="btn btn-primary"
+                  @click="startEditingProfile"
+                  :disabled="!userProfile.emailVerified"
+                >
+                  <i class="bi bi-pencil me-2"></i>Edit Profile
+                </button>
+                <template v-else>
+                  <button 
+                    type="submit" 
+                    class="btn btn-primary"
+                    :disabled="!canSaveProfile"
+                  >
+                    <span v-if="profileLoading" class="spinner-border spinner-border-sm me-2"></span>
+                    <i v-else class="bi bi-check-lg me-2"></i>
+                    {{ profileLoading ? 'Saving...' : 'Save Changes' }}
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-outline-secondary ms-2"
+                    @click="cancelEditingProfile"
+                    :disabled="profileLoading"
+                  >
+                    <i class="bi bi-x-lg me-2"></i>Cancel
+                  </button>
+                </template>
+              </div>
             </div>
           </form>
         </div>
@@ -292,6 +388,16 @@
               <i class="bi bi-info-circle me-1"></i>
               Enter a hospital ID to request membership. The hospital admin will need to approve your request.
             </p>
+            <div v-if="!userProfile.emailVerified" class="verification-blocker mb-3">
+              <div class="verification-blocker-content">
+                <i class="bi bi-shield-exclamation verification-blocker-icon"></i>
+                <div class="verification-blocker-text">
+                  <p class="verification-blocker-message mb-0">
+                    Please verify your email address to join a hospital.
+                  </p>
+                </div>
+              </div>
+            </div>
             <form @submit.prevent="joinHospital">
               <div class="form-row mb-3">
                 <label for="hospitalId" class="form-label">Hospital ID</label>
@@ -302,6 +408,7 @@
                   v-model="joinHospitalId"
                   placeholder="e.g., HSP-A1B2C3"
                   pattern="HSP-[A-Za-z0-9]{6}"
+                  :disabled="!userProfile.emailVerified"
                 />
               </div>
               <div v-if="hospitalSuccess || hospitalError" class="form-row">
@@ -319,7 +426,7 @@
               </div>
               <div class="form-row">
                 <div class="form-label"></div>
-                <button type="submit" class="btn btn-primary" :disabled="joinLoading || !joinHospitalId">
+                <button type="submit" class="btn btn-primary" :disabled="joinLoading || !joinHospitalId || !userProfile.emailVerified">
                   <span v-if="joinLoading" class="spinner-border spinner-border-sm me-2"></span>
                   {{ joinLoading ? 'Joining...' : 'Request to Join' }}
                 </button>
@@ -335,6 +442,16 @@
           <h5 class="card-title mb-4">
             <i class="bi bi-shield-lock me-2"></i>Change Password
           </h5>
+          <div v-if="!userProfile.emailVerified" class="verification-blocker mb-4">
+            <div class="verification-blocker-content">
+              <i class="bi bi-shield-exclamation verification-blocker-icon"></i>
+              <div class="verification-blocker-text">
+                <p class="verification-blocker-message mb-0">
+                  Please verify your email address to change your password.
+                </p>
+              </div>
+            </div>
+          </div>
           <form @submit.prevent="changePassword">
             <div class="form-row mb-3">
               <label for="currentPassword" class="form-label">Current Password</label>
@@ -346,6 +463,7 @@
                   v-model="passwordForm.currentPassword"
                   required
                   placeholder="Enter current password"
+                  :disabled="!userProfile.emailVerified"
                 />
                 <button
                   type="button"
@@ -368,6 +486,7 @@
                   required
                   minlength="6"
                   placeholder="Enter new password (min. 6 characters)"
+                  :disabled="!userProfile.emailVerified"
                 />
                 <button
                   type="button"
@@ -389,6 +508,7 @@
                   v-model="passwordForm.confirmPassword"
                   required
                   placeholder="Confirm new password"
+                  :disabled="!userProfile.emailVerified"
                 />
                 <button
                   type="button"
@@ -415,7 +535,7 @@
             </div>
             <div class="form-row">
               <div class="form-label"></div>
-              <button type="submit" class="btn btn-primary" :disabled="passwordLoading">
+              <button type="submit" class="btn btn-primary" :disabled="passwordLoading || !userProfile.emailVerified">
                 <span v-if="passwordLoading" class="spinner-border spinner-border-sm me-2"></span>
                 {{ passwordLoading ? 'Changing...' : 'Change Password' }}
               </button>
@@ -443,6 +563,7 @@
 import axios from 'axios';
 import { orthancApiUrl } from '../globalConfigurations';
 import ConfirmDialog from './ConfirmDialog.vue';
+import api from '../orthancApi';
 
 export default {
   name: 'AccountSettings',
@@ -474,6 +595,14 @@ export default {
       joinLoading: false,
       leaveLoading: false,
       invitationLoading: false,
+      roleLoading: false,
+      roleUpgraded: false,
+      isEditingProfile: false,
+      originalProfile: {
+        username: '',
+        name: '',
+        email: ''
+      },
       profileSuccess: '',
       profileError: '',
       passwordSuccess: '',
@@ -496,6 +625,24 @@ export default {
       confirmDialogButtonClass: 'btn-primary',
       confirmDialogAction: null
     };
+  },
+  computed: {
+    hasProfileChanges() {
+      if (!this.isEditingProfile) return false;
+      return this.userProfile.username !== this.originalProfile.username ||
+             this.userProfile.name !== this.originalProfile.name ||
+             this.userProfile.email !== this.originalProfile.email;
+    },
+    canSaveProfile() {
+      if (!this.isEditingProfile) return false;
+      if (this.profileLoading) return false;
+      // If username changed, it must be valid
+      if (this.userProfile.username !== this.originalProfile.username) {
+        return !this.usernameError && this.usernameValid;
+      }
+      // If username unchanged, allow save if name or email changed
+      return this.hasProfileChanges;
+    }
   },
   async mounted() {
     await this.loadUserProfile();
@@ -580,6 +727,11 @@ export default {
         if (response.data.success) {
           this.userProfile = response.data.user;
           this.originalUsername = response.data.user.username;
+          this.originalProfile = {
+            username: response.data.user.username,
+            name: response.data.user.name,
+            email: response.data.user.email
+          };
           this.usernameValid = true;
           
           // Set hospital membership if available
@@ -631,9 +783,40 @@ export default {
       }
     },
     
+    startEditingProfile() {
+      if (!this.userProfile.emailVerified) {
+        this.profileError = 'Please verify your email address to edit your profile.';
+        return;
+      }
+      this.isEditingProfile = true;
+      this.profileError = '';
+      this.profileSuccess = '';
+      // Reset username validation state when starting to edit
+      this.usernameError = '';
+      this.usernameValid = true;
+    },
+    
+    cancelEditingProfile() {
+      // Revert to original values
+      this.userProfile.username = this.originalProfile.username;
+      this.userProfile.name = this.originalProfile.name;
+      this.userProfile.email = this.originalProfile.email;
+      this.originalUsername = this.originalProfile.username;
+      this.usernameError = '';
+      this.usernameValid = true;
+      this.isEditingProfile = false;
+      this.profileError = '';
+      this.profileSuccess = '';
+    },
+    
     async updateProfile() {
+      if (!this.userProfile.emailVerified) {
+        this.profileError = 'Please verify your email address to update your profile.';
+        return;
+      }
+      
       // Validate username if changed
-      if (this.userProfile.username !== this.originalUsername && !this.usernameValid) {
+      if (this.userProfile.username !== this.originalProfile.username && !this.usernameValid) {
         this.profileError = this.usernameError || 'Please enter a valid username';
         return;
       }
@@ -662,10 +845,18 @@ export default {
           this.profileSuccess = response.data.message || 'Profile updated successfully!';
           this.userProfile = { ...this.userProfile, ...response.data.user };
           this.originalUsername = response.data.user.username;
+          this.originalProfile = {
+            username: response.data.user.username,
+            name: response.data.user.name,
+            email: response.data.user.email
+          };
           
           // Update localStorage
           const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
           localStorage.setItem('user', JSON.stringify({ ...storedUser, ...response.data.user }));
+          
+          // Exit edit mode
+          this.isEditingProfile = false;
           
           setTimeout(() => {
             this.profileSuccess = '';
@@ -679,6 +870,11 @@ export default {
     },
     
     async joinHospital() {
+      if (!this.userProfile.emailVerified) {
+        this.hospitalError = 'Please verify your email address to join a hospital.';
+        return;
+      }
+      
       if (!this.joinHospitalId) {
         this.hospitalError = 'Please enter a hospital ID';
         return;
@@ -754,6 +950,11 @@ export default {
     },
     
     async changePassword() {
+      if (!this.userProfile.emailVerified) {
+        this.passwordError = 'Please verify your email address to change your password.';
+        return;
+      }
+      
       // Validate passwords match
       if (this.passwordForm.newPassword !== this.passwordForm.confirmPassword) {
         this.passwordError = 'New passwords do not match';
@@ -1037,6 +1238,76 @@ export default {
         year: 'numeric',
         month: 'long',
         day: 'numeric'
+      });
+    },
+    
+    toggleRole(event) {
+      if (this.userProfile.role === 'owner') {
+        return; // Owners can't change their role
+      }
+      
+      if (!this.userProfile.emailVerified) {
+        event.target.checked = this.userProfile.role === 'admin';
+        this.profileError = 'Please verify your email address to change your role.';
+        return;
+      }
+      
+      const newRole = event.target.checked ? 'admin' : 'doctor';
+      const previousRole = this.userProfile.role;
+      
+      // Don't do anything if it's the same role
+      if (newRole === previousRole) {
+        event.target.checked = previousRole === 'admin';
+        return;
+      }
+      
+      this.roleLoading = true;
+      this.roleUpgraded = false;
+      this.profileError = '';
+      this.profileSuccess = '';
+      
+      // Update the role immediately for UI feedback
+      this.userProfile.role = newRole;
+      
+      api.updateOwnRole(newRole).then(response => {
+        if (response.success) {
+          this.profileSuccess = response.message || 'Role updated successfully!';
+          this.roleUpgraded = true;
+          
+          // Reload user profile to get updated data
+          this.loadUserProfile().then(() => {
+            this.loadMembership();
+          });
+          
+          // Smooth fade-out: start fading after 1.5s, complete by 3s
+          setTimeout(() => {
+            if (this.roleUpgraded) {
+              const toggleElement = document.querySelector('.role-toggle');
+              if (toggleElement) {
+                toggleElement.classList.add('fading-out');
+              }
+            }
+          }, 1500);
+          
+          // Remove success animation after smooth fade-out
+          setTimeout(() => {
+            if (this.roleUpgraded) {
+              this.roleUpgraded = false;
+              this.profileSuccess = '';
+            }
+          }, 3000);
+        }
+      }).catch(error => {
+        // Revert role change on error
+        this.userProfile.role = previousRole;
+        event.target.checked = previousRole === 'admin';
+        this.profileError = error.response?.data?.error || 'Failed to update role. Please try again.';
+        
+        setTimeout(() => {
+          this.profileError = '';
+        }, 5000);
+      }).finally(() => {
+        this.roleLoading = false;
       });
     }
   }
@@ -1377,6 +1648,506 @@ export default {
   color: #6b21a8;
 }
 
+/* Creative Upgrade Button Design */
+.role-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 14px;
+}
+
+.role-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.role-toggle input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.upgrade-button {
+  position: relative;
+  min-width: 120px;
+  height: 40px;
+  padding: 0 20px;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  border-radius: 20px;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
+}
+
+.upgrade-button-bg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
+  opacity: 0;
+  transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1;
+}
+
+.upgrade-button-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.upgrade-icon {
+  font-size: 16px;
+  color: #6b7280;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  align-items: center;
+}
+
+.upgrade-icon.active {
+  color: #ffffff;
+}
+
+.upgrade-text {
+  color: #6b7280;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  letter-spacing: 0.3px;
+}
+
+.upgrade-text.active {
+  color: #ffffff;
+}
+
+.upgrade-button-shine {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, 
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.upgrade-button:hover .upgrade-button-shine {
+  transform: translateX(100%);
+}
+
+/* Checked State - Admin Active */
+.role-toggle input[type="checkbox"]:checked ~ .upgrade-button {
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 
+    0 0 20px rgba(59, 130, 246, 0.4),
+    0 4px 12px rgba(59, 130, 246, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.role-toggle input[type="checkbox"]:checked ~ .upgrade-button .upgrade-button-bg {
+  opacity: 1;
+}
+
+/* Admin Active State - Subtle Breathing */
+.role-toggle.admin-active input[type="checkbox"]:checked ~ .upgrade-button {
+  animation: button-breathe 4s ease-in-out infinite;
+}
+
+/* Upgrading State - Smooth Flow */
+.role-toggle.upgrading .upgrade-button {
+  animation: button-flow 1.5s ease-in-out infinite;
+  box-shadow: 
+    0 0 25px rgba(59, 130, 246, 0.5),
+    0 6px 16px rgba(59, 130, 246, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.role-toggle.upgrading .upgrade-button-content {
+  animation: content-pulse 1.5s ease-in-out infinite;
+}
+
+/* Upgraded Success State - Fun & Fantastic Celebration */
+.role-toggle.upgraded .upgrade-button {
+  animation: button-celebration 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+
+.role-toggle.upgraded .upgrade-button::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  background: linear-gradient(45deg, 
+    rgba(16, 185, 129, 0.3) 0%,
+    rgba(59, 130, 246, 0.3) 25%,
+    rgba(168, 85, 247, 0.3) 50%,
+    rgba(236, 72, 153, 0.3) 75%,
+    rgba(251, 191, 36, 0.3) 100%
+  );
+  animation: rainbow-shimmer 1.5s ease-in-out;
+  z-index: 0;
+}
+
+.role-toggle.upgraded .upgrade-button-content {
+  animation: content-bounce 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.role-toggle.upgraded .upgrade-icon::after {
+  content: '✨';
+  position: absolute;
+  font-size: 12px;
+  animation: sparkle-pop 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+  margin-left: 4px;
+}
+
+/* Smooth Fade-Out Transition */
+.role-toggle.fading-out .upgrade-button {
+  animation: button-fade-out 1.5s ease-out forwards;
+}
+
+.role-toggle.fading-out .upgrade-button::before {
+  animation: rainbow-fade-out 1.5s ease-out forwards;
+}
+
+.role-toggle.fading-out .upgrade-success {
+  animation: success-fade-out 1.5s ease-out forwards;
+}
+
+.role-toggle input[type="checkbox"]:disabled ~ .upgrade-button {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: grayscale(0.3);
+}
+
+.role-toggle-label {
+  font-size: 14px;
+  font-weight: 500;
+  user-select: none;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+}
+
+.role-label-active {
+  color: #3b82f6;
+}
+
+.role-label-inactive {
+  color: #6b7280;
+}
+
+.role-toggle input[type="checkbox"]:checked ~ .role-toggle-label .role-label-active {
+  animation: natural-glow 2.5s ease-in-out infinite;
+}
+
+/* Upgrade Status Indicators */
+.upgrade-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+  color: #4a90e2;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.upgrade-spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+  font-size: 16px;
+}
+
+.upgrade-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+  animation: success-fade-in 0.5s ease-out;
+  position: relative;
+}
+
+.upgrade-success::before {
+  content: '🎉';
+  position: absolute;
+  left: -20px;
+  font-size: 14px;
+  animation: confetti-burst 1.5s ease-out;
+  pointer-events: none;
+}
+
+.upgrade-success::after {
+  content: '✨';
+  position: absolute;
+  right: -20px;
+  font-size: 14px;
+  animation: confetti-burst 1.5s ease-out 0.2s;
+  pointer-events: none;
+}
+
+.success-icon {
+  color: #10b981;
+  font-size: 18px;
+  animation: success-scale 0.5s ease-out;
+}
+
+.success-text {
+  color: #10b981;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Animations */
+@keyframes button-breathe {
+  0%, 100% {
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    box-shadow: 
+      0 0 28px rgba(59, 130, 246, 0.5),
+      0 6px 16px rgba(59, 130, 246, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes button-flow {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 
+      0 0 25px rgba(59, 130, 246, 0.5),
+      0 6px 16px rgba(59, 130, 246, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 
+      0 0 35px rgba(59, 130, 246, 0.6),
+      0 8px 20px rgba(59, 130, 246, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes content-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes button-celebration {
+  0% {
+    transform: scale(1) rotate(0deg);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  20% {
+    transform: scale(1.1) rotate(2deg);
+    box-shadow: 
+      0 0 45px rgba(16, 185, 129, 0.7),
+      0 8px 24px rgba(16, 185, 129, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  40% {
+    transform: scale(1.06) rotate(-1deg);
+    box-shadow: 
+      0 0 40px rgba(168, 85, 247, 0.6),
+      0 7px 22px rgba(168, 85, 247, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  60% {
+    transform: scale(1.08) rotate(1deg);
+    box-shadow: 
+      0 0 42px rgba(236, 72, 153, 0.6),
+      0 7px 23px rgba(236, 72, 153, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  80% {
+    transform: scale(1.04) rotate(-0.5deg);
+    box-shadow: 
+      0 0 32px rgba(251, 191, 36, 0.5),
+      0 6px 20px rgba(251, 191, 36, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes content-bounce {
+  0%, 100% {
+    transform: scale(1) translateY(0);
+  }
+  15% {
+    transform: scale(1.15) translateY(-2px);
+  }
+  30% {
+    transform: scale(1.08) translateY(0);
+  }
+  45% {
+    transform: scale(1.12) translateY(-1px);
+  }
+  60% {
+    transform: scale(1.06) translateY(0);
+  }
+  75% {
+    transform: scale(1.09) translateY(-0.5px);
+  }
+  90% {
+    transform: scale(1.03) translateY(0);
+  }
+}
+
+@keyframes button-fade-out {
+  0% {
+    transform: scale(1);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.4),
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes rainbow-shimmer {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
+  60% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes sparkle-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0) rotate(0deg);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-15px) scale(1.5) rotate(180deg);
+  }
+  60% {
+    opacity: 0.8;
+    transform: translateY(-25px) scale(1.2) rotate(360deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-35px) scale(0.8) rotate(540deg);
+  }
+}
+
+@keyframes rainbow-fade-out {
+  0% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes success-fade-out {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-10px) scale(0.9);
+  }
+}
+
+@keyframes success-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes confetti-burst {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1.2) rotate(180deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.8) rotate(360deg);
+  }
+}
+
+@keyframes success-scale {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes natural-glow {
+  0%, 100% {
+    text-shadow: 0 0 5px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    text-shadow: 0 0 15px rgba(59, 130, 246, 0.6), 0 0 25px rgba(59, 130, 246, 0.4);
+  }
+}
+
 /* Hospital membership styles */
 .membership-info {
   margin-bottom: 20px;
@@ -1616,5 +2387,154 @@ export default {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid #e5e7eb;
+}
+
+/* Field Display Styles */
+.field-display {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.field-value {
+  font-size: 15px;
+  color: #1f2937;
+  font-weight: 500;
+  padding: 8px 0;
+  line-height: 1.5;
+}
+
+/* Profile Actions */
+.profile-actions {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Verification Blocker Styles */
+.verification-blocker {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #fbbf24;
+  border-radius: 12px;
+  padding: 16px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.verification-blocker-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.verification-blocker-icon {
+  font-size: 24px;
+  color: #d97706;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.verification-blocker-text {
+  flex: 1;
+}
+
+.verification-blocker-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 4px;
+}
+
+.verification-blocker-message {
+  font-size: 14px;
+  color: #78350f;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Verification Notice (less intrusive) */
+.verification-notice {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  padding: 12px 16px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.verification-notice-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.verification-notice-icon {
+  font-size: 18px;
+  color: #d97706;
+  flex-shrink: 0;
+}
+
+.verification-notice-text {
+  font-size: 14px;
+  color: #78350f;
+  font-weight: 500;
+}
+
+.role-toggle.disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.role-toggle.disabled .upgrade-button {
+  filter: grayscale(0.5);
+  opacity: 0.8;
+}
+
+/* Disabled Input Styles */
+.form-control:disabled {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.btn-primary:disabled {
+  background-color: #d1d5db;
+  border-color: #d1d5db;
+  color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Animation */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .profile-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .profile-actions .btn {
+    width: 100%;
+  }
+  
+  .verification-blocker-content {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .verification-blocker-icon {
+    align-self: center;
+  }
 }
 </style>

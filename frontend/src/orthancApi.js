@@ -1205,6 +1205,14 @@ export default {
         return response.data;
     },
 
+    async updateOwnRole(role) {
+        const token = localStorage.getItem('auth-token');
+        const response = await axios.put(orthancApiUrl + `api/users/me/role`, { role }, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.data;
+    },
+
     async setUserRole(userId, role) {
         const token = localStorage.getItem('auth-token');
         const response = await axios.put(orthancApiUrl + `api/users/${userId}/role`, { role }, {
