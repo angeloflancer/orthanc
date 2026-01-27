@@ -8,8 +8,10 @@ export default defineConfig({
   base: '',
   plugins: [vue()],
   server: {
-    host: true,
-    port: 5829
+    host: '0.0.0.0', // Explicitly bind to all network interfaces
+    port: 5829,
+    allowedHosts: true,
+    strictPort: false // Allow port fallback if 5829 is busy
   },
   build: {
     chunkSizeWarningLimit: 1000,

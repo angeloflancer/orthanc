@@ -95,10 +95,11 @@
                     </button>
                     <span 
                       v-if="member.status === 'pending_invitation'"
-                      class="badge bg-info"
-                      title="Waiting for doctor to accept invitation"
+                      class="invite-status-pill"
+                      title="Invitation sent. Waiting for doctor."
                     >
-                      <i class="bi bi-hourglass-split me-1"></i>Waiting for Response
+                      <i class="bi bi-hourglass-split me-1"></i>
+                      Invite Sent
                     </span>
                     <button 
                       v-if="member.status === 'accepted'"
@@ -663,6 +664,18 @@ export default {
 .status-badge.blocked {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.invite-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #0ea5e9;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.35);
 }
 
 .action-buttons {

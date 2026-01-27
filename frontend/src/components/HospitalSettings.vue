@@ -29,13 +29,12 @@
             </div>
             <div class="form-row mb-3">
               <label for="hospitalAddress" class="form-label">Address</label>
-              <textarea 
+              <input
                 class="form-control" 
                 id="hospitalAddress" 
                 v-model="form.address"
-                rows="2"
                 placeholder="Enter hospital address (optional)"
-              ></textarea>
+              />
             </div>
             <div v-if="error" class="alert alert-danger">
               <i class="bi bi-exclamation-circle me-2"></i>{{ error }}

@@ -294,7 +294,7 @@
                   <button 
                     class="btn btn-success"
                     @click="acceptInvitation"
-                    :disabled="invitationLoading"
+                    :disabled="invitationLoading || !userProfile.emailVerified"
                   >
                     <span v-if="invitationLoading" class="spinner-border spinner-border-sm me-2"></span>
                     <i v-else class="bi bi-check-circle me-2"></i>
@@ -303,7 +303,7 @@
                   <button 
                     class="btn btn-outline-danger"
                     @click="rejectInvitation"
-                    :disabled="invitationLoading"
+                    :disabled="invitationLoading || !userProfile.emailVerified"
                   >
                     <span v-if="invitationLoading" class="spinner-border spinner-border-sm me-2"></span>
                     <i v-else class="bi bi-x-circle me-2"></i>
@@ -1053,6 +1053,10 @@ export default {
     },
     
     acceptInvitation() {
+      if (!this.userProfile.emailVerified) {
+        this.hospitalError = 'Please verify your email address to respond to hospital invitations.';
+        return;
+      }
       this.showConfirmDialog = true;
       this.confirmDialogTitle = 'Accept Invitation';
       this.confirmDialogMessage = 'Are you sure you want to accept this invitation?';
@@ -1095,6 +1099,10 @@ export default {
     },
     
     rejectInvitation() {
+      if (!this.userProfile.emailVerified) {
+        this.hospitalError = 'Please verify your email address to respond to hospital invitations.';
+        return;
+      }
       this.showConfirmDialog = true;
       this.confirmDialogTitle = 'Reject Invitation';
       this.confirmDialogMessage = 'Are you sure you want to reject this invitation? This action cannot be undone.';

@@ -502,6 +502,12 @@ router.get('/my-membership', protect, async (req, res) => {
 // Accept invitation (Doctor only) - For admin-invited memberships
 router.put('/accept-invitation', protect, requireRole('doctor'), async (req, res) => {
   try {
+    // Ensure doctor's email is verified
+    const user = await User.findById(req.user._id);
+    if (!user || !user.emailVerified) {
+      return res.status(403).json({ error: 'Please verify your email address before accepting hospital invitations.' });
+    }
+
     const membership = await HospitalMember.findOne({ 
       user: req.user._id,
       status: 'pending_invitation'
@@ -548,6 +554,12 @@ router.put('/accept-invitation', protect, requireRole('doctor'), async (req, res
 // Reject/Cancel invitation (Doctor only)
 router.put('/reject-invitation', protect, requireRole('doctor'), async (req, res) => {
   try {
+    // Ensure doctor's email is verified
+    const user = await User.findById(req.user._id);
+    if (!user || !user.emailVerified) {
+      return res.status(403).json({ error: 'Please verify your email address before rejecting hospital invitations.' });
+    }
+
     const membership = await HospitalMember.findOne({ 
       user: req.user._id,
       status: 'pending_invitation'
