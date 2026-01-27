@@ -66,11 +66,11 @@ const dicomStudySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  // Hospital ownership (required for access control)
+  // Hospital ownership (required for access control, optional for owners)
   hospital: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Hospital',
-    required: true,
+    required: false, // Optional to allow owners to upload without hospital
     index: true
   },
   // Upload tracking (kept for audit trail)

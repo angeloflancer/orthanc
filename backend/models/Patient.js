@@ -4,15 +4,15 @@ const patientSchema = new mongoose.Schema({
   patientId: {
     type: String,
     required: true,
+    unique: true, // One patient ID = one patient record globally
     index: true
-    // Removed unique: true - now unique per hospital
   },
-  // Hospital ownership (required for access control)
+  // Hospital ownership (required for access control, optional for owners)
   hospital: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Hospital',
-    required: true,
-    index: true
+    required: false, // Optional to allow owners to create patients without hospital
+    index: true // Index for efficient queries
   },
   patientName: {
     type: String,
@@ -49,8 +49,8 @@ const patientSchema = new mongoose.Schema({
   }
 });
 
-// Compound unique index: patientId + hospital (same patient ID can exist in different hospitals)
-patientSchema.index({ patientId: 1, hospital: 1 }, { unique: true });
+// patientId is now unique globally, so we don't need the compound index
+// Hospital index is already defined in the field definition (index: true)
 
 // Update timestamp on save
 patientSchema.pre('save', function(next) {

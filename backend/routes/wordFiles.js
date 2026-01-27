@@ -74,17 +74,25 @@ router.post('/upload', protect, checkFeatureAccess(), upload.single('file'), asy
       return res.status(400).json({ error: 'Patient ID and Patient Name are required' });
     }
     
+    // Get user info first
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      if (req.file && req.file.path) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
     // Get hospital from middleware (set by checkFeatureAccess)
+    // Owners don't have a hospital but can still upload
     const hospital = req.hospital;
-    if (!hospital) {
-      // Delete uploaded file if no hospital
+    if (!hospital && user.role !== 'owner') {
+      // Delete uploaded file if no hospital (except for owners)
       if (req.file && req.file.path) {
         fs.unlinkSync(req.file.path);
       }
       return res.status(403).json({ error: 'Hospital not found. You must be a member of a hospital to upload data.' });
     }
-    
-    const user = await User.findById(req.user._id);
     
     // Fix Arabic filename encoding issue
     // Multer may receive filename incorrectly encoded. We need to properly decode it.
@@ -146,26 +154,34 @@ router.post('/upload', protect, checkFeatureAccess(), upload.single('file'), asy
       mimeType: req.file.mimetype,
       patientId: patientId.trim(),
       patientName: patientName.trim(),
-      hospital: hospital._id,
+      hospital: hospital ? hospital._id : null, // Allow null for owners
       uploadedBy: req.user._id,
       uploadedByName: user.name
     });
     
-    // Update or create patient record for this hospital
-    let patient = await Patient.findOne({ patientId: patientId.trim(), hospital: hospital._id });
+    // Check if patient already exists by patientId (one patient ID = one patient record)
+    // If exists, use the existing patient; if not, create a new one
+    let patient = await Patient.findOne({ patientId: patientId.trim() });
     if (!patient) {
+      // Create new patient record
+      const patientHospital = hospital ? hospital._id : null;
       patient = await Patient.create({
         patientId: patientId.trim(),
-        hospital: hospital._id,
+        hospital: patientHospital, // null for owners
         patientName: patientName.trim(),
         dicomStudyCount: 0,
         wordFileCount: 1
       });
     } else {
+      // Patient already exists - update counts and info, but don't create duplicate
       patient.wordFileCount += 1;
       // Update patient name if not set
       if (!patient.patientName && patientName) {
         patient.patientName = patientName.trim();
+      }
+      // Update hospital if patient doesn't have one and we have one
+      if (!patient.hospital && hospital) {
+        patient.hospital = hospital._id;
       }
       await patient.save();
     }
@@ -288,6 +304,7 @@ router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
     // Check hospital access
     if (user.role !== 'owner') {
       const hospital = req.hospital;
+      // For non-owners, file must have a hospital and match user's hospital
       if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -297,6 +314,7 @@ router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
+    // Owners can access all files (including those with null hospital)
     
     res.json({
       success: true,
@@ -336,6 +354,7 @@ router.get('/:id/download', protect, checkFeatureAccess(), async (req, res) => {
     // Check hospital access
     if (user.role !== 'owner') {
       const hospital = req.hospital;
+      // For non-owners, file must have a hospital and match user's hospital
       if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -345,6 +364,7 @@ router.get('/:id/download', protect, checkFeatureAccess(), async (req, res) => {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
+    // Owners can access all files (including those with null hospital)
     
     if (!fs.existsSync(wordFile.filePath)) {
       return res.status(404).json({ error: 'File not found on server' });
@@ -377,6 +397,7 @@ router.delete('/:id', protect, async (req, res) => {
     // Check hospital access
     if (user.role !== 'owner') {
       const hospital = req.hospital;
+      // For non-owners, file must have a hospital and match user's hospital
       if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -386,14 +407,18 @@ router.delete('/:id', protect, async (req, res) => {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
+    // Owners can delete all files (including those with null hospital)
     
     // Delete file from filesystem
     if (fs.existsSync(wordFile.filePath)) {
       fs.unlinkSync(wordFile.filePath);
     }
     
-    // Decrement patient word file count (hospital-specific)
-    const patient = await Patient.findOne({ patientId: wordFile.patientId, hospital: wordFile.hospital });
+    // Decrement patient word file count (hospital-specific, or null for owners)
+    const patient = await Patient.findOne({ 
+      patientId: wordFile.patientId, 
+      hospital: wordFile.hospital || null 
+    });
     if (patient) {
       patient.wordFileCount = Math.max(0, patient.wordFileCount - 1);
       await patient.save();

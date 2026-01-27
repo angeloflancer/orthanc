@@ -40,6 +40,12 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(400).json({ error: 'Patient ID is required' });
     }
     
+    // Get user info first (needed for owner check and name)
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
     // Check if study already exists
     const existingStudy = await DicomStudy.findOne({ studyInstanceUid });
     if (existingStudy) {
@@ -48,6 +54,10 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       existingStudy.seriesCount = seriesCount || existingStudy.seriesCount;
       existingStudy.instancesCount = instancesCount || existingStudy.instancesCount;
       existingStudy.modalitiesInStudy = modalitiesInStudy || existingStudy.modalitiesInStudy;
+      // Update uploadedByName if it's empty (for existing studies uploaded by owners)
+      if (!existingStudy.uploadedByName && user.name) {
+        existingStudy.uploadedByName = user.name;
+      }
       await existingStudy.save();
       
       return res.json({
@@ -59,13 +69,11 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
     }
     
     // Get hospital from middleware (set by checkFeatureAccess)
+    // Owners don't have a hospital but can still upload
     const hospital = req.hospital;
-    if (!hospital) {
+    if (!hospital && user.role !== 'owner') {
       return res.status(403).json({ error: 'Hospital not found. You must be a member of a hospital to upload data.' });
     }
-    
-    // Get user info
-    const user = await User.findById(req.user._id);
     
     // Create new DICOM study record
     const dicomStudy = await DicomStudy.create({
@@ -83,17 +91,20 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       modalitiesInStudy: modalitiesInStudy || '',
       seriesCount: seriesCount || 0,
       instancesCount: instancesCount || 0,
-      hospital: hospital._id,
+      hospital: hospital ? hospital._id : null, // Allow null for owners
       uploadedBy: req.user._id,
-      uploadedByName: user ? user.name : ''
+      uploadedByName: user.name || '' // Ensure owner's name is saved
     });
     
-    // Check if patient already exists for this hospital, if not create one
-    let patient = await Patient.findOne({ patientId, hospital: hospital._id });
+    // Check if patient already exists by patientId (one patient ID = one patient record)
+    // If exists, use the existing patient; if not, create a new one
+    let patient = await Patient.findOne({ patientId });
     if (!patient) {
+      // Create new patient record
+      const patientHospital = hospital ? hospital._id : null;
       patient = await Patient.create({
         patientId,
-        hospital: hospital._id,
+        hospital: patientHospital, // null for owners
         patientName: patientName || '',
         patientBirthDate: patientBirthDate || '',
         patientSex: patientSex || '',
@@ -101,6 +112,7 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
         wordFileCount: 0
       });
     } else {
+      // Patient already exists - update counts and info, but don't create duplicate
       // Increment DICOM study count
       patient.dicomStudyCount += 1;
       // Update patient info if more complete
@@ -112,6 +124,10 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       }
       if (!patient.patientSex && patientSex) {
         patient.patientSex = patientSex;
+      }
+      // Update hospital if patient doesn't have one and we have one
+      if (!patient.hospital && hospital) {
+        patient.hospital = hospital._id;
       }
       await patient.save();
     }

@@ -178,15 +178,22 @@ export default {
             }
             
             try {
-                await api.deleteWordFile(id);
-                this.wordFiles = this.wordFiles.filter(file => file.id !== id);
-                if (this.expandedWordFileId === id) {
-                    this.expandedWordFileId = null;
+                const response = await api.deleteWordFile(id);
+                // Check if response indicates success
+                if (response && (response.success || response.message)) {
+                    this.wordFiles = this.wordFiles.filter(file => file.id !== id);
+                    this.filteredWordFiles = this.filteredWordFiles.filter(file => file.id !== id);
+                    if (this.expandedWordFileId === id) {
+                        this.expandedWordFileId = null;
+                    }
+                    this.messageBus.emit('show-toast', 'Document deleted successfully');
+                } else {
+                    throw new Error('Unexpected response format');
                 }
-                this.messageBus.emit('show-toast', 'Document deleted successfully');
             } catch (error) {
                 console.error('Error deleting word file:', error);
-                this.messageBus.emit('show-toast', 'Failed to delete document');
+                const errorMessage = error.response?.data?.error || error.message || 'Failed to delete document';
+                this.messageBus.emit('show-toast', errorMessage);
             }
         },
         async deleteSelectedWordFiles() {
