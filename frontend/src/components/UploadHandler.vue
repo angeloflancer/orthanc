@@ -112,6 +112,14 @@ export default {
             patientNotFound: false
         };
     },
+    computed: {
+        mostRecentUploadId() {
+            const keys = Object.keys(this.lastUploadReports);
+            if (keys.length === 0) return null;
+            // Since uploadCounter increments, the highest numeric key is the most recent
+            return Math.max(...keys.map(k => parseInt(k) || 0)).toString();
+        }
+    },
     mounted() {
         this.$nextTick(() => {
             const filesUpload = document.querySelector("#filesUpload");
@@ -602,8 +610,15 @@ export default {
         </div>
         
         <div class="upload-report-list">
-            <UploadReport v-for="(upload, key) in lastUploadReports" :report="upload" :key="key" :showStudyDetails="showStudyDetails" :disableCloseReport="disableCloseReport"
-                @deletedUploadReport="onDeletedUploadReport"></UploadReport>
+            <UploadReport 
+                v-for="(upload, key) in lastUploadReports" 
+                :report="upload" 
+                :key="key" 
+                :showStudyDetails="showStudyDetails" 
+                :disableCloseReport="disableCloseReport"
+                :isMostRecent="key === mostRecentUploadId"
+                @deletedUploadReport="onDeletedUploadReport">
+            </UploadReport>
         </div>
     </div>
 </template>
