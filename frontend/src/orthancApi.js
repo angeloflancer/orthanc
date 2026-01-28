@@ -889,10 +889,10 @@ export default {
         if (!url) return url;
         // If URL is relative (starts with /), prepend backend URL
         if (url.startsWith('/')) {
-            return 'http://localhost:5830' + url;
+            return 'http://100.126.26.114:5830' + url;
         }
         // If URL is absolute but uses frontend port, replace with backend port
-        return url.replace(/localhost:5829/g, 'localhost:5830');
+        return url.replace(/localhost:5829/g, '100.126.26.114:5830');
     },
     getOhifViewerUrlForDicomJson(mode, resourceOrthancId) {
         let baseUrl = this.toBackendUrl(store.state.configuration.uiOptions.OhifViewer3PublicRoot);
