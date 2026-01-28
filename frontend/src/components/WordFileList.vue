@@ -25,7 +25,8 @@ export default {
             showDocumentViewer: false,
             viewingDocument: null,
             documentViewerUrl: null,
-            documentViewerLoading: false
+            documentViewerLoading: false,
+            userRole: 'doctor' // Default to doctor, will be loaded
         };
     },
     async created() {
@@ -34,6 +35,7 @@ export default {
         if (urlParams.has('patientId')) {
             this.filterPatientId = urlParams.get('patientId');
         }
+        await this.loadUserRole();
         await this.loadWordFiles();
     },
     watch: {
@@ -71,6 +73,9 @@ export default {
         },
         isEmpty() {
             return !this.loading && this.filteredWordFiles.length === 0;
+        },
+        isDoctor() {
+            return this.userRole === 'doctor';
         }
     },
     methods: {
@@ -354,6 +359,19 @@ export default {
         },
         getWordFile(id) {
             return this.wordFiles.find(f => f.id === id);
+        },
+        async loadUserRole() {
+            try {
+                const token = localStorage.getItem('auth-token');
+                if (!token) return;
+                
+                const response = await api.getCurrentUser();
+                if (response.success && response.user) {
+                    this.userRole = response.user.role || 'doctor';
+                }
+            } catch (error) {
+                console.error('Error loading user role:', error);
+            }
         }
     }
 }
@@ -423,7 +441,7 @@ export default {
                                         <i class="bi bi-printer"></i> Print
                                     </button>
                                     <button class="btn btn-sm btn-danger m-1" @click="deleteSelectedWordFiles" 
-                                        :disabled="!hasSelection" title="Delete">
+                                        :disabled="!hasSelection || isDoctor" title="Delete">
                                         <i class="bi bi-trash"></i> Delete
                                     </button>
                                 </div>
@@ -498,6 +516,7 @@ export default {
                             type="button" 
                             class="btn btn-sm btn-danger" 
                             @click.stop="deleteWordFile(wordFile.id)"
+                            :disabled="isDoctor"
                             title="Delete"
                         >
                             <i class="bi bi-trash"></i>
@@ -580,6 +599,7 @@ export default {
                                         type="button" 
                                         class="btn btn-sm btn-danger action-btn"
                                         @click="deleteWordFile(wordFile.id)"
+                                        :disabled="isDoctor"
                                         title="Delete"
                                     >
                                         <i class="bi bi-trash"></i>

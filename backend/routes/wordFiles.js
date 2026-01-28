@@ -380,7 +380,7 @@ router.get('/:id/download', protect, checkFeatureAccess(), async (req, res) => {
 });
 
 // Delete Word file
-router.delete('/:id', protect, async (req, res) => {
+router.delete('/:id', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const wordFile = await WordFile.findById(req.params.id);
     
@@ -394,16 +394,16 @@ router.delete('/:id', protect, async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
     
+    // Prevent doctors from deleting documents
+    if (user.role === 'doctor') {
+      return res.status(403).json({ error: 'Doctors are not allowed to delete documents' });
+    }
+    
     // Check hospital access
     if (user.role !== 'owner') {
       const hospital = req.hospital;
       // For non-owners, file must have a hospital and match user's hospital
       if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-      
-      // Doctors can only delete their own files
-      if (user.role === 'doctor' && (!wordFile.uploadedBy || !wordFile.uploadedBy.equals(req.user._id))) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }

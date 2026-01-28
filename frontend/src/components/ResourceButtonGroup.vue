@@ -7,6 +7,7 @@ import $ from "jquery"
 import { mapState } from "vuex"
 import api from "../orthancApi"
 import resourceHelpers from "../helpers/resource-helpers"
+import { orthancApiUrl } from '../globalConfigurations';
 import clipboardHelpers from "../helpers/clipboard-helpers"
 import TokenLinkButton from "./TokenLinkButton.vue"
 import BulkLabelsModal from "./BulkLabelsModal.vue"
@@ -27,7 +28,8 @@ export default {
             isBulkLabelModalVisible: false,
             isWsiSeries: false,
             modalitiesList: [],
-            isNiftiCompatible: false
+            isNiftiCompatible: false,
+            userRole: 'doctor' // Default to doctor, will be loaded
         };
     },
     watch: {
@@ -61,6 +63,8 @@ export default {
     },
 
     async mounted() {
+        // Load user role
+        await this.loadUserRole();
 
         // check if the image is NIfTI compatible: make sure this is a 3D image
         if (!this.isPluginEnabled("neuro")) {
@@ -95,7 +99,7 @@ export default {
             event.stopPropagation();
             event.preventDefault();
         },
-        deleteResource(event) {
+        async deleteResource(event) {
             if (this.resourceLevel == 'bulk') {
                 api.deleteResources(this.resourcesOrthancId)
                     .then(() => {
@@ -104,6 +108,19 @@ export default {
                     .catch((reason) => {
                         console.error("failed to delete resources : ", this.resourceOrthancId, reason);
                     });
+            } else if (this.resourceLevel == 'study') {
+                // For DICOM studies, use our backend endpoint that checks user role
+                try {
+                    await api.deleteDicomStudy(this.resourceOrthancId);
+                    this.$emit("deletedResource");
+                } catch (reason) {
+                    console.error("failed to delete DICOM study : ", this.resourceOrthancId, reason);
+                    if (reason.response && reason.response.data && reason.response.data.error) {
+                        this.messageBus.emit('show-toast', reason.response.data.error);
+                    } else {
+                        this.messageBus.emit('show-toast', 'Failed to delete DICOM study');
+                    }
+                }
             } else {
                 api.deleteResource(this.resourceLevel, this.resourceOrthancId)
                     .then(() => {
@@ -181,6 +198,27 @@ export default {
         },
         capitalizeFirstLetter(level) {
             return level.charAt(0).toUpperCase() + level.slice(1);
+        },
+        async loadUserRole() {
+            try {
+                const token = localStorage.getItem('auth-token');
+                if (!token) return;
+                
+                const response = await fetch(`${orthancApiUrl}api/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.user) {
+                        this.userRole = data.user.role || 'doctor';
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading user role:', error);
+            }
         },
         copyIdToClipboard() {
             clipboardHelpers.copyToClipboard(this.resourceOrthancId);
@@ -347,6 +385,10 @@ export default {
                 this.uiOptions.EnableDeleteResources;
         },
         isDeleteEnabled() {
+            // Disable delete for doctors when deleting studies
+            if (this.resourceLevel == 'study' && this.userRole === 'doctor') {
+                return false;
+            }
             if (this.resourceLevel == 'bulk') {
                 return this.selectedStudiesIds.length > 0
             } else {

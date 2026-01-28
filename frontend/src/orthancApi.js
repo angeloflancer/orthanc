@@ -490,6 +490,15 @@ export default {
         };
         return (await axios.get(orthancApiUrl + "api/dicom-studies/exists/" + encodeURIComponent(studyInstanceUid), config)).data;
     },
+    async deleteDicomStudy(orthancStudyId) {
+        const token = localStorage.getItem('auth-token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+        return (await axios.delete(orthancApiUrl + "api/dicom-studies/" + encodeURIComponent(orthancStudyId), config)).data;
+    },
     // Patient API methods
     async getPatients() {
         const token = localStorage.getItem('auth-token');

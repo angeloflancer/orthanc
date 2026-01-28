@@ -234,4 +234,68 @@ router.get('/exists/:studyInstanceUid', protect, async (req, res) => {
   }
 });
 
+// Delete DICOM study
+router.delete('/:orthancStudyId', protect, checkFeatureAccess(), async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    // Prevent doctors from deleting DICOM studies
+    if (user.role === 'doctor') {
+      return res.status(403).json({ error: 'Doctors are not allowed to delete DICOM studies' });
+    }
+    
+    const { orthancStudyId } = req.params;
+    
+    // Find the study in our database
+    const dicomStudy = await DicomStudy.findOne({ orthancStudyId });
+    
+    if (!dicomStudy) {
+      return res.status(404).json({ error: 'DICOM study not found in database' });
+    }
+    
+    // Check hospital access for non-owners
+    if (user.role !== 'owner') {
+      const hospital = req.hospital;
+      if (!hospital || !dicomStudy.hospital || !dicomStudy.hospital.equals(hospital._id)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+    
+    // Delete from Orthanc
+    const axios = require('axios');
+    const TARGET_SERVICE = process.env.TARGET_SERVICE || 'http://localhost:8042';
+    
+    try {
+      await axios.delete(`${TARGET_SERVICE}/studies/${orthancStudyId}`);
+    } catch (err) {
+      console.error(`Error deleting study ${orthancStudyId} from Orthanc:`, err.message);
+      // Continue with database deletion even if Orthanc deletion fails
+    }
+    
+    // Decrement patient DICOM study count
+    const patient = await Patient.findOne({ 
+      patientId: dicomStudy.patientId, 
+      hospital: dicomStudy.hospital || null 
+    });
+    if (patient) {
+      patient.dicomStudyCount = Math.max(0, patient.dicomStudyCount - 1);
+      await patient.save();
+    }
+    
+    // Delete from database
+    await DicomStudy.findByIdAndDelete(dicomStudy._id);
+    
+    res.json({
+      success: true,
+      message: 'DICOM study deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete DICOM study error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

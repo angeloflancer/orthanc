@@ -1,4 +1,4 @@
-import { createApp } from 'vue'
+\import { createApp } from 'vue'
 import AppInbox from './AppInbox.vue'
 import i18n from './locales/i18n'
 import "bootstrap/dist/css/bootstrap.min.css"
