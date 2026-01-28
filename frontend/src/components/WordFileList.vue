@@ -768,7 +768,8 @@ export default {
 
 .study-column-titles {
     background-color: var(--study-table-header-bg-color) !important;
-    font-size: smaller;
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 .study-table-title {
@@ -780,6 +781,10 @@ export default {
     vertical-align: middle !important;
     line-height: 1.5;
     position: sticky;
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+    font-weight: 600;
 }
 
 .study-table-filters {

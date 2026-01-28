@@ -1356,7 +1356,8 @@ button.form-control.study-list-filter {
 
 .study-column-titles {
   background-color: var(--study-table-header-bg-color) !important;
-  font-size: smaller;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 
@@ -1369,6 +1370,9 @@ button.form-control.study-list-filter {
   vertical-align: middle !important;
   line-height: 1.5;
   position: sticky;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 400;
 }
 
 .study-column-titles th {
