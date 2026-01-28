@@ -119,6 +119,10 @@ export default {
             // Show Hospital settings for admin
             return this.isAdmin;
         },
+        showSystemInfoNav() {
+            // "System Info" is owner-only
+            return this.isOwner;
+        },
         // Access control computed properties
         canAccessFeatures() {
             // Owner always has access
@@ -849,7 +853,7 @@ export default {
                         </div>
                     </li>
                     <ul class="sub-menu collapse" id="settings-list">
-                        <li :class="{ 'active': isRouteActive('/settings') }" @click="onSettingsSubmenuSelected()">
+                        <li v-if="showSystemInfoNav" :class="{ 'active': isRouteActive('/settings') }" @click="onSettingsSubmenuSelected()">
                             <router-link class="router-link" to="/settings">{{ $t('settings.system_info') }}</router-link>
                         </li>
                         <li :class="{ 'active': isRouteActive('/account-settings') }" @click="onSettingsSubmenuSelected()">

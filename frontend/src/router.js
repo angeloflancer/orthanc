@@ -250,7 +250,7 @@ export const router = createRouter({
         ContentView: Settings,
       },
       name: 'settings',
-      beforeEnter: requireAuth
+      beforeEnter: requireOwner
     },
     {
       path: '/account-settings',
