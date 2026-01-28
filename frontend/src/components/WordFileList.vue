@@ -1,6 +1,7 @@
 <script>
 import Toasts from "./Toasts.vue"
 import api from "../orthancApi"
+import { renderAsync as renderDocx } from "docx-preview"
 
 export default {
     name: 'WordFileList',
@@ -26,6 +27,8 @@ export default {
             viewingDocument: null,
             documentViewerUrl: null,
             documentViewerLoading: false,
+            isDocxPreview: false,
+            docxPreviewError: false,
             userRole: 'doctor', // Default to doctor, will be loaded
             highlightedDocumentId: null // ID of document to highlight
         };
@@ -304,11 +307,45 @@ export default {
         async viewWordFile(id) {
             try {
                 this.viewingDocument = this.wordFiles.find(f => f.id === id);
-                this.documentViewerLoading = true;
                 this.showDocumentViewer = true;
-                
+                this.documentViewerLoading = true;
+                this.isDocxPreview = false;
+                this.docxPreviewError = false;
+                this.documentViewerUrl = null;
+
                 const response = await api.downloadWordFile(id);
-                const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                const blob = new Blob([response.data]);
+
+                const fileName = (this.viewingDocument?.originalFileName || '').toLowerCase();
+                const isDocx = fileName.endsWith('.docx');
+
+                if (isDocx) {
+                    // Switch off loading to render into the DOM, then render DOCX
+                    this.documentViewerLoading = false;
+                    await this.$nextTick();
+
+                    if (this.$refs.docxContainer) {
+                        this.$refs.docxContainer.innerHTML = '';
+
+                        try {
+                            await renderDocx(blob, this.$refs.docxContainer, null, {
+                                className: "emx-docx",
+                                inWrapper: true,
+                                ignoreWidth: true,
+                                ignoreHeight: true,
+                                breakPages: false
+                            });
+                            this.isDocxPreview = true;
+                            return;
+                        } catch (e) {
+                            console.error('Error rendering DOCX preview:', e);
+                            this.docxPreviewError = true;
+                            this.isDocxPreview = false;
+                        }
+                    }
+                }
+
+                // Fallback: keep download-only message (non-docx or preview failed)
                 this.documentViewerUrl = window.URL.createObjectURL(blob);
                 this.documentViewerLoading = false;
             } catch (error) {
@@ -320,9 +357,14 @@ export default {
         closeDocumentViewer() {
             this.showDocumentViewer = false;
             this.viewingDocument = null;
+            this.isDocxPreview = false;
+            this.docxPreviewError = false;
             if (this.documentViewerUrl) {
                 window.URL.revokeObjectURL(this.documentViewerUrl);
                 this.documentViewerUrl = null;
+            }
+            if (this.$refs.docxContainer) {
+                this.$refs.docxContainer.innerHTML = '';
             }
             this.documentViewerLoading = false;
         },
@@ -714,21 +756,31 @@ export default {
                         </div>
                         <p>Loading document...</p>
                     </div>
-                    <div v-else-if="documentViewerUrl" class="document-viewer-content">
-                        <div class="document-info-banner">
-                            <i class="bi bi-info-circle me-2"></i>
-                            Word documents cannot be previewed directly in the browser. Please download the file to view its contents.
-                        </div>
-                        <div class="document-preview-placeholder">
-                            <i class="bi bi-file-earmark-word"></i>
-                            <h4>{{ viewingDocument?.originalFileName }}</h4>
-                            <p class="text-muted">
-                                Patient: {{ viewingDocument?.patientName }} ({{ viewingDocument?.patientId }})<br>
-                                Uploaded: {{ formatDate(viewingDocument?.uploadedAt) }}
-                            </p>
-                            <button class="btn btn-primary" @click="downloadViewingDocument">
-                                <i class="bi bi-download me-2"></i>Download to View
-                            </button>
+                    <div v-else class="document-viewer-content">
+                        <!-- Always render container so docx-preview can mount -->
+                        <div
+                            ref="docxContainer"
+                            class="docx-preview-container"
+                            v-show="isDocxPreview && !docxPreviewError"
+                        ></div>
+
+                        <!-- Fallback banner when not previewing or on error -->
+                        <div v-if="!isDocxPreview || docxPreviewError" class="document-preview-fallback">
+                            <div class="document-info-banner">
+                                <i class="bi bi-info-circle me-2"></i>
+                                Word documents cannot be fully previewed directly in the browser. Please download the file to view its contents.
+                            </div>
+                            <div class="document-preview-placeholder">
+                                <i class="bi bi-file-earmark-word"></i>
+                                <h4>{{ viewingDocument?.originalFileName }}</h4>
+                                <p class="text-muted">
+                                    Patient: {{ viewingDocument?.patientName }} ({{ viewingDocument?.patientId }})<br>
+                                    Uploaded: {{ formatDate(viewingDocument?.uploadedAt) }}
+                                </p>
+                                <button class="btn btn-primary" @click="downloadViewingDocument">
+                                    <i class="bi bi-download me-2"></i>Download to View
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1134,6 +1186,15 @@ input.form-control.study-list-filter {
     display: flex;
     flex-direction: column;
     align-items: center;
+}
+
+.docx-preview-container {
+    width: 100%;
+    max-width: 100%;
+    overflow: auto;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 16px;
 }
 
 .document-info-banner {
