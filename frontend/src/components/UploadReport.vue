@@ -305,7 +305,7 @@ export default {
                         <router-link 
                             v-for="(doc, docId) in report.uploadedStudies" 
                             :key="docId"
-                            :to="doc.patientId ? `/word-files?patientId=${doc.patientId}` : '/word-files'" 
+                            :to="doc.patientId ? `/word-files?patientId=${doc.patientId}&documentId=${docId}` : `/word-files?documentId=${docId}`" 
                             class="upload-progress-study-link"
                             @click="showModal = false">
                             {{ getDocumentLine(doc) }}

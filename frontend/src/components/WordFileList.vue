@@ -26,7 +26,8 @@ export default {
             viewingDocument: null,
             documentViewerUrl: null,
             documentViewerLoading: false,
-            userRole: 'doctor' // Default to doctor, will be loaded
+            userRole: 'doctor', // Default to doctor, will be loaded
+            highlightedDocumentId: null // ID of document to highlight
         };
     },
     async created() {
@@ -34,6 +35,9 @@ export default {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('patientId')) {
             this.filterPatientId = urlParams.get('patientId');
+        }
+        if (urlParams.has('documentId')) {
+            this.highlightedDocumentId = urlParams.get('documentId');
         }
         await this.loadUserRole();
         await this.loadWordFiles();
@@ -65,6 +69,46 @@ export default {
         },
         wordFiles() {
             this.applyFilters();
+        },
+        '$route'(to, from) {
+            // Only handle route changes if we're on the word-files route
+            if (to.path === '/word-files' || to.path.startsWith('/word-files')) {
+                let queryChanged = false;
+                
+                // Check if query parameters changed
+                if (from) {
+                    const fromQueryStr = JSON.stringify(from.query || {});
+                    const toQueryStr = JSON.stringify(to.query || {});
+                    queryChanged = fromQueryStr !== toQueryStr;
+                }
+                
+                // Update patientId filter if it changed in URL
+                const newPatientId = to.query.patientId || '';
+                if (newPatientId !== this.filterPatientId) {
+                    this.filterPatientId = newPatientId;
+                }
+                
+                // Handle documentId parameter when route changes
+                if (to.query.documentId) {
+                    this.highlightedDocumentId = to.query.documentId;
+                }
+                
+                // Always reload word files when:
+                // 1. Query parameters changed (new document uploaded, filter changed, etc.)
+                // 2. Coming from a different route
+                // This ensures we see newly uploaded documents immediately
+                if (queryChanged || (from && from.path !== to.path)) {
+                    this.loadWordFiles();
+                } else if (this.highlightedDocumentId && !this.loading) {
+                    // If only documentId was added and data is already loaded, just scroll to it
+                    this.$nextTick(() => {
+                        this.scrollToDocument(this.highlightedDocumentId);
+                        if (!this.isExpanded(this.highlightedDocumentId)) {
+                            this.expandedWordFileId = this.highlightedDocumentId;
+                        }
+                    });
+                }
+            }
         }
     },
     computed: {
@@ -86,6 +130,17 @@ export default {
                 if (response.success) {
                     this.wordFiles = response.wordFiles || [];
                     this.applyFilters();
+                    
+                    // If there's a highlighted document, scroll to it and expand it
+                    if (this.highlightedDocumentId) {
+                        this.$nextTick(() => {
+                            this.scrollToDocument(this.highlightedDocumentId);
+                            // Auto-expand the highlighted document
+                            if (!this.isExpanded(this.highlightedDocumentId)) {
+                                this.expandedWordFileId = this.highlightedDocumentId;
+                            }
+                        });
+                    }
                 }
             } catch (error) {
                 console.error('Error loading word files:', error);
@@ -93,6 +148,22 @@ export default {
             } finally {
                 this.loading = false;
             }
+        },
+        scrollToDocument(documentId) {
+            this.$nextTick(() => {
+                const element = document.getElementById(`word-file-${documentId}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Remove highlight after a few seconds
+                    setTimeout(() => {
+                        this.highlightedDocumentId = null;
+                        // Clean up URL parameter
+                        const url = new URL(window.location);
+                        url.searchParams.delete('documentId');
+                        window.history.replaceState({}, '', url);
+                    }, 5000);
+                }
+            });
         },
         applyFilters() {
             let filtered = [...this.wordFiles];
@@ -158,6 +229,13 @@ export default {
             const temp = "";
             console.log('filteredWordFiles', this.filteredWordFiles, temp.length > 1 ? !(temp[1].hospitalName.length == 0) : '');
             this.updateSelectAll();
+            
+            // If there's a highlighted document, scroll to it after filters are applied
+            if (this.highlightedDocumentId) {
+                this.$nextTick(() => {
+                    this.scrollToDocument(this.highlightedDocumentId);
+                });
+            }
         },
         clearFilters() {
             this.filterFileName = '';
@@ -479,7 +557,11 @@ export default {
             <tbody v-for="wordFile in filteredWordFiles" :key="wordFile.id">
                 <tr 
                     class="data-row" 
-                    :class="{ 'data-row-expanded': isExpanded(wordFile.id) }"
+                    :class="{ 
+                        'data-row-expanded': isExpanded(wordFile.id),
+                        'highlighted-document': highlightedDocumentId === wordFile.id
+                    }"
+                    :id="`word-file-${wordFile.id}`"
                 >
                     <td style="vertical-align: middle; padding-right: 8px;">
                         <div class="form-check" style="display: flex; align-items: center; justify-content: center; height: 100%;">
@@ -831,6 +913,26 @@ input.form-control.study-list-filter {
 
 .data-row-expanded > td {
     background-color: var(--study-details-bg-color) !important;
+}
+
+/* Highlighted document styles */
+.highlighted-document {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107 !important;
+    animation: highlightPulse 2s ease-in-out;
+}
+
+.highlighted-document > td {
+    background-color: #fff3cd !important;
+}
+
+@keyframes highlightPulse {
+    0%, 100% {
+        background-color: #fff3cd;
+    }
+    50% {
+        background-color: #ffe69c;
+    }
 }
 
 .details-row {
