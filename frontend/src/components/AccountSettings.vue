@@ -75,14 +75,14 @@
                   'upgrading': roleLoading,
                   'upgraded': roleUpgraded,
                   'admin-active': userProfile.role === 'admin' && !roleLoading && !roleUpgraded,
-                  'disabled': !userProfile.emailVerified
+                  'disabled': profileDataLoading || !userProfile.emailVerified
                 }">
                   <input 
                     type="checkbox"
                     :key="`role-toggle-${userProfile.role}`"
                     :checked="userProfile.role === 'admin'"
                     @change="toggleRole($event)"
-                    :disabled="roleLoading || !userProfile.emailVerified"
+                    :disabled="profileDataLoading || roleLoading || !userProfile.emailVerified"
                   />
                   <span class="upgrade-button">
                     <span class="upgrade-button-bg"></span>
@@ -130,9 +130,16 @@
             <div class="form-row mb-3">
               <label class="form-label">Email Verification</label>
               <div class="verification-status">
-                <span v-if="userProfile.emailVerified" class="status-badge verified">
+                <!-- Loading state while fetching profile data -->
+                <div v-if="profileDataLoading" class="verification-loading">
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  <span>Loading verification status...</span>
+                </div>
+                <!-- Verified state -->
+                <span v-else-if="userProfile.emailVerified" class="status-badge verified">
                   <i class="bi bi-check-circle me-1"></i> Verified
                 </span>
+                <!-- Not verified state -->
                 <div v-else class="verification-unverified">
                   <span class="status-badge not-verified">
                     <i class="bi bi-exclamation-circle me-1"></i> Not Verified
@@ -147,14 +154,14 @@
                     {{ resendLoading ? 'Sending...' : 'Resend Email' }}
                   </button>
                 </div>
-                <div v-if="!userProfile.emailVerified" class="verification-hint">
+                <div v-if="!profileDataLoading && !userProfile.emailVerified" class="verification-hint">
                   <i class="bi bi-info-circle me-1"></i>
                   Please verify your email address to edit your profile, change your role, join a hospital, or change your password.
                 </div>
               </div>
             </div>
             <!-- Email Verification Warning for Edit Button -->
-            <div v-if="!userProfile.emailVerified && !isEditingProfile" class="verification-notice mb-3">
+            <div v-if="!profileDataLoading && !userProfile.emailVerified && !isEditingProfile" class="verification-notice mb-3">
               <div class="verification-notice-content">
                 <i class="bi bi-shield-exclamation verification-notice-icon"></i>
                 <span class="verification-notice-text">
@@ -183,7 +190,7 @@
                   type="button" 
                   class="btn btn-primary"
                   @click="startEditingProfile"
-                  :disabled="!userProfile.emailVerified"
+                  :disabled="profileDataLoading || !userProfile.emailVerified"
                 >
                   <i class="bi bi-pencil me-2"></i>Edit Profile
                 </button>
@@ -294,7 +301,7 @@
                   <button 
                     class="btn btn-success"
                     @click="acceptInvitation"
-                    :disabled="invitationLoading || !userProfile.emailVerified"
+                    :disabled="profileDataLoading || invitationLoading || !userProfile.emailVerified"
                   >
                     <span v-if="invitationLoading" class="spinner-border spinner-border-sm me-2"></span>
                     <i v-else class="bi bi-check-circle me-2"></i>
@@ -303,7 +310,7 @@
                   <button 
                     class="btn btn-outline-danger"
                     @click="rejectInvitation"
-                    :disabled="invitationLoading || !userProfile.emailVerified"
+                    :disabled="profileDataLoading || invitationLoading || !userProfile.emailVerified"
                   >
                     <span v-if="invitationLoading" class="spinner-border spinner-border-sm me-2"></span>
                     <i v-else class="bi bi-x-circle me-2"></i>
@@ -408,7 +415,7 @@
                   v-model="joinHospitalId"
                   placeholder="e.g., HSP-A1B2C3"
                   pattern="HSP-[A-Za-z0-9]{6}"
-                  :disabled="!userProfile.emailVerified"
+                  :disabled="profileDataLoading || !userProfile.emailVerified"
                 />
               </div>
               <div v-if="hospitalSuccess || hospitalError" class="form-row">
@@ -426,7 +433,7 @@
               </div>
               <div class="form-row">
                 <div class="form-label"></div>
-                <button type="submit" class="btn btn-primary" :disabled="joinLoading || !joinHospitalId || !userProfile.emailVerified">
+                <button type="submit" class="btn btn-primary" :disabled="profileDataLoading || joinLoading || !joinHospitalId || !userProfile.emailVerified">
                   <span v-if="joinLoading" class="spinner-border spinner-border-sm me-2"></span>
                   {{ joinLoading ? 'Joining...' : 'Request to Join' }}
                 </button>
@@ -463,7 +470,7 @@
                   v-model="passwordForm.currentPassword"
                   required
                   placeholder="Enter current password"
-                  :disabled="!userProfile.emailVerified"
+                  :disabled="profileDataLoading || !userProfile.emailVerified"
                 />
                 <button
                   type="button"
@@ -486,7 +493,7 @@
                   required
                   minlength="6"
                   placeholder="Enter new password (min. 6 characters)"
-                  :disabled="!userProfile.emailVerified"
+                  :disabled="profileDataLoading || !userProfile.emailVerified"
                 />
                 <button
                   type="button"
@@ -508,7 +515,7 @@
                   v-model="passwordForm.confirmPassword"
                   required
                   placeholder="Confirm new password"
-                  :disabled="!userProfile.emailVerified"
+                  :disabled="profileDataLoading || !userProfile.emailVerified"
                 />
                 <button
                   type="button"
@@ -535,7 +542,7 @@
             </div>
             <div class="form-row">
               <div class="form-label"></div>
-              <button type="submit" class="btn btn-primary" :disabled="passwordLoading || !userProfile.emailVerified">
+              <button type="submit" class="btn btn-primary" :disabled="profileDataLoading || passwordLoading || !userProfile.emailVerified">
                 <span v-if="passwordLoading" class="spinner-border spinner-border-sm me-2"></span>
                 {{ passwordLoading ? 'Changing...' : 'Change Password' }}
               </button>
@@ -590,6 +597,7 @@ export default {
       doctorSubscription: null,
       joinHospitalId: '',
       profileLoading: false,
+      profileDataLoading: false, // Loading state for initial profile data fetch
       passwordLoading: false,
       resendLoading: false,
       joinLoading: false,
@@ -711,6 +719,7 @@ export default {
     },
     
     async loadUserProfile() {
+      this.profileDataLoading = true;
       try {
         const token = localStorage.getItem('auth-token');
         if (!token) {
@@ -761,6 +770,8 @@ export default {
           localStorage.removeItem('auth-token');
           this.$router.push('/login');
         }
+      } finally {
+        this.profileDataLoading = false;
       }
     },
     
@@ -1422,6 +1433,21 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.verification-loading {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  color: #6b7280;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.verification-loading .spinner-border-sm {
+  width: 1rem;
+  height: 1rem;
+  border-width: 0.15em;
 }
 
 .verification-unverified {
