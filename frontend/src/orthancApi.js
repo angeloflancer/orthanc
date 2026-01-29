@@ -896,12 +896,16 @@ export default {
     // Helper to convert relative URL to absolute URL using backend
     toBackendUrl(url) {
         if (!url) return url;
-        // If URL is relative (starts with /), prepend backend URL
+        const base = orthancApiUrl.replace(/\/$/, '');
+        // If URL is relative (starts with /), prepend backend URL (same host, port 5830)
         if (url.startsWith('/')) {
-            return 'http://100.126.26.114:5830' + url;
+            return base + url;
         }
-        // If URL is absolute but uses frontend port, replace with backend port
-        return url.replace(/localhost:5829/g, '100.126.26.114:5830');
+        // If URL is absolute and points to current frontend origin, rewrite to backend (same host, port 5830)
+        if (typeof window !== 'undefined' && window.location && url.startsWith(window.location.origin)) {
+            return url.replace(window.location.origin, base);
+        }
+        return url;
     },
     getOhifViewerUrlForDicomJson(mode, resourceOrthancId) {
         let baseUrl = this.toBackendUrl(store.state.configuration.uiOptions.OhifViewer3PublicRoot);
