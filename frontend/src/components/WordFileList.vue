@@ -29,6 +29,7 @@ export default {
             documentViewerLoading: false,
             isDocxPreview: false,
             docxPreviewError: false,
+            printAfterOpen: false,
             userRole: 'doctor', // Default to doctor, will be loaded
             highlightedDocumentId: null // ID of document to highlight
         };
@@ -336,6 +337,11 @@ export default {
                                 breakPages: false
                             });
                             this.isDocxPreview = true;
+                            this.documentViewerLoading = false;
+                            if (this.printAfterOpen) {
+                                this.printAfterOpen = false;
+                                this.$nextTick(() => this.printViewingDocument());
+                            }
                             return;
                         } catch (e) {
                             console.error('Error rendering DOCX preview:', e);
@@ -348,6 +354,10 @@ export default {
                 // Fallback: keep download-only message (non-docx or preview failed)
                 this.documentViewerUrl = window.URL.createObjectURL(blob);
                 this.documentViewerLoading = false;
+                if (this.printAfterOpen) {
+                    this.printAfterOpen = false;
+                    this.$nextTick(() => this.printViewingDocument());
+                }
             } catch (error) {
                 console.error('Error viewing word file:', error);
                 this.messageBus.emit('show-toast', 'Failed to view document');
@@ -359,6 +369,7 @@ export default {
             this.viewingDocument = null;
             this.isDocxPreview = false;
             this.docxPreviewError = false;
+            this.printAfterOpen = false;
             if (this.documentViewerUrl) {
                 window.URL.revokeObjectURL(this.documentViewerUrl);
                 this.documentViewerUrl = null;
@@ -372,6 +383,14 @@ export default {
             if (this.viewingDocument) {
                 this.downloadWordFile(this.viewingDocument.id);
             }
+        },
+        printViewingDocument() {
+            if (!this.showDocumentViewer || !this.viewingDocument) return;
+            document.body.classList.add('printing-document-modal');
+            this.$nextTick(() => {
+                window.print();
+                document.body.classList.remove('printing-document-modal');
+            });
         },
         async downloadWordFile(id) {
             try {
@@ -408,18 +427,12 @@ export default {
             }
         },
         async printWordFile(id) {
-            try {
-                const response = await api.downloadWordFile(id);
-                const blob = new Blob([response.data]);
-                const url = window.URL.createObjectURL(blob);
-                const printWindow = window.open(url, '_blank');
-                printWindow.onload = () => {
-                    printWindow.print();
-                };
-            } catch (error) {
-                console.error('Error printing word file:', error);
-                this.messageBus.emit('show-toast', 'Failed to print document');
+            if (this.showDocumentViewer && this.viewingDocument?.id === id) {
+                this.printViewingDocument();
+                return;
             }
+            this.printAfterOpen = true;
+            await this.viewWordFile(id);
         },
         async printSelectedWordFiles() {
             if (this.selectedWordFileIds.length === 0) {
@@ -745,6 +758,9 @@ export default {
                     <div class="document-viewer-actions">
                         <button class="btn btn-sm btn-outline-primary me-2" @click="downloadViewingDocument">
                             <i class="bi bi-download me-1"></i> Download
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary me-2" @click="printViewingDocument" title="Print">
+                            <i class="bi bi-printer me-1"></i> Print
                         </button>
                         <button class="btn-close" @click="closeDocumentViewer"></button>
                     </div>
@@ -1125,7 +1141,7 @@ input.form-control.study-list-filter {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.4);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1133,40 +1149,44 @@ input.form-control.study-list-filter {
 }
 
 .document-viewer-modal {
-    background: white;
+    background: #fafafa;
     border-radius: 12px;
-    width: 80%;
-    max-width: 900px;
+    width: 88%;
+    max-width: 820px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12);
 }
 
 .document-viewer-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 24px;
-    border-bottom: 1px solid #e0e0e0;
+    padding: 14px 20px;
+    background: #fff;
+    border-bottom: 1px solid #eee;
+    border-radius: 12px 12px 0 0;
 }
 
 .document-viewer-header h5 {
     margin: 0;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
-    color: var(--bs-body-color);
+    color: #1a1a1a;
 }
 
 .document-viewer-actions {
     display: flex;
     align-items: center;
+    gap: 8px;
 }
 
 .document-viewer-body {
     flex: 1;
     overflow: auto;
-    padding: 24px;
+    padding: 20px;
+    background: #f5f5f5;
 }
 
 .document-viewer-loading {
@@ -1185,16 +1205,33 @@ input.form-control.study-list-filter {
 .document-viewer-content {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
+    width: 100%;
 }
 
 .docx-preview-container {
     width: 100%;
     max-width: 100%;
     overflow: auto;
-    background: #ffffff;
+    background: #f5f5f5;
     border-radius: 8px;
-    padding: 16px;
+    padding: 24px;
+}
+
+/* Override docx-preview default gray wrapper: one natural “page” look */
+.docx-preview-container :deep(.emx-docx-wrapper) {
+    background: transparent !important;
+    padding: 0 !important;
+    display: block !important;
+    max-width: 100%;
+}
+
+.docx-preview-container :deep(.emx-docx-wrapper > section.emx-docx) {
+    background: #fff !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08) !important;
+    margin: 0 auto 24px !important;
+    max-width: 100%;
+    border-radius: 4px;
 }
 
 .document-info-banner {
@@ -1227,5 +1264,34 @@ input.form-control.study-list-filter {
     font-weight: 600;
     color: var(--bs-body-color);
     margin-bottom: 12px;
+}
+</style>
+
+<style>
+/* Unscoped: print only the document viewer modal (no new tab) */
+@media print {
+    body.printing-document-modal * {
+        visibility: hidden;
+    }
+    body.printing-document-modal .document-viewer-overlay,
+    body.printing-document-modal .document-viewer-overlay * {
+        visibility: visible;
+    }
+    body.printing-document-modal .document-viewer-overlay {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        background: white !important;
+        align-items: flex-start !important;
+    }
+    body.printing-document-modal .document-viewer-modal {
+        max-height: none !important;
+        box-shadow: none !important;
+        width: 100% !important;
+    }
 }
 </style>
