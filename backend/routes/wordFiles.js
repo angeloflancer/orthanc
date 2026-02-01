@@ -11,6 +11,12 @@ const HospitalMember = require('../models/HospitalMember');
 const { protect } = require('../middleware/auth');
 const { checkFeatureAccess } = require('../middleware/accessControl');
 
+/** Get request user: for owner use req.user (not in DB); for others load from DB. */
+async function getRequestUser(req) {
+  if (req.user.role === 'owner') return req.user;
+  return User.findById(req.user._id).select('-password');
+}
+
 // Get upload directory from environment variable or use default
 const uploadsDir = process.env.WORD_FILES_UPLOAD_PATH 
   ? path.resolve(process.env.WORD_FILES_UPLOAD_PATH)
@@ -74,15 +80,15 @@ router.post('/upload', protect, checkFeatureAccess(), upload.single('file'), asy
       return res.status(400).json({ error: 'Patient ID and Patient Name are required' });
     }
     
-    // Get user info first
-    const user = await User.findById(req.user._id);
+    // Get user info first (owner is not in DB)
+    const user = await getRequestUser(req);
     if (!user) {
       if (req.file && req.file.path) {
         fs.unlinkSync(req.file.path);
       }
       return res.status(401).json({ error: 'User not found' });
     }
-    
+
     // Get hospital from middleware (set by checkFeatureAccess)
     // Owners don't have a hospital but can still upload
     const hospital = req.hospital;
@@ -155,8 +161,8 @@ router.post('/upload', protect, checkFeatureAccess(), upload.single('file'), asy
       patientId: patientId.trim(),
       patientName: patientName.trim(),
       hospital: hospital ? hospital._id : null, // Allow null for owners
-      uploadedBy: req.user._id,
-      uploadedByName: user.name
+      uploadedBy: req.user._id || undefined,
+      uploadedByName: user.name || req.user.name
     });
     
     // Check if patient already exists by patientId (one patient ID = one patient record)
@@ -238,11 +244,11 @@ async function getUserHospitalId(user) {
 // Get all Word files
 router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    
+
     // Build query based on hospital
     let query = {};
     if (user.role !== 'owner') {
@@ -296,11 +302,11 @@ router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
     }
     
     // Check if user has permission to access this file (check hospital)
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    
+
     // Check hospital access
     if (user.role !== 'owner') {
       const hospital = req.hospital;
@@ -308,14 +314,14 @@ router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
       if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
         return res.status(403).json({ error: 'Access denied' });
       }
-      
+
       // Doctors can only access their own files
       if (user.role === 'doctor' && (!wordFile.uploadedBy || !wordFile.uploadedBy.equals(req.user._id))) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
     // Owners can access all files (including those with null hospital)
-    
+
     res.json({
       success: true,
       wordFile: {
@@ -340,13 +346,13 @@ router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
 router.get('/:id/download', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const wordFile = await WordFile.findById(req.params.id);
-    
+
     if (!wordFile) {
       return res.status(404).json({ error: 'Word file not found' });
     }
-    
+
     // Check if user has permission to access this file (check hospital)
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
@@ -383,13 +389,13 @@ router.get('/:id/download', protect, checkFeatureAccess(), async (req, res) => {
 router.delete('/:id', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const wordFile = await WordFile.findById(req.params.id);
-    
+
     if (!wordFile) {
       return res.status(404).json({ error: 'Word file not found' });
     }
-    
+
     // Check if user has permission to delete this file (check hospital)
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }

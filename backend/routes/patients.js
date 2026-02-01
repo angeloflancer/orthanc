@@ -9,6 +9,13 @@ const HospitalMember = require('../models/HospitalMember');
 const { protect } = require('../middleware/auth');
 const { checkFeatureAccess } = require('../middleware/accessControl');
 
+/** Get request user: for owner use req.user (not in DB); for others load from DB. */
+async function getRequestUser(req) {
+  if (req.user.role === 'owner') return req.user;
+  return User.findById(req.user._id).select('-password');
+}
+
+
 // Helper function to get user's hospital ID for filtering
 // Returns null for owner (all access), hospital._id for admin/doctor, or null if no hospital
 async function getUserHospitalId(user) {
@@ -38,7 +45,7 @@ async function getUserHospitalId(user) {
 // Get all patients
 router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
@@ -164,7 +171,7 @@ router.get('/', protect, checkFeatureAccess(), async (req, res) => {
 // Get patient by patientId (DICOM Patient ID) - must come before /:id
 router.get('/by-patient-id/:patientId', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
@@ -257,7 +264,7 @@ router.get('/by-patient-id/:patientId', protect, checkFeatureAccess(), async (re
 // Get DICOM studies for a patient
 router.get('/:patientId/dicom-studies', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
@@ -308,7 +315,7 @@ router.get('/:patientId/dicom-studies', protect, checkFeatureAccess(), async (re
 // Get Word files for a patient - must come before /:id
 router.get('/:patientId/word-files', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
@@ -355,7 +362,7 @@ router.get('/:patientId/word-files', protect, checkFeatureAccess(), async (req, 
 // Get single patient by MongoDB ID - must be last to avoid route conflicts
 router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }

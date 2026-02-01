@@ -6,6 +6,12 @@ const User = require('../models/User');
 const { protect } = require('../middleware/auth');
 const { checkFeatureAccess } = require('../middleware/accessControl');
 
+/** Get request user: for owner use req.user (not in DB); for others load from DB. */
+async function getRequestUser(req) {
+  if (req.user.role === 'owner') return req.user;
+  return User.findById(req.user._id).select('-password');
+}
+
 // Save DICOM study info after upload
 router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
   try {
@@ -40,12 +46,12 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(400).json({ error: 'Patient ID is required' });
     }
     
-    // Get user info first (needed for owner check and name)
-    const user = await User.findById(req.user._id);
+    // Get user info first (owner is not in DB)
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    
+
     // Check if study already exists
     const existingStudy = await DicomStudy.findOne({ studyInstanceUid });
     if (existingStudy) {
@@ -92,8 +98,8 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       seriesCount: seriesCount || 0,
       instancesCount: instancesCount || 0,
       hospital: hospital ? hospital._id : null, // Allow null for owners
-      uploadedBy: req.user._id,
-      uploadedByName: user.name || '' // Ensure owner's name is saved
+      uploadedBy: req.user._id || undefined,
+      uploadedByName: user.name || req.user.name || ''
     });
     
     // Check if patient already exists by patientId (one patient ID = one patient record)
@@ -161,11 +167,11 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
 // Get all DICOM studies
 router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    
+
     // Build query based on user role and hospital
     let query = {};
     
@@ -237,11 +243,11 @@ router.get('/exists/:studyInstanceUid', protect, async (req, res) => {
 // Delete DICOM study
 router.delete('/:orthancStudyId', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    
+
     // Prevent doctors from deleting DICOM studies
     if (user.role === 'doctor') {
       return res.status(403).json({ error: 'Doctors are not allowed to delete DICOM studies' });
