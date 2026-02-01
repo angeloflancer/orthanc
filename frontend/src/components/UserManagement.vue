@@ -4,16 +4,10 @@
       <div class="header-section">
         <h2 class="mb-0">User Management</h2>
         <div class="stats-badges">
-          <span class="stat-badge">
-            <i class="bi bi-people me-1"></i>{{ stats.totalUsers || 0 }} Total
-          </span>
           <span class="stat-badge doctors">
-            <i class="bi bi-person-badge me-1"></i>{{ stats.doctorCount || 0 }} Doctors
+            <i class="bi bi-person-badge me-1"></i>{{ stats.doctorCount ?? stats.totalUsers ?? 0 }} Doctors
           </span>
-          <span class="stat-badge admins">
-            <i class="bi bi-building me-1"></i>{{ stats.adminCount || 0 }} Admins
-          </span>
-          <span v-if="stats.blockedCount > 0" class="stat-badge blocked">
+          <span v-if="(stats.blockedCount || 0) > 0" class="stat-badge blocked">
             <i class="bi bi-slash-circle me-1"></i>{{ stats.blockedCount }} Blocked
           </span>
         </div>
@@ -39,13 +33,11 @@
         <div class="filter-row">
           <div class="filter-buttons">
             <button 
-              v-for="role in roles" 
-              :key="role.value"
-              class="btn btn-filter"
-              :class="{ active: filterRole === role.value }"
-              @click="filterRole = role.value; loadUsers()"
+              class="btn btn-filter active"
+              disabled
+              title="User Management lists doctors only"
             >
-              <i :class="role.icon" class="me-1"></i>{{ role.label }}
+              <i class="bi bi-person-badge me-1"></i>Doctors
             </button>
           </div>
           <div class="filter-buttons">
@@ -115,13 +107,7 @@
                   <td>{{ user.name }}</td>
                   <td>{{ user.email }}</td>
                   <td>
-                    <span v-if="user.role === 'owner'" class="role-badge owner">
-                      <i class="bi bi-shield-check me-1"></i>Owner
-                    </span>
-                    <span v-else-if="user.role === 'admin'" class="role-badge admin">
-                      <i class="bi bi-building me-1"></i>Admin
-                    </span>
-                    <span v-else class="role-badge doctor">
+                    <span class="role-badge doctor">
                       <i class="bi bi-person-badge me-1"></i>Doctor
                     </span>
                   </td>
@@ -135,7 +121,7 @@
                   </td>
                   <td>{{ formatDate(user.createdAt) }}</td>
                   <td @click.stop>
-                    <div class="action-buttons" v-if="user.role !== 'owner'">
+                    <div class="action-buttons">
                       <button 
                         v-if="!user.blocked"
                         class="btn btn-sm btn-danger"
@@ -153,10 +139,9 @@
                         <i class="bi bi-unlock"></i>
                       </button>
                     </div>
-                    <span v-else class="text-muted">-</span>
                   </td>
                 </tr>
-                <!-- Expanded row with role editing -->
+                <!-- Expanded row with doctor settings -->
                 <tr v-if="isExpanded(user.id)" class="details-row" @click.stop>
                   <td colspan="7">
                     <div class="details-content">
@@ -219,92 +204,6 @@
                           <div class="info-row">
                             <span class="info-label">Joined:</span>
                             <span class="info-value">{{ formatDate(user.createdAt) }}</span>
-                          </div>
-                        </div>
-                        
-                        <!-- Role Management Section -->
-                        <div class="info-section" v-if="user.role !== 'owner'">
-                          <h6><i class="bi bi-shield-check me-2"></i>Role Upgrade</h6>
-                          <div class="info-row">
-                            <span class="info-label">Current Role:</span>
-                            <span class="info-value">
-                              <span v-if="user.role === 'admin'" class="role-badge admin">
-                                <i class="bi bi-building me-1"></i>Admin
-                              </span>
-                              <span v-else class="role-badge doctor">
-                                <i class="bi bi-person-badge me-1"></i>Doctor
-                              </span>
-                            </span>
-                          </div>
-                          <div class="info-row">
-                            <span class="info-label">Upgrade Role:</span>
-                            <div class="role-toggle-wrapper">
-                              <label class="role-toggle" :data-user-id="user.id" :class="{ 
-                                'upgrading': changingRole === user.id,
-                                'upgraded': recentlyUpgraded === user.id,
-                                'admin-active': user.role === 'admin' && changingRole !== user.id && !recentlyUpgraded
-                              }">
-                                <input 
-                                  type="checkbox"
-                                  :key="`role-toggle-${user.id}-${user.role}`"
-                                  :checked="user.role === 'admin'"
-                                  @change="toggleRole(user, $event)"
-                                  :disabled="changingRole === user.id"
-                                />
-                                <span class="upgrade-button">
-                                  <span class="upgrade-button-bg"></span>
-                                  <span class="upgrade-button-content">
-                                    <span class="upgrade-icon" v-if="user.role === 'doctor'">
-                                      <i class="bi bi-arrow-up-circle-fill"></i>
-                                    </span>
-                                    <span class="upgrade-text" v-if="user.role === 'doctor'">Upgrade</span>
-                                    <span class="upgrade-icon active" v-if="user.role === 'admin'">
-                                      <i class="bi bi-check-circle-fill"></i>
-                                    </span>
-                                    <span class="upgrade-text active" v-if="user.role === 'admin'">Admin</span>
-                                  </span>
-                                  <span class="upgrade-button-shine"></span>
-                                </span>
-                                <span class="role-toggle-label">
-                                  <span v-if="user.role === 'admin'" class="role-label-active">
-                                    <i class="bi bi-building me-1"></i>Admin
-                                  </span>
-                                  <span v-else class="role-label-inactive">
-                                    <i class="bi bi-person-badge me-1"></i>Doctor
-                                  </span>
-                                </span>
-                              </label>
-                              <div v-if="changingRole === user.id" class="upgrade-status">
-                                <span class="upgrade-spinner">
-                                  <i class="bi bi-arrow-repeat"></i>
-                                </span>
-                                <span class="upgrade-text">Upgrading...</span>
-                              </div>
-                              <div v-if="recentlyUpgraded === user.id" class="upgrade-success">
-                                <span class="success-icon">
-                                  <i class="bi bi-check-circle-fill"></i>
-                                </span>
-                                <span class="success-text">Upgraded!</span>
-                                <span class="success-confetti">✨</span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <!-- Hospital Info Button (for admins) -->
-                          <div v-if="user.role === 'admin'" class="info-row mt-3">
-                            <div class="hospital-info-badge-wrapper">
-                              <button 
-                                type="button" 
-                                class="hospital-info-badge"
-                                @click="checkHospitalInfo(user)"
-                                title="Check Hospital Information"
-                              >
-                                <div class="hospital-badge-icon">
-                                  <i class="bi bi-hospital"></i>
-                                </div>
-                                <span class="hospital-badge-text">Hospital Info</span>
-                              </button>
-                            </div>
                           </div>
                         </div>
                         
@@ -456,220 +355,6 @@
         </div>
       </div>
 
-      <!-- Upgrade Confirmation Modal -->
-      <div v-if="showUpgradeModal" class="modal-overlay" @click.self="cancelRoleChange">
-        <div class="modal-dialog upgrade-modal-dialog">
-          <div class="modal-content upgrade-modal-content">
-            <div class="modal-header upgrade-modal-header">
-              <div class="upgrade-header-content">
-                <h5 class="modal-title">
-                  {{ getUpgradeModalTitle() }}
-                </h5>
-                <button type="button" class="upgrade-close-btn" @click="cancelRoleChange" aria-label="Close">
-                  <i class="bi bi-x-lg"></i>
-                </button>
-              </div>
-            </div>
-            <div class="modal-body upgrade-modal-body">
-              <p class="upgrade-message">{{ getUpgradeModalMessage() }}</p>
-            </div>
-            <div class="modal-footer upgrade-modal-footer">
-              <button type="button" class="btn btn-secondary upgrade-btn-cancel" @click="cancelRoleChange">
-                Cancel
-              </button>
-              <button 
-                type="button" 
-                class="btn upgrade-btn-action" 
-                :class="getUpgradeButtonClass()"
-                @click="executeRoleChange"
-              >
-                {{ getUpgradeButtonText() }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Hospital Info Modal -->
-      <div v-if="showHospitalInfoModal" class="modal-overlay" @click.self="closeHospitalInfoModal">
-        <div class="modal-dialog hospital-info-modal-dialog">
-          <div class="modal-content hospital-info-modal-content">
-            <div class="modal-header hospital-info-modal-header">
-              <div class="hospital-info-header-content">
-                <h5 class="modal-title">
-                  <i class="bi bi-hospital me-2"></i>Hospital Information
-                </h5>
-                <button type="button" class="hospital-info-close-btn" @click="closeHospitalInfoModal" aria-label="Close">
-                  <i class="bi bi-x-lg"></i>
-                </button>
-              </div>
-            </div>
-            <div class="modal-body hospital-info-modal-body">
-              <div v-if="hospitalInfoLoading" class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                  <span class="visually-hidden">Loading...</span>
-                </div>
-              </div>
-              <div v-else-if="hospitalInfo">
-                <!-- Hospital Basic Info -->
-                <div class="hospital-info-section">
-                  <h6 class="section-title">
-                    <i class="bi bi-building me-2"></i>Basic Information
-                  </h6>
-                  <div class="info-grid">
-                    <div class="info-item">
-                      <span class="info-label">Hospital ID:</span>
-                      <span class="info-value">{{ hospitalInfo.hospitalId }}</span>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">Hospital Name:</span>
-                      <span class="info-value">{{ hospitalInfo.name }}</span>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">Address:</span>
-                      <span class="info-value">{{ hospitalInfo.address || 'N/A' }}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <!-- Statistics -->
-                <div class="hospital-info-section">
-                  <h6 class="section-title">
-                    <i class="bi bi-graph-up me-2"></i>Statistics
-                  </h6>
-                  <div class="stats-grid">
-                    <div class="stat-card">
-                      <div class="stat-icon">
-                        <i class="bi bi-people"></i>
-                      </div>
-                      <div class="stat-content">
-                        <div class="stat-value">{{ hospitalInfo.memberCount || 0 }}</div>
-                        <div class="stat-label">Members</div>
-                      </div>
-                    </div>
-                    <div class="stat-card">
-                      <div class="stat-icon dicom">
-                        <i class="bi bi-file-earmark-medical"></i>
-                      </div>
-                      <div class="stat-content">
-                        <div class="stat-value">{{ hospitalInfo.dicomCount || 0 }}</div>
-                        <div class="stat-label">DICOM Files</div>
-                      </div>
-                    </div>
-                    <div class="stat-card">
-                      <div class="stat-icon document">
-                        <i class="bi bi-file-earmark-word"></i>
-                      </div>
-                      <div class="stat-content">
-                        <div class="stat-value">{{ hospitalInfo.documentCount || 0 }}</div>
-                        <div class="stat-label">Documents</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <!-- Subscription Info -->
-                <div class="hospital-info-section">
-                  <h6 class="section-title">
-                    <i class="bi bi-calendar-check me-2"></i>Subscription
-                  </h6>
-                  <div v-if="hospitalInfo.subscription" class="subscription-info">
-                    <div class="subscription-badge" :class="{
-                      'badge-active': hospitalInfo.subscription.isActive,
-                      'badge-expired': !hospitalInfo.subscription.isActive
-                    }">
-                      <i :class="hospitalInfo.subscription.planType === 'forever' ? 'bi bi-award-fill' : 
-                                 hospitalInfo.subscription.planType === 'monthly' ? 'bi bi-calendar-week' : 
-                                 'bi bi-calendar-range'" class="me-1"></i>
-                      {{ hospitalInfo.subscription.planType === 'forever' ? 'Forever' : 
-                         hospitalInfo.subscription.planType === 'monthly' ? 'Monthly' : 'Yearly' }} Plan
-                    </div>
-                    <div v-if="hospitalInfo.subscription.planType !== 'forever'" class="expiration-info">
-                      <div class="expiration-row">
-                        <span class="expiration-label">Expires:</span>
-                        <span class="expiration-value">{{ formatDate(hospitalInfo.subscription.expiresAt) }}</span>
-                      </div>
-                      <div class="expiration-row">
-                        <span class="expiration-label">Days Remaining:</span>
-                        <span class="expiration-value" :class="{
-                          'text-danger': hospitalInfo.subscription.daysUntilExpiration <= 3,
-                          'text-warning': hospitalInfo.subscription.daysUntilExpiration > 3 && hospitalInfo.subscription.daysUntilExpiration <= 7
-                        }">
-                          {{ Math.max(0, hospitalInfo.subscription.daysUntilExpiration) }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div v-else class="no-subscription-message">
-                    <i class="bi bi-info-circle me-2"></i>
-                    <span>No subscription plan applied yet</span>
-                  </div>
-                </div>
-                
-                <!-- Apply Plan Section -->
-                <div v-if="canApplyPlan" class="hospital-info-section plan-section">
-                  <h6 class="section-title">
-                    <i class="bi bi-magic me-2"></i>Apply New Plan
-                  </h6>
-                  <p class="plan-section-description">Select a new subscription plan to extend the hospital's access:</p>
-                  <div class="plan-options">
-                    <div 
-                      v-for="plan in subscriptionPlans" 
-                      :key="plan.value"
-                      class="plan-card"
-                      :class="{ 'selected': selectedHospitalPlan === plan.value }"
-                      @click="selectedHospitalPlan = plan.value"
-                    >
-                      <div class="plan-icon">
-                        <i :class="plan.icon"></i>
-                      </div>
-                      <div class="plan-info">
-                        <h6 class="plan-name">{{ plan.name }}</h6>
-                        <p class="plan-description">{{ plan.description }}</p>
-                      </div>
-                      <div class="plan-check" v-if="selectedHospitalPlan === plan.value">
-                        <i class="bi bi-check-circle-fill"></i>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="apply-plan-button-wrapper">
-                    <button 
-                      class="btn apply-plan-btn"
-                      :disabled="!selectedHospitalPlan || applyingPlan"
-                      @click="applyHospitalPlan"
-                    >
-                      <span v-if="applyingPlan" class="spinner-border spinner-border-sm me-2"></span>
-                      <i v-else class="bi bi-sparkles me-2"></i>
-                      {{ applyingPlan ? 'Applying...' : 'Apply Plan' }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="modal-footer hospital-info-modal-footer">
-              <button 
-                v-if="hospitalInfo && hospitalInfo.subscription && hospitalInfo.subscription.isActive"
-                type="button" 
-                class="btn btn-outline-danger expire-btn"
-                :disabled="expiringHospital"
-                @click="expireHospital"
-              >
-                <span v-if="expiringHospital" class="spinner-border spinner-border-sm me-2"></span>
-                <i v-else class="bi bi-x-circle me-2"></i>
-                {{ expiringHospital ? 'Expiring...' : 'Expire Hospital' }}
-              </button>
-              <button 
-                type="button" 
-                class="btn btn-secondary"
-                @click="closeHospitalInfoModal"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
     </div>
   </div>
 </template>
@@ -685,14 +370,7 @@ export default {
       users: [],
       loading: true,
       searchQuery: '',
-      filterRole: '',
       filterBlocked: '',
-      roles: [
-        { value: '', label: 'All Roles', icon: 'bi bi-people' },
-        { value: 'doctor', label: 'Doctors', icon: 'bi bi-person-badge' },
-        { value: 'admin', label: 'Admins', icon: 'bi bi-building' },
-        { value: 'owner', label: 'Owner', icon: 'bi bi-shield-check' }
-      ],
       stats: {
         totalUsers: 0,
         doctorCount: 0,
@@ -706,7 +384,6 @@ export default {
         total: 0,
         pages: 0
       },
-      changingRole: null,
       showBlockModal: false,
       userToBlock: null,
       blockReason: '',
@@ -716,54 +393,10 @@ export default {
       editingUserId: null,
       editForms: {},
       editLoading: null,
-      searchInputReadonly: true,
-      recentlyUpgraded: null,
-      // Upgrade confirmation modal
-      showUpgradeModal: false,
-      userToUpgrade: null,
-      pendingUpgradeEvent: null,
-      pendingUpgradeRole: null,
-      // Hospital info modal
-      showHospitalInfoModal: false,
-      hospitalInfo: null,
-      hospitalInfoLoading: false,
-      selectedHospitalPlan: null,
-      applyingPlan: false,
-      expiringHospital: false,
-      currentAdminUser: null
+      searchInputReadonly: true
     };
   },
-  computed: {
-    subscriptionPlans() {
-      return [
-        {
-          value: 'monthly',
-          name: 'Monthly',
-          description: '30 days access',
-          icon: 'bi bi-calendar-week'
-        },
-        {
-          value: 'yearly',
-          name: 'Yearly',
-          description: '365 days access',
-          icon: 'bi bi-calendar-range'
-        },
-        {
-          value: 'forever',
-          name: 'Forever',
-          description: 'Unlimited access',
-          icon: 'bi bi-award-fill'
-        }
-      ];
-    },
-    canApplyPlan() {
-      if (!this.hospitalInfo) return false;
-      // Allow if no subscription (new hospital) or expired or ≤3 days remaining
-      if (!this.hospitalInfo.subscription) return true;
-      const days = this.hospitalInfo.subscription.daysUntilExpiration;
-      return days <= 3 || !this.hospitalInfo.subscription.isActive;
-    }
-  },
+  computed: {},
   async mounted() {
     await this.loadUsers();
     await this.loadStats();
@@ -779,9 +412,6 @@ export default {
           limit: this.pagination.limit
         });
         
-        if (this.filterRole) {
-          params.append('role', this.filterRole);
-        }
         if (this.filterBlocked) {
           params.append('blocked', this.filterBlocked);
         }
@@ -854,253 +484,6 @@ export default {
     goToPage(page) {
       this.pagination.page = page;
       this.loadUsers();
-    },
-    
-    async toggleRole(user, event) {
-      const currentRole = user.role;
-      const newRole = currentRole === 'admin' ? 'doctor' : 'admin';
-      
-      // Store the user and event for later execution
-      this.userToUpgrade = user;
-      this.pendingUpgradeEvent = event;
-      this.pendingUpgradeRole = { currentRole, newRole };
-      
-      // Show custom confirmation modal
-      this.showUpgradeModal = true;
-    },
-    
-    async executeRoleChange() {
-      if (!this.userToUpgrade || !this.pendingUpgradeEvent || !this.pendingUpgradeRole) {
-        return;
-      }
-      
-      const { currentRole, newRole } = this.pendingUpgradeRole;
-      const user = this.userToUpgrade;
-      const event = this.pendingUpgradeEvent;
-      
-      // Close modal
-      this.showUpgradeModal = false;
-      
-      // Clear any previous success state
-      this.recentlyUpgraded = null;
-      this.changingRole = user.id;
-      
-      try {
-        const token = localStorage.getItem('auth-token');
-        
-        await axios.put(
-          `${orthancApiUrl}api/users/${user.id}/role`,
-          { role: newRole },
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-        
-        user.role = newRole;
-        await this.loadStats();
-        
-        // Show success animation with smooth fade-out
-        this.recentlyUpgraded = user.id;
-        
-        // Smooth fade-out: start fading after 1.5s, complete by 3s
-        setTimeout(() => {
-          if (this.recentlyUpgraded === user.id) {
-            // Add fade-out class for smooth transition
-            const toggleElement = document.querySelector(`[data-user-id="${user.id}"] .role-toggle`);
-            if (toggleElement) {
-              toggleElement.classList.add('fading-out');
-            }
-          }
-        }, 1500);
-        
-        // Remove success animation after smooth fade-out
-        setTimeout(() => {
-          if (this.recentlyUpgraded === user.id) {
-            this.recentlyUpgraded = null;
-          }
-        }, 3000);
-      } catch (error) {
-        alert(error.response?.data?.error || 'Failed to change role');
-        // Reset checkbox state on error
-        event.target.checked = currentRole === 'admin';
-      } finally {
-        this.changingRole = null;
-        // Clear pending upgrade data
-        this.userToUpgrade = null;
-        this.pendingUpgradeEvent = null;
-        this.pendingUpgradeRole = null;
-      }
-    },
-    
-    cancelRoleChange() {
-      if (this.pendingUpgradeEvent && this.pendingUpgradeRole) {
-        // Reset checkbox state if cancelled
-        this.pendingUpgradeEvent.target.checked = this.pendingUpgradeRole.currentRole === 'admin';
-      }
-      this.showUpgradeModal = false;
-      this.userToUpgrade = null;
-      this.pendingUpgradeEvent = null;
-      this.pendingUpgradeRole = null;
-    },
-    
-    getUpgradeModalTitle() {
-      if (!this.pendingUpgradeRole) return 'Change Role';
-      return this.pendingUpgradeRole.newRole === 'admin' 
-        ? 'Upgrade to Admin' 
-        : 'Downgrade to Doctor';
-    },
-    
-    getUpgradeModalMessage() {
-      if (!this.userToUpgrade || !this.pendingUpgradeRole) return '';
-      const { newRole } = this.pendingUpgradeRole;
-      return newRole === 'admin' 
-        ? `Upgrade @${this.userToUpgrade.username} to admin? They will be able to create and manage a hospital.`
-        : `Downgrade @${this.userToUpgrade.username} to doctor? If they have a hospital, it will be deleted.`;
-    },
-    
-    getUpgradeButtonClass() {
-      if (!this.pendingUpgradeRole) return 'btn-primary';
-      return this.pendingUpgradeRole.newRole === 'admin' ? 'btn-primary' : 'btn-warning';
-    },
-    
-    getUpgradeButtonText() {
-      if (!this.pendingUpgradeRole) return 'Confirm';
-      return this.pendingUpgradeRole.newRole === 'admin' ? 'Upgrade' : 'Downgrade';
-    },
-    
-    async checkHospitalInfo(user) {
-      this.hospitalInfoLoading = true;
-      this.showHospitalInfoModal = true;
-      this.hospitalInfo = null;
-      this.selectedHospitalPlan = null;
-      this.currentAdminUser = user;
-      
-      try {
-        const token = localStorage.getItem('auth-token');
-        const response = await axios.get(
-          `${orthancApiUrl}api/users/${user.id}/hospital-info`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-        
-        if (response.data.success) {
-          if (response.data.hospital) {
-            this.hospitalInfo = response.data.hospital;
-          } else {
-            // Show toast notification
-            if (this.messageBus) {
-              this.messageBus.emit('show-info-toast', 'The user didn\'t create the hospital yet.');
-            } else {
-              alert('The user didn\'t create the hospital yet.');
-            }
-            this.showHospitalInfoModal = false;
-          }
-        }
-      } catch (error) {
-        console.error('Error loading hospital info:', error);
-        if (error.response?.status === 404 || error.response?.data?.message) {
-          // Show toast notification
-          if (this.messageBus) {
-            this.messageBus.emit('show-info-toast', 'The user didn\'t create the hospital yet.');
-          } else {
-            alert('The user didn\'t create the hospital yet.');
-          }
-        } else {
-          if (this.messageBus) {
-            this.messageBus.emit('show-error-toast', error.response?.data?.error || 'Failed to load hospital info');
-          } else {
-            alert(error.response?.data?.error || 'Failed to load hospital info');
-          }
-        }
-        this.showHospitalInfoModal = false;
-      } finally {
-        this.hospitalInfoLoading = false;
-      }
-    },
-    
-    closeHospitalInfoModal() {
-      this.showHospitalInfoModal = false;
-      this.hospitalInfo = null;
-      this.selectedHospitalPlan = null;
-      this.currentAdminUser = null;
-    },
-    
-    async applyHospitalPlan() {
-      if (!this.selectedHospitalPlan) {
-        alert('Please select a plan');
-        return;
-      }
-      
-      if (!this.hospitalInfo) return;
-      
-      this.applyingPlan = true;
-      
-      try {
-        const token = localStorage.getItem('auth-token');
-        // Use hospital MongoDB _id for the subscription endpoint
-        const response = await axios.post(
-          `${orthancApiUrl}api/subscriptions/${this.hospitalInfo.id}`,
-          { planType: this.selectedHospitalPlan },
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-        
-        if (response.data.success) {
-          // Reload hospital info
-          if (this.currentAdminUser) {
-            await this.checkHospitalInfo(this.currentAdminUser);
-          }
-          this.selectedHospitalPlan = null;
-          alert('Plan applied successfully!');
-        }
-      } catch (error) {
-        console.error('Error applying plan:', error);
-        alert(error.response?.data?.error || 'Failed to apply plan');
-      } finally {
-        this.applyingPlan = false;
-      }
-    },
-    
-    async expireHospital() {
-      if (!confirm('Are you sure you want to expire this hospital? This will suspend the hospital immediately.')) {
-        return;
-      }
-      
-      if (!this.hospitalInfo || !this.currentAdminUser) return;
-      
-      this.expiringHospital = true;
-      
-      try {
-        const token = localStorage.getItem('auth-token');
-        const response = await axios.post(
-          `${orthancApiUrl}api/users/${this.currentAdminUser.id}/expire-hospital`,
-          {},
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-        
-        if (response.data.success) {
-          // Reload hospital info
-          await this.checkHospitalInfo(this.currentAdminUser);
-          alert('Hospital expired successfully!');
-        }
-      } catch (error) {
-        console.error('Error expiring hospital:', error);
-        alert(error.response?.data?.error || 'Failed to expire hospital');
-      } finally {
-        this.expiringHospital = false;
-      }
     },
     
     startEdit(user) {

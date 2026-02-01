@@ -13,10 +13,12 @@ router.get('/', protect, requireOwner(), async (req, res) => {
     const { role, blocked, search, page = 1, limit = 20 } = req.query;
     
     const query = {};
-    
-    // Filter by role
-    if (role && ['doctor', 'admin', 'owner'].includes(role)) {
+
+    // Default to doctors only for User Management list; owner is not in DB
+    if (role && ['doctor', 'admin'].includes(role)) {
       query.role = role;
+    } else {
+      query.role = 'doctor';
     }
     
     // Filter by blocked status
@@ -131,218 +133,11 @@ router.get('/:id', protect, requireOwner(), async (req, res) => {
   }
 });
 
-// Update own role (All users can change their own role)
+// Update own role - disabled; only owner can assign admin via Hospital Management
 router.put('/me/role', protect, async (req, res) => {
-  try {
-    const { role } = req.body;
-    
-    if (!role || !['doctor', 'admin'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role. Must be doctor or admin.' });
-    }
-    
-    const user = await User.findById(req.user._id);
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    // Can't change owner's role
-    if (user.role === 'owner') {
-      return res.status(400).json({ error: 'Cannot change owner role' });
-    }
-    
-    // Can't change to the same role
-    if (user.role === role) {
-      return res.status(400).json({ error: 'You already have this role' });
-    }
-    
-    const previousRole = user.role;
-    
-    user.role = role;
-    
-    // If changing from admin to doctor, delete their hospital and all associated data
-    if (previousRole === 'admin' && role === 'doctor') {
-      const hospital = await Hospital.findOne({ admin: user._id });
-      if (hospital) {
-        const DicomStudy = require('../models/DicomStudy');
-        const WordFile = require('../models/WordFile');
-        const Patient = require('../models/Patient');
-        const axios = require('axios');
-        const fs = require('fs');
-        const TARGET_SERVICE = process.env.TARGET_SERVICE || 'http://localhost:8042';
-        
-        // Get all DICOM studies for this hospital
-        const dicomStudies = await DicomStudy.find({ hospital: hospital._id }).select('orthancStudyId');
-        
-        // Delete studies from Orthanc
-        for (const study of dicomStudies) {
-          if (study.orthancStudyId) {
-            try {
-              await axios.delete(`${TARGET_SERVICE}/studies/${study.orthancStudyId}`);
-            } catch (err) {
-              console.error(`Error deleting study ${study.orthancStudyId} from Orthanc:`, err.message);
-            }
-          }
-        }
-        
-        // Get all Word files for this hospital
-        const wordFiles = await WordFile.find({ hospital: hospital._id }).select('filePath');
-        
-        // Delete physical Word files from filesystem
-        for (const wordFile of wordFiles) {
-          if (wordFile.filePath && fs.existsSync(wordFile.filePath)) {
-            try {
-              fs.unlinkSync(wordFile.filePath);
-            } catch (err) {
-              console.error(`Error deleting file ${wordFile.filePath}:`, err.message);
-            }
-          }
-        }
-        
-        // Delete all data records
-        await DicomStudy.deleteMany({ hospital: hospital._id });
-        await WordFile.deleteMany({ hospital: hospital._id });
-        await Patient.deleteMany({ hospital: hospital._id });
-        
-        // Delete subscription
-        await HospitalSubscription.deleteOne({ hospital: hospital._id });
-        // Delete members
-        await HospitalMember.deleteMany({ hospital: hospital._id });
-        // Delete hospital
-        await Hospital.findByIdAndDelete(hospital._id);
-      }
-    }
-    
-    // If changing from doctor to admin, remove from hospital membership (don't create hospital - admin must create it)
-    if (previousRole === 'doctor' && role === 'admin') {
-      // Remove from hospital membership
-      await HospitalMember.deleteMany({ user: user._id });
-      // Hospital will be created by admin when they set up their hospital
-    }
-    
-    await user.save();
-    
-    res.json({
-      success: true,
-      message: `Your role has been changed to ${role}`,
-      user: {
-        id: user._id,
-        username: user.username,
-        name: user.name,
-        role: user.role
-      }
-    });
-  } catch (error) {
-    console.error('Update own role error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Set user role (Owner only)
-router.put('/:id/role', protect, requireOwner(), async (req, res) => {
-  try {
-    const { role } = req.body;
-    
-    if (!role || !['doctor', 'admin'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role. Must be doctor or admin.' });
-    }
-    
-    const user = await User.findById(req.params.id);
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    // Can't change owner's role
-    if (user.role === 'owner') {
-      return res.status(400).json({ error: 'Cannot change owner role' });
-    }
-    
-    // Can't change own role
-    if (user._id.equals(req.user._id)) {
-      return res.status(400).json({ error: 'Cannot change your own role' });
-    }
-    
-    const previousRole = user.role;
-    
-    user.role = role;
-    
-    // If changing from admin to doctor, delete their hospital and all associated data
-    if (previousRole === 'admin' && role === 'doctor') {
-      const hospital = await Hospital.findOne({ admin: user._id });
-      if (hospital) {
-        const DicomStudy = require('../models/DicomStudy');
-        const WordFile = require('../models/WordFile');
-        const Patient = require('../models/Patient');
-        const axios = require('axios');
-        const fs = require('fs');
-        const TARGET_SERVICE = process.env.TARGET_SERVICE || 'http://localhost:8042';
-        
-        // Get all DICOM studies for this hospital
-        const dicomStudies = await DicomStudy.find({ hospital: hospital._id }).select('orthancStudyId');
-        
-        // Delete studies from Orthanc
-        for (const study of dicomStudies) {
-          if (study.orthancStudyId) {
-            try {
-              await axios.delete(`${TARGET_SERVICE}/studies/${study.orthancStudyId}`);
-            } catch (err) {
-              console.error(`Error deleting study ${study.orthancStudyId} from Orthanc:`, err.message);
-            }
-          }
-        }
-        
-        // Get all Word files for this hospital
-        const wordFiles = await WordFile.find({ hospital: hospital._id }).select('filePath');
-        
-        // Delete physical Word files from filesystem
-        for (const wordFile of wordFiles) {
-          if (wordFile.filePath && fs.existsSync(wordFile.filePath)) {
-            try {
-              fs.unlinkSync(wordFile.filePath);
-            } catch (err) {
-              console.error(`Error deleting file ${wordFile.filePath}:`, err.message);
-            }
-          }
-        }
-        
-        // Delete all data records
-        await DicomStudy.deleteMany({ hospital: hospital._id });
-        await WordFile.deleteMany({ hospital: hospital._id });
-        await Patient.deleteMany({ hospital: hospital._id });
-        
-        // Delete subscription
-        await HospitalSubscription.deleteOne({ hospital: hospital._id });
-        // Delete members
-        await HospitalMember.deleteMany({ hospital: hospital._id });
-        // Delete hospital
-        await Hospital.findByIdAndDelete(hospital._id);
-      }
-    }
-    
-    // If changing from doctor to admin, remove from hospital membership (don't create hospital - admin must create it)
-    if (previousRole === 'doctor' && role === 'admin') {
-      // Remove from hospital membership
-      await HospitalMember.deleteMany({ user: user._id });
-      // Hospital will be created by admin when they set up their hospital
-    }
-    
-    await user.save();
-    
-    res.json({
-      success: true,
-      message: `User role changed to ${role}`,
-      user: {
-        id: user._id,
-        username: user.username,
-        name: user.name,
-        role: user.role
-      }
-    });
-  } catch (error) {
-    console.error('Set role error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
+  return res.status(403).json({
+    error: 'Role changes are not allowed. Contact the owner to change your role.'
+  });
 });
 
 // Block user (Owner only)
@@ -361,8 +156,8 @@ router.put('/:id/block', protect, requireOwner(), async (req, res) => {
       return res.status(400).json({ error: 'Cannot block owner account' });
     }
     
-    // Can't block self
-    if (user._id.equals(req.user._id)) {
+    // Can't block self (owner has no _id in DB)
+    if (req.user._id && user._id.equals(req.user._id)) {
       return res.status(400).json({ error: 'Cannot block your own account' });
     }
     

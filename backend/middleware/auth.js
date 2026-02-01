@@ -6,38 +6,47 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 exports.protect = async (req, res, next) => {
   try {
     let token;
-    
-    // Check for token in Authorization header
+
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
     } else if (req.headers.token) {
       token = req.headers.token;
     }
-    
+
     if (!token) {
       return res.status(401).json({ error: 'Not authorized, no token provided' });
     }
-    
+
     try {
-      // Verify token
       const decoded = jwt.verify(token, JWT_SECRET);
-      
-      // Get user from token
+
+      // Owner token: not in DB, set req.user from payload/env
+      if (decoded.type === 'owner' && decoded.email) {
+        req.user = {
+          _id: null,
+          role: 'owner',
+          email: decoded.email,
+          name: process.env.OWNER_NAME || 'Owner',
+          emailVerified: true
+        };
+        return next();
+      }
+
+      // Normal user: load from DB
       req.user = await User.findById(decoded.id).select('-password');
-      
+
       if (!req.user) {
         return res.status(401).json({ error: 'User not found' });
       }
-      
-      // Check if user is blocked by owner
+
       if (req.user.blocked && req.user.blockedBy === 'owner') {
-        return res.status(403).json({ 
+        return res.status(403).json({
           error: 'Your account has been suspended. Please contact the owner for assistance.',
           blocked: true,
           blockedBy: 'owner'
         });
       }
-      
+
       next();
     } catch (error) {
       return res.status(401).json({ error: 'Not authorized, invalid token' });
@@ -49,4 +58,8 @@ exports.protect = async (req, res, next) => {
 
 exports.generateToken = (userId) => {
   return jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '30d' });
+};
+
+exports.generateOwnerToken = (email) => {
+  return jwt.sign({ type: 'owner', email }, JWT_SECRET, { expiresIn: '30d' });
 };

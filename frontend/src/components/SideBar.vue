@@ -760,7 +760,13 @@ export default {
                             <span class="nav-text">User Management</span>
                         </router-link>
                     </li>
-
+                    <!-- Hospital Management (Owner only) -->
+                    <li v-if="showUsersNav" class="nav-item" :class="{ 'nav-active': isRouteActive('/hospitals') }" @click="collapseAllDropdowns()">
+                        <router-link class="nav-link" to="/hospitals">
+                            <i class="fa fa-hospital fa-lg nav-icon"></i>
+                            <span class="nav-text">Hospital Management</span>
+                        </router-link>
+                    </li>
                     <!-- Members Management (Admin with hospital only) -->
                     <li v-if="showMembersNav" 
                         class="nav-item" 

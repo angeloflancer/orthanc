@@ -4,8 +4,33 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const Hospital = require('../models/Hospital');
 const HospitalMember = require('../models/HospitalMember');
-const { generateToken, protect } = require('../middleware/auth');
-const { sendVerificationEmail } = require('../utils/emailService');
+const { generateToken, generateOwnerToken, protect } = require('../middleware/auth');
+const { sendVerificationEmail, sendOtpEmail } = require('../utils/emailService');
+
+// In-memory OTP store for owner login: { email -> { code, expiresAt } }. Single-use, 10 min TTL.
+const ownerOtpStore = {};
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_LENGTH = 6;
+
+// Rate limit: max OTP requests and verify attempts per email per window
+const OTP_RATE_LIMIT = { maxRequest: 5, maxVerify: 10, windowMs: 15 * 60 * 1000 };
+const otpRateLimit = {}; // { email -> { requests: n, verifyAttempts: n, windowStart } }
+function checkOtpRateLimit(email, isVerify) {
+  const key = (email || '').toLowerCase();
+  const now = Date.now();
+  if (!otpRateLimit[key] || now - otpRateLimit[key].windowStart > OTP_RATE_LIMIT.windowMs) {
+    otpRateLimit[key] = { requests: 0, verifyAttempts: 0, windowStart: now };
+  }
+  const lim = otpRateLimit[key];
+  if (isVerify) {
+    lim.verifyAttempts++;
+    if (lim.verifyAttempts > OTP_RATE_LIMIT.maxVerify) return false;
+  } else {
+    lim.requests++;
+    if (lim.requests > OTP_RATE_LIMIT.maxRequest) return false;
+  }
+  return true;
+}
 
 // Check username availability
 router.get('/check-username/:username', async (req, res) => {
@@ -115,76 +140,82 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, username, password } = req.body;
-    
-    // Support both 'email' and 'username' fields, or use 'email' for backward compatibility
-    const identifier = email || username;
-    
-    // Validation
+
+    const identifier = (email || username || '').toString().trim();
     if (!identifier || !password) {
       return res.status(400).json({ error: 'Please provide email/username and password' });
     }
-    
-    // Determine if identifier is email or username
+
+    const ownerEmail = process.env.OWNER_EMAIL && process.env.OWNER_EMAIL.trim().toLowerCase();
+    const ownerPassword = process.env.OWNER_PASSWORD;
+
+    // Owner login: require OTP; do not issue token until OTP is verified
+    if (ownerEmail && ownerPassword && identifier.toLowerCase() === ownerEmail) {
+      if (password !== ownerPassword) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      const code = crypto.randomInt(0, Math.pow(10, OTP_LENGTH))
+        .toString()
+        .padStart(OTP_LENGTH, '0');
+      ownerOtpStore[ownerEmail] = { code, expiresAt: Date.now() + OTP_TTL_MS };
+      const ownerName = process.env.OWNER_NAME || 'Owner';
+      await sendOtpEmail(ownerEmail, code, ownerName);
+      return res.json({
+        success: true,
+        requiresOtp: true,
+        email: ownerEmail
+      });
+    }
+
+    // Normal user login
     const isEmail = identifier.includes('@');
-    
-    // Build query based on identifier type
-    const query = isEmail 
+    const query = isEmail
       ? { email: identifier.toLowerCase() }
       : { username: identifier.toLowerCase() };
-    
-    // Check if user exists (include password field)
+
     const user = await User.findOne(query).select('+password');
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
-    // Check password
+
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
-    // Check if user is blocked by owner
+
     if (user.blocked && user.blockedBy === 'owner') {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Your account has been suspended. Please contact the owner for assistance.',
         blocked: true,
         blockedBy: 'owner'
       });
     }
-    
-    // Check email verification requirement (read from env per request)
-    // Support both REQUIRE_VERIFY_EMAIL and REQUIRE_EMAIL_VERIFY for compatibility
+
     const envValue = process.env.REQUIRE_VERIFY_EMAIL;
-    console.log("EnValue", envValue)
-    const requireEmailVerify = envValue 
+    const requireEmailVerify = envValue
       ? envValue.toString().trim().toLowerCase() === 'true'
-      : false; // Explicitly default to false
-    
+      : false;
+
     if (requireEmailVerify && !user.emailVerified) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Email verification required',
         emailVerified: false,
         requireEmailVerify: true,
-        email: user.email // Include email for resend verification
+        email: user.email
       });
     }
-    
-    // Generate token
+
     const token = generateToken(user._id);
-    
-    // Get hospital info for admin
+
     let hospital = null;
     if (user.role === 'admin') {
       hospital = await Hospital.findOne({ admin: user._id });
     }
-    
-    // Get hospital membership for doctor
+
     let hospitalMembership = null;
     if (user.role === 'doctor') {
-      const membership = await HospitalMember.findOne({ 
-        user: user._id 
-      }).populate('hospital', 'hospitalId name');
+      const membership = await HospitalMember.findOne({ user: user._id })
+        .populate('hospital', 'hospitalId name');
       if (membership) {
         hospitalMembership = {
           hospitalId: membership.hospital.hospitalId,
@@ -193,7 +224,7 @@ router.post('/login', async (req, res) => {
         };
       }
     }
-    
+
     res.json({
       success: true,
       token,
@@ -218,12 +249,80 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// Owner login: verify OTP and issue JWT
+router.post('/login-verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const ownerEmail = process.env.OWNER_EMAIL && process.env.OWNER_EMAIL.trim().toLowerCase();
+
+    if (!ownerEmail || !email || !otp) {
+      return res.status(400).json({ error: 'Email and verification code are required' });
+    }
+    if (email.toLowerCase() !== ownerEmail) {
+      return res.status(401).json({ error: 'Invalid verification code' });
+    }
+    if (!checkOtpRateLimit(ownerEmail, true)) {
+      return res.status(429).json({ error: 'Too many verification attempts. Try again later.' });
+    }
+
+    const stored = ownerOtpStore[ownerEmail];
+    if (!stored) {
+      return res.status(401).json({ error: 'Verification code expired or already used' });
+    }
+    if (Date.now() > stored.expiresAt) {
+      delete ownerOtpStore[ownerEmail];
+      return res.status(401).json({ error: 'Verification code expired' });
+    }
+    if (stored.code !== String(otp).trim()) {
+      return res.status(401).json({ error: 'Invalid verification code' });
+    }
+
+    delete ownerOtpStore[ownerEmail];
+    const token = generateOwnerToken(ownerEmail);
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: null,
+        username: null,
+        email: ownerEmail,
+        name: process.env.OWNER_NAME || 'Owner',
+        role: 'owner',
+        emailVerified: true,
+        hospital: null,
+        hospitalMembership: null
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Get current user
 router.get('/me', protect, async (req, res) => {
   try {
+    // Owner: not in DB, return profile from env
+    if (req.user.role === 'owner') {
+      return res.json({
+        success: true,
+        user: {
+          id: null,
+          username: null,
+          email: req.user.email,
+          name: req.user.name,
+          role: 'owner',
+          emailVerified: true,
+          hospital: null,
+          subscription: null,
+          hospitalMembership: null,
+          doctorSubscription: null
+        }
+      });
+    }
+
     const HospitalSubscription = require('../models/HospitalSubscription');
-    
-    // Get hospital info for admin
+
     let hospital = null;
     let subscription = null;
     if (req.user.role === 'admin') {
@@ -232,13 +331,12 @@ router.get('/me', protect, async (req, res) => {
         subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
       }
     }
-    
-    // Get hospital membership for doctor
+
     let hospitalMembership = null;
     let doctorSubscription = null;
     if (req.user.role === 'doctor') {
-      const membership = await HospitalMember.findOne({ 
-        user: req.user._id 
+      const membership = await HospitalMember.findOne({
+        user: req.user._id
       }).populate('hospital', 'hospitalId name');
       if (membership) {
         hospitalMembership = {
@@ -246,17 +344,14 @@ router.get('/me', protect, async (req, res) => {
           hospitalName: membership.hospital.name,
           status: membership.status
         };
-        
-        // Get subscription info if membership is accepted
         if (membership.status === 'accepted' && membership.hospital) {
-          doctorSubscription = await HospitalSubscription.findOne({ 
-            hospital: membership.hospital._id 
+          doctorSubscription = await HospitalSubscription.findOne({
+            hospital: membership.hospital._id
           });
         }
       }
     }
-    
-    // Format subscription info for admin
+
     let subscriptionInfo = null;
     if (subscription) {
       subscriptionInfo = {
@@ -267,8 +362,7 @@ router.get('/me', protect, async (req, res) => {
         shouldShowWarning: subscription.shouldShowWarning()
       };
     }
-    
-    // Format subscription info for doctor
+
     let doctorSubscriptionInfo = null;
     if (doctorSubscription) {
       doctorSubscriptionInfo = {
@@ -279,7 +373,7 @@ router.get('/me', protect, async (req, res) => {
         shouldShowWarning: doctorSubscription.shouldShowWarning()
       };
     }
-    
+
     res.json({
       success: true,
       user: {

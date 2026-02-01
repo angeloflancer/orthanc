@@ -4,6 +4,7 @@ import AccountSettings from './components/AccountSettings.vue'
 import HospitalSettings from './components/HospitalSettings.vue'
 import MemberManagement from './components/MemberManagement.vue'
 import UserManagement from './components/UserManagement.vue'
+import HospitalManagement from './components/HospitalManagement.vue'
 import Worklists from './components/Worklists.vue'
 import StudyList from './components/StudyList.vue'
 import WordFileList from './components/WordFileList.vue'
@@ -286,6 +287,15 @@ export const router = createRouter({
         ContentView: UserManagement,
       },
       name: 'users',
+      beforeEnter: requireOwner
+    },
+    {
+      path: '/hospitals',
+      components: {
+        SideBarView: SideBar,
+        ContentView: HospitalManagement,
+      },
+      name: 'hospitals',
       beforeEnter: requireOwner
     },
     // Catch-all 404 route - must be last

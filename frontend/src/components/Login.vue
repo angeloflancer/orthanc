@@ -2,15 +2,17 @@
   <div class="login-page">
     <div class="login-container">
       <transition name="dialog" appear>
-        <div class="login-card" key="login-card">
+        <div class="login-card" :key="requiresOtpStep ? 'otp' : 'login'">
           <div class="login-header">
             <img class="login-logo" src="../assets/images/emedx-logo.png" alt="EMEDX Logo" />
-            <h1 class="login-title">Welcome Back</h1>
-            <p class="login-subtitle">Sign in to continue to your account</p>
+            <h1 class="login-title">{{ requiresOtpStep ? 'Verification code' : 'Welcome Back' }}</h1>
+            <p class="login-subtitle">
+              {{ requiresOtpStep ? 'Enter the code sent to your email' : 'Sign in to continue to your account' }}
+            </p>
           </div>
-          
-          <form @submit.prevent="handleLogin" class="login-form">
-            <!-- Blocked user alert -->
+
+          <!-- Step 1: Email + Password -->
+          <form v-if="!requiresOtpStep" @submit.prevent="handleLogin" class="login-form">
             <div v-if="isBlocked" class="alert alert-blocked">
               <i class="bi bi-slash-circle me-2"></i>
               <div>
@@ -18,13 +20,12 @@
                 <p class="mb-0 mt-1">Your account has been suspended. Please contact the owner for assistance.</p>
               </div>
             </div>
-            
             <div v-if="error && !isBlocked" class="alert alert-danger">
               {{ error }}
               <div v-if="unverifiedEmail && !resendSuccess" class="mt-2">
-                <button 
-                  type="button" 
-                  @click="handleResendVerification" 
+                <button
+                  type="button"
+                  @click="handleResendVerification"
                   class="btn btn-link p-0 text-decoration-underline"
                   :disabled="resendLoading"
                   style="font-size: 0.9rem; color: #4a90e2;"
@@ -36,7 +37,6 @@
             <div v-if="resendSuccess" class="alert alert-success">
               Verification email sent! Please check your inbox.
             </div>
-            
             <div class="form-group">
               <label for="email">Email or Username</label>
               <input
@@ -49,7 +49,6 @@
                 autocomplete="username"
               />
             </div>
-            
             <div class="form-group">
               <label for="password">Password</label>
               <div class="password-input-wrapper">
@@ -72,15 +71,40 @@
                 </button>
               </div>
             </div>
-            
             <button type="submit" class="btn btn-primary btn-block" :disabled="loading || emailNotVerified">
               <span v-if="loading">Signing in...</span>
               <span v-else>Sign In</span>
             </button>
-            
             <div class="login-footer">
               <p>Don't have an account? <router-link to="/register">Register here</router-link></p>
             </div>
+          </form>
+
+          <!-- Step 2: OTP (owner verification) -->
+          <form v-else @submit.prevent="handleVerifyOtp" class="login-form">
+            <div v-if="error" class="alert alert-danger">{{ error }}</div>
+            <p class="otp-email-hint">Code sent to <strong>{{ otpEmail }}</strong></p>
+            <div class="form-group">
+              <label for="otp">Verification code</label>
+              <input
+                id="otp"
+                v-model="otpCode"
+                type="text"
+                class="form-control otp-input"
+                placeholder="Enter 6-digit code"
+                maxlength="6"
+                autocomplete="one-time-code"
+                inputmode="numeric"
+                pattern="[0-9]*"
+              />
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" :disabled="loading || otpCode.length < 6">
+              <span v-if="loading">Verifying...</span>
+              <span v-else>Verify and sign in</span>
+            </button>
+            <button type="button" class="btn btn-link btn-back" @click="backToLogin">
+              Back to sign in
+            </button>
           </form>
         </div>
       </transition>
@@ -106,80 +130,69 @@ export default {
       unverifiedEmail: null,
       emailNotVerified: false,
       showPassword: false,
-      isBlocked: false
+      isBlocked: false,
+      requiresOtpStep: false,
+      otpCode: '',
+      otpEmail: ''
     };
   },
   methods: {
+    backToLogin() {
+      this.requiresOtpStep = false;
+      this.otpCode = '';
+      this.otpEmail = '';
+      this.error = '';
+    },
+    finishLogin(responseData) {
+      localStorage.setItem('auth-token', responseData.token);
+      localStorage.setItem('user', JSON.stringify(responseData.user));
+      orthancApi.updateAuthHeader('auth-token');
+      const bus = this.messageBus || this.$messageBus;
+      if (bus) {
+        bus.emit('show-success-toast', this.$t('login_success_message') || 'Sign in successful!');
+      }
+      const urlParams = new URLSearchParams(window.location.search);
+      const params = {};
+      const validParams = ['StudyInstanceUID', 'PatientID', 'AccessionNumber', 'StudyDate',
+        'PatientName', 'StudyDescription', 'ModalitiesInStudy', 'labels',
+        'source-type', 'remote-source', 'order-by', 'labels-constraint'];
+      for (const key of validParams) {
+        if (urlParams.has(key)) params[key] = urlParams.get(key);
+      }
+      setTimeout(() => {
+        this.$router.push(Object.keys(params).length > 0 ? { path: '/', query: params } : '/');
+      }, 300);
+    },
     async handleLogin() {
       this.error = '';
       this.emailNotVerified = false;
       this.isBlocked = false;
       this.loading = true;
-      
+
       try {
-        // Send as both email and username for backward compatibility
-        // Backend will determine which one to use based on the value
         const response = await axios.post(`${orthancApiUrl}api/auth/login`, {
           email: this.email,
           username: this.email,
           password: this.password
         });
-        
+
         if (response.data.success) {
-          // Backend already checks REQUIRE_VERIFY_EMAIL setting
-          // If we get here, login is allowed (either email is verified or verification is not required)
-          
-          // Store token and user data
-          localStorage.setItem('auth-token', response.data.token);
-          localStorage.setItem('user', JSON.stringify(response.data.user));
-          
-          // Update axios headers with auth token
-          orthancApi.updateAuthHeader('auth-token');
-          
-          // Show success notification
-          if (this.messageBus) {
-            this.messageBus.emit('show-success-toast', this.$t('login_success_message') || 'Sign in successful!');
-          } else if (this.$messageBus) {
-            this.$messageBus.emit('show-success-toast', this.$t('login_success_message') || 'Sign in successful!');
+          if (response.data.requiresOtp && response.data.email) {
+            this.requiresOtpStep = true;
+            this.otpEmail = response.data.email;
+            this.otpCode = '';
+            this.error = '';
+          } else {
+            this.finishLogin(response.data);
           }
-          
-          // Check for URL parameters to preserve them when redirecting
-          const urlParams = new URLSearchParams(window.location.search);
-          const params = {};
-          
-          // Preserve common query parameters that might be used for study filtering
-          const validParams = ['StudyInstanceUID', 'PatientID', 'AccessionNumber', 'StudyDate', 
-                              'PatientName', 'StudyDescription', 'ModalitiesInStudy', 'labels', 
-                              'source-type', 'remote-source', 'order-by', 'labels-constraint'];
-          
-          for (const key of validParams) {
-            if (urlParams.has(key)) {
-              params[key] = urlParams.get(key);
-            }
-          }
-          
-          // Small delay to show notification before redirect
-          setTimeout(() => {
-            // Redirect to home with preserved parameters if any
-            if (Object.keys(params).length > 0) {
-              this.$router.push({ path: '/', query: params });
-            } else {
-              this.$router.push('/');
-            }
-          }, 300);
         }
       } catch (error) {
-        // Check if user is blocked
         if (error.response?.status === 403 && error.response?.data?.blocked) {
           this.isBlocked = true;
           this.error = '';
           this.emailNotVerified = false;
           this.unverifiedEmail = null;
-        }
-        // If backend requires email verification and email is not verified, show resend option
-        else if (error.response?.status === 403 && error.response?.data?.requireEmailVerify && !error.response?.data?.emailVerified) {
-          // Use the email from response if available (when user logged in with username)
-          // Otherwise use the input value (which might be email or username)
+        } else if (error.response?.status === 403 && error.response?.data?.requireEmailVerify && !error.response?.data?.emailVerified) {
           this.unverifiedEmail = error.response?.data?.email || this.email;
           this.emailNotVerified = true;
           this.error = error.response?.data?.error || 'Email verification required.';
@@ -188,6 +201,23 @@ export default {
           this.emailNotVerified = false;
           this.unverifiedEmail = null;
         }
+      } finally {
+        this.loading = false;
+      }
+    },
+    async handleVerifyOtp() {
+      this.error = '';
+      this.loading = true;
+      try {
+        const response = await axios.post(`${orthancApiUrl}api/auth/login-verify-otp`, {
+          email: this.otpEmail,
+          otp: this.otpCode.trim()
+        });
+        if (response.data.success) {
+          this.finishLogin(response.data);
+        }
+      } catch (error) {
+        this.error = error.response?.data?.error || 'Invalid or expired code. Please try again.';
       } finally {
         this.loading = false;
       }
@@ -486,5 +516,35 @@ export default {
 
 .password-toggle i {
   font-size: 18px;
+}
+
+.otp-email-hint {
+  color: #6b7280;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.otp-input {
+  text-align: center;
+  letter-spacing: 0.25em;
+  font-size: 18px;
+}
+
+.btn-back {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  color: #6b7280;
+  text-decoration: none;
+  font-size: 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.btn-back:hover {
+  color: #4a90e2;
+  text-decoration: underline;
 }
 </style>

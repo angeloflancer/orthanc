@@ -70,61 +70,12 @@
             </div>
             <div class="form-row mb-3">
               <label class="form-label">Role</label>
-              <div class="role-toggle-wrapper" v-if="userProfile.role !== 'owner'">
-                <label class="role-toggle" :class="{ 
-                  'upgrading': roleLoading,
-                  'upgraded': roleUpgraded,
-                  'admin-active': userProfile.role === 'admin' && !roleLoading && !roleUpgraded,
-                  'disabled': profileDataLoading || !userProfile.emailVerified
-                }">
-                  <input 
-                    type="checkbox"
-                    :key="`role-toggle-${userProfile.role}`"
-                    :checked="userProfile.role === 'admin'"
-                    @change="toggleRole($event)"
-                    :disabled="profileDataLoading || roleLoading || !userProfile.emailVerified"
-                  />
-                  <span class="upgrade-button">
-                    <span class="upgrade-button-bg"></span>
-                    <span class="upgrade-button-content">
-                      <span class="upgrade-icon" v-if="userProfile.role === 'doctor'">
-                        <i class="bi bi-arrow-up-circle-fill"></i>
-                      </span>
-                      <span class="upgrade-text" v-if="userProfile.role === 'doctor'">Upgrade</span>
-                      <span class="upgrade-icon active" v-if="userProfile.role === 'admin'">
-                        <i class="bi bi-check-circle-fill"></i>
-                      </span>
-                      <span class="upgrade-text active" v-if="userProfile.role === 'admin'">Admin</span>
-                    </span>
-                    <span class="upgrade-button-shine"></span>
-                  </span>
-                  <span class="role-toggle-label">
-                    <span v-if="userProfile.role === 'admin'" class="role-label-active">
-                      <i class="bi bi-building me-1"></i>Admin
-                    </span>
-                    <span v-else class="role-label-inactive">
-                      <i class="bi bi-person-badge me-1"></i>Doctor
-                    </span>
-                  </span>
-                </label>
-                <div v-if="roleLoading" class="upgrade-status">
-                  <span class="upgrade-spinner">
-                    <i class="bi bi-arrow-repeat"></i>
-                  </span>
-                  <span class="upgrade-text">Upgrading...</span>
-                </div>
-                <div v-if="roleUpgraded" class="upgrade-success">
-                  <span class="success-icon">
-                    <i class="bi bi-check-circle-fill"></i>
-                  </span>
-                  <span class="success-text">Upgraded!</span>
-                </div>
-              </div>
-              <div class="role-display" v-else>
+              <div class="role-display">
                 <span class="role-badge" :class="userProfile.role">
                   <i :class="getRoleIcon(userProfile.role)" class="me-1"></i>
                   {{ formatRole(userProfile.role) }}
                 </span>
+                <span class="text-muted small ms-2">Role cannot be changed.</span>
               </div>
             </div>
             <div class="form-row mb-3">
@@ -603,8 +554,6 @@ export default {
       joinLoading: false,
       leaveLoading: false,
       invitationLoading: false,
-      roleLoading: false,
-      roleUpgraded: false,
       isEditingProfile: false,
       originalProfile: {
         username: '',
@@ -1260,75 +1209,6 @@ export default {
       });
     },
     
-    toggleRole(event) {
-      if (this.userProfile.role === 'owner') {
-        return; // Owners can't change their role
-      }
-      
-      if (!this.userProfile.emailVerified) {
-        event.target.checked = this.userProfile.role === 'admin';
-        this.profileError = 'Please verify your email address to change your role.';
-        return;
-      }
-      
-      const newRole = event.target.checked ? 'admin' : 'doctor';
-      const previousRole = this.userProfile.role;
-      
-      // Don't do anything if it's the same role
-      if (newRole === previousRole) {
-        event.target.checked = previousRole === 'admin';
-        return;
-      }
-      
-      this.roleLoading = true;
-      this.roleUpgraded = false;
-      this.profileError = '';
-      this.profileSuccess = '';
-      
-      // Update the role immediately for UI feedback
-      this.userProfile.role = newRole;
-      
-      api.updateOwnRole(newRole).then(response => {
-        if (response.success) {
-          this.profileSuccess = response.message || 'Role updated successfully!';
-          this.roleUpgraded = true;
-          
-          // Reload user profile to get updated data
-          this.loadUserProfile().then(() => {
-            this.loadMembership();
-          });
-          
-          // Smooth fade-out: start fading after 1.5s, complete by 3s
-          setTimeout(() => {
-            if (this.roleUpgraded) {
-              const toggleElement = document.querySelector('.role-toggle');
-              if (toggleElement) {
-                toggleElement.classList.add('fading-out');
-              }
-            }
-          }, 1500);
-          
-          // Remove success animation after smooth fade-out
-          setTimeout(() => {
-            if (this.roleUpgraded) {
-              this.roleUpgraded = false;
-              this.profileSuccess = '';
-            }
-          }, 3000);
-        }
-      }).catch(error => {
-        // Revert role change on error
-        this.userProfile.role = previousRole;
-        event.target.checked = previousRole === 'admin';
-        this.profileError = error.response?.data?.error || 'Failed to update role. Please try again.';
-        
-        setTimeout(() => {
-          this.profileError = '';
-        }, 5000);
-      }).finally(() => {
-        this.roleLoading = false;
-      });
-    }
   }
 };
 </script>

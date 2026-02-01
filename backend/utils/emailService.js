@@ -149,6 +149,72 @@ EMEDX Team
   }
 };
 
+/**
+ * Send OTP email (e.g. for owner login verification)
+ */
+const sendOtpEmail = async (email, code, name = 'User') => {
+  try {
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+
+    if (!gmailUser || !gmailAppPassword) {
+      console.warn('⚠️  Gmail credentials not found. OTP email not sent.');
+      return { success: false, error: 'Gmail credentials not configured' };
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: gmailUser, pass: gmailAppPassword }
+    });
+
+    const fromName = process.env.EMAIL_FROM_NAME || 'EMEDX';
+    const fromAddress = `"${fromName}" <${gmailUser}>`;
+
+    const mailOptions = {
+      from: fromAddress,
+      to: email,
+      subject: 'Your login verification code',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><title>Verification code</title></head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; margin: 0; padding: 40px 20px;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden;">
+            <tr>
+              <td style="background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%); padding: 24px 30px; text-align: center;">
+                <h1 style="color: #fff; margin: 0; font-size: 22px; font-weight: 600;">Verification code</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 32px 30px;">
+                <p style="margin: 0 0 16px; font-size: 16px;">Hello ${name},</p>
+                <p style="margin: 0 0 24px; font-size: 16px;">Your verification code is:</p>
+                <p style="margin: 0 0 24px; font-size: 28px; font-weight: 700; letter-spacing: 4px; color: #4a90e2;">${code}</p>
+                <p style="margin: 0; font-size: 14px; color: #666;">This code expires in 10 minutes. Do not share it.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="background: #f9f9f9; padding: 16px 30px; text-align: center; font-size: 12px; color: #999;">
+                © ${new Date().getFullYear()} EMEDX
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
+      text: `Hello ${name},\n\nYour verification code is: ${code}\n\nThis code expires in 10 minutes. Do not share it.\n\nEMEDX`
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log('✅ OTP email sent to', email);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error sending OTP email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
-  sendVerificationEmail
+  sendVerificationEmail,
+  sendOtpEmail
 };
