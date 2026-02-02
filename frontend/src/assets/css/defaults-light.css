@@ -2,8 +2,21 @@
 This CSS is loaded after all other CSS files have been loaded 
 therefore, it overrides all other definitions.  However, if you provide
 a CustomCssPath, the custom file will be loaded after this one*/
+
+/* Primary font (modern project: Geist) – load once globally */
+@font-face {
+    font-family: 'Geist';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url('https://cdn.jsdelivr.net/fontsource/fonts/geist:vf@latest/latin-wght-normal.woff2') format('woff2-variations');
+}
+
 :root {
     --bootstrap-theme: light;
+
+    /* Primary font family for the project (same as modern project sidebar + body) */
+    --font-sans: 'Geist', 'Geist Fallback', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 
     --study-even-bg-color: rgb(255, 255, 255);
     --study-odd-bg-color: rgb(248, 250, 252);
@@ -45,6 +58,36 @@ a CustomCssPath, the custom file will be loaded after this one*/
     --nav-side-submenu-color: rgb(255, 255, 255);
     --nav-side-active-border-color: #ffffff;
 
+    /* Sidebar: always use modern project's dark sidebar (same in light theme) */
+    --sidebar-bg: oklch(0.12 0.01 60);
+    --sidebar-foreground: oklch(0.95 0.005 80);
+    --sidebar-primary: oklch(0.95 0.005 80);
+    --sidebar-primary-foreground: oklch(0.15 0.01 60);
+    --sidebar-accent: oklch(0.22 0.01 60);
+    --sidebar-accent-foreground: oklch(0.95 0.005 80);
+    --sidebar-border: oklch(0.28 0.01 60);
+    --sidebar-ring: oklch(0.50 0.01 60);
+    --sidebar-card-bg: oklch(0.18 0.01 60);
+    --sidebar-font: var(--font-sans);
+
+    /* Content area (modern project parity): background, cards, text, borders */
+    --content-background: oklch(0.96 0.01 80);
+    --content-foreground: oklch(0.15 0.01 60);
+    --content-card: oklch(0.98 0.005 80);
+    --content-secondary: oklch(0.93 0.015 80);
+    --content-muted-foreground: oklch(0.45 0.01 60);
+    --content-border: oklch(0.88 0.02 80);
+    --content-input: oklch(0.92 0.015 80);
+    --content-primary: #080503;
+    --content-primary-foreground: #fff;
+    --content-accent: oklch(0.90 0.02 80);
+    --content-accent-foreground: oklch(0.20 0.01 60);
+    --content-destructive: oklch(0.577 0.245 27.325);
+    --content-destructive-foreground: oklch(0.98 0.005 80);
+    --content-radius: 0.75rem;
+    --content-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --content-ring: rgba(8, 5, 3, 0.15);
+
     --label-bg-color: rgb(10, 200, 240);
 
     --form-placeholder-color: #CCC;
@@ -64,6 +107,25 @@ a CustomCssPath, the custom file will be loaded after this one*/
 /* .dp__theme_dark {
     --dp-border-color: var(--bs-border-color);
 } */
+
+/* Content area (dark theme) – match modern project .dark */
+[data-bs-theme="dark"] {
+    --content-background: oklch(0.12 0.01 60);
+    --content-foreground: oklch(0.95 0.005 80);
+    --content-card: oklch(0.15 0.01 60);
+    --content-secondary: oklch(0.22 0.01 60);
+    --content-muted-foreground: oklch(0.65 0.01 80);
+    --content-border: oklch(0.28 0.01 60);
+    --content-input: oklch(0.22 0.01 60);
+    --content-primary: #080503;
+    --content-primary-foreground: oklch(0.98 0.005 80);
+    --content-accent: oklch(0.25 0.015 60);
+    --content-accent-foreground: oklch(0.95 0.005 80);
+    --content-destructive: oklch(0.50 0.20 25);
+    --content-destructive-foreground: oklch(0.95 0.005 80);
+    --content-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --content-ring: rgba(255, 255, 255, 0.2);
+}
 
 /* optional, you may e.g. customize bootstrap buttons or any other class that is declared globally */
 

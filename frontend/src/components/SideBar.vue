@@ -2,7 +2,6 @@
 
 import UploadHandler from "./UploadHandler.vue"
 import JobsList from "./JobsList.vue";
-import LanguagePicker from "./LanguagePicker.vue";
 import { mapState, mapGetters } from "vuex"
 import { orthancApiUrl, oe2ApiUrl } from "../globalConfigurations";
 import api from "../orthancApi"
@@ -84,6 +83,15 @@ export default {
             } else {
                 return "-";
             }
+        },
+        documentCountFormatted() {
+            if (this.statistics && typeof this.statistics.CountDocuments === 'number') {
+                return this.statistics.CountDocuments.toLocaleString();
+            }
+            if (this.statistics && typeof this.statistics.TotalDiskSize !== 'undefined') {
+                return "—";
+            }
+            return "—";
         },
         orthancApiUrl() {
             return orthancApiUrl;
@@ -643,432 +651,343 @@ export default {
         });
         }
     },
-    components: { UploadHandler, JobsList, LanguagePicker },
+    components: { UploadHandler, JobsList },
 }
 </script>
 <template>
-    <div class="nav-side-menu">
-        <div class="nav-side-content">
-            <div v-if="!hasCustomLogo" class="logo-container" @click="goToDashboard" style="cursor: pointer;">
-                <img class="emedx-logo" src="../assets/images/emedx-logo-white.png"/>
+    <aside class="sidebar-modern">
+        <div class="sidebar-inner">
+            <!-- Logo -->
+            <div class="sidebar-header" @click="goToDashboard">
+                <span class="sidebar-logo-text">EMEDX</span>
             </div>
-            <div v-if="hasCustomLogo" class="logo-container" @click="goToDashboard" style="cursor: pointer;">
-                <img class="custom-logo" :src="customLogoUrl" />
-            </div>
-            <div v-if="hasCustomLogo" class="logo-container">
-                <p class="powered-by-emedx">
-                powered by
-                <img src="../assets/logo.png" />
-                </p>
-            </div>
-            <div class="menu-list">
+
+            <!-- Nav -->
+            <nav class="sidebar-nav">
                 <ul id="menu-content" class="menu-content">
                     <!-- Dashboard -->
-                    <li class="nav-item" :class="{ 'nav-active': currentRoutePath === '/' }" @click="collapseAllDropdowns()">
-                        <router-link class="nav-link" to="/">
-                            <i class="fa fa-home fa-lg nav-icon"></i>
+                    <li class="nav-item">
+                        <router-link class="nav-link" to="/" :class="{ 'active': currentRoutePath === '/' }" @click.native="collapseAllDropdowns()">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                             <span class="nav-text">Dashboard</span>
                         </router-link>
                     </li>
-                    
-                    <!-- All local Studies with Labels as submenu -->
-                    <li class="nav-item nav-dropdown" 
-                        :class="{ 
-                            'nav-active': isRouteActive('/studies'),
-                            'nav-disabled': !canAccessFeatures
-                        }" 
-                        @click="!canAccessFeatures ? handleDisabledNavClick('studies') : handleStudiesNavClick()"
-                        :data-bs-toggle="canAccessFeatures ? 'collapse' : null"
-                        :data-bs-target="canAccessFeatures ? '#studies-labels-list' : null">
-                        <div class="nav-link">
-                            <i class="fa fa-x-ray fa-lg nav-icon"></i>
+
+                    <!-- All DICOM Studies -->
+                    <li class="nav-item nav-dropdown" :class="{ 'nav-disabled': !canAccessFeatures }">
+                        <div class="nav-link nav-toggle" :class="{ 'active': isRouteActive('/studies') }"
+                            @click="canAccessFeatures ? handleStudiesNavClick() : handleDisabledNavClick('studies')"
+                            :data-bs-toggle="canAccessFeatures ? 'collapse' : null"
+                            :data-bs-target="canAccessFeatures ? '#studies-labels-list' : null">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2v6h6"/><path d="M12 12H2V4a2 2 0 0 1 2-2h6"/><path d="M14 2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z"/></svg>
                             <span class="nav-text">{{ $t('local_studies') }}</span>
-                            <span v-if="hasLabels" class="nav-arrow"></span>
+                            <svg v-if="hasLabels" class="nav-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
                         </div>
                     </li>
                     <ul class="sub-menu collapse" id="studies-labels-list">
-                        <li @click.stop="goToAllStudies(); onLabelSelected(null)" :class="{ 'active': isRouteActive('/studies') && !labelFilters.length && !selectedLabel }">
-                            <i class="fa fa-list-ul sub-menu-icon"></i>
+                        <li @click.stop="goToAllStudies(); onLabelSelected(null)" :class="{ 'active': isRouteActive('/studies') && !labelFilters.length && !selectedLabel }" class="sub-item">
+                            <svg class="sub-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
                             <span>All Studies</span>
-                            <span class="study-count ms-auto">{{ displayedStudyCount }}</span>
+                            <span class="nav-badge">{{ displayedStudyCount }}</span>
                         </li>
-                        <li v-for="label in allLabels" :key="label"
-                            v-bind:class="{ 'active': isSelectedLabel(label) }" @click.stop="selectLabel(label)">
-                            <i class="fa fa-tag sub-menu-icon"></i>
+                        <li v-for="label in allLabels" :key="label" :class="{ 'active': isSelectedLabel(label) }" class="sub-item" @click.stop="selectLabel(label)">
+                            <svg class="sub-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
                             <span>{{ label }}</span>
-                            <span class="study-count ms-auto">{{ labelsStudyCount[label] != null ? labelsStudyCount[label] : '...' }}</span>
+                            <span class="nav-badge">{{ labelsStudyCount[label] != null ? labelsStudyCount[label] : '...' }}</span>
                         </li>
                     </ul>
-                    
-                    <li class="nav-item" 
-                        :class="{ 
-                            'nav-active': isRouteActive('/word-files'),
-                            'nav-disabled': !canAccessFeatures
-                        }" 
-                        @click="!canAccessFeatures ? handleDisabledNavClick('documents') : collapseAllDropdowns()">
-                        <router-link 
-                            v-if="canAccessFeatures"
-                            class="nav-link" 
-                            to="/word-files">
-                            <i class="fa fa-file-word fa-lg nav-icon"></i>
+
+                    <!-- All Documents -->
+                    <li class="nav-item" :class="{ 'nav-disabled': !canAccessFeatures }">
+                        <router-link v-if="canAccessFeatures" class="nav-link" to="/word-files" :class="{ 'active': isRouteActive('/word-files') }" @click.native="collapseAllDropdowns()">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 9.5 8 15h4l2-5.5"/><circle cx="12" cy="12" r="3"/></svg>
                             <span class="nav-text">All Documents</span>
                         </router-link>
-                        <div v-else class="nav-link" @click.prevent="handleDisabledNavClick('documents')">
-                            <i class="fa fa-file-word fa-lg nav-icon"></i>
+                        <div v-else class="nav-link" :class="{ 'active': false }" @click.prevent="handleDisabledNavClick('documents')">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 9.5 8 15h4l2-5.5"/><circle cx="12" cy="12" r="3"/></svg>
                             <span class="nav-text">All Documents</span>
                         </div>
                     </li>
-                    <li class="nav-item" 
-                        :class="{ 
-                            'nav-active': isRouteActive('/patients'),
-                            'nav-disabled': !canAccessFeatures
-                        }" 
-                        @click="!canAccessFeatures ? handleDisabledNavClick('patients') : collapseAllDropdowns()">
-                        <router-link 
-                            v-if="canAccessFeatures"
-                            class="nav-link" 
-                            to="/patients">
-                            <i class="fa fa-users fa-lg nav-icon"></i>
+
+                    <!-- All Patients -->
+                    <li class="nav-item" :class="{ 'nav-disabled': !canAccessFeatures }">
+                        <router-link v-if="canAccessFeatures" class="nav-link" to="/patients" :class="{ 'active': isRouteActive('/patients') }" @click.native="collapseAllDropdowns()">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                             <span class="nav-text">All Patients</span>
                         </router-link>
                         <div v-else class="nav-link" @click.prevent="handleDisabledNavClick('patients')">
-                            <i class="fa fa-users fa-lg nav-icon"></i>
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
                             <span class="nav-text">All Patients</span>
                         </div>
                     </li>
 
-                    <li v-if="uiOptions.EnableUpload" 
-                        class="nav-item nav-dropdown" 
-                        :class="{ 'nav-disabled': !canAccessFeatures }"
+                    <!-- Upload -->
+                    <li v-if="uiOptions.EnableUpload" class="nav-item nav-dropdown" :class="{ 'nav-disabled': !canAccessFeatures }"
                         :data-bs-toggle="canAccessFeatures ? 'collapse' : null"
                         :data-bs-target="canAccessFeatures ? '#upload-handler' : null"
                         @click="!canAccessFeatures ? handleDisabledNavClick('upload') : null">
-                        <div class="nav-link">
-                            <i class="fa fa-file-upload fa-lg nav-icon"></i>
+                        <div class="nav-link nav-toggle">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
                             <span class="nav-text">{{ $t('upload') }}</span>
-                            <span class="nav-arrow"></span>
+                            <svg class="nav-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
                         </div>
                     </li>
-                    <div v-if="uiOptions.EnableUpload" class="collapse" id="upload-handler">
+                    <div v-if="uiOptions.EnableUpload" class="collapse upload-panel" id="upload-handler">
                         <UploadHandler :showStudyDetails="true"/>
                     </div>
 
-                    <!-- Users Management (Owner only) -->
-                    <li v-if="showUsersNav" class="nav-item" :class="{ 'nav-active': isRouteActive('/users') }" @click="collapseAllDropdowns()">
-                        <router-link class="nav-link" to="/users">
-                            <i class="fa fa-users-cog fa-lg nav-icon"></i>
+                    <!-- User Management -->
+                    <li v-if="showUsersNav" class="nav-item">
+                        <router-link class="nav-link" to="/users" :class="{ 'active': isRouteActive('/users') }" @click.native="collapseAllDropdowns()">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="22" cy="11" r="2"/></svg>
                             <span class="nav-text">User Management</span>
                         </router-link>
                     </li>
-                    <!-- Hospital Management (Owner only) -->
-                    <li v-if="showUsersNav" class="nav-item" :class="{ 'nav-active': isRouteActive('/hospitals') }" @click="collapseAllDropdowns()">
-                        <router-link class="nav-link" to="/hospitals">
-                            <i class="fa fa-hospital fa-lg nav-icon"></i>
+                    <li v-if="showUsersNav" class="nav-item">
+                        <router-link class="nav-link" to="/hospitals" :class="{ 'active': isRouteActive('/hospitals') }" @click.native="collapseAllDropdowns()">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
                             <span class="nav-text">Hospital Management</span>
                         </router-link>
                     </li>
-                    <!-- Members Management (Admin with hospital only) -->
-                    <li v-if="showMembersNav" 
-                        class="nav-item" 
-                        :class="{ 
-                            'nav-active': isRouteActive('/members'),
-                            'nav-disabled': isHospitalExpired
-                        }" 
-                        @click="isHospitalExpired ? handleDisabledNavClick('members') : collapseAllDropdowns()">
-                        <router-link 
-                            v-if="!isHospitalExpired"
-                            class="nav-link" 
-                            to="/members">
-                            <i class="fa fa-user-friends fa-lg nav-icon"></i>
+                    <li v-if="showMembersNav" class="nav-item" :class="{ 'nav-disabled': isHospitalExpired }">
+                        <router-link v-if="!isHospitalExpired" class="nav-link" to="/members" :class="{ 'active': isRouteActive('/members') }" @click.native="collapseAllDropdowns()">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                             <span class="nav-text">Hospital Members</span>
                         </router-link>
                         <div v-else class="nav-link" @click.prevent="handleDisabledNavClick('members')">
-                            <i class="fa fa-user-friends fa-lg nav-icon"></i>
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
                             <span class="nav-text">Hospital Members</span>
                         </div>
                     </li>
 
-                    <li v-if="showDicomModalities" class="nav-item nav-dropdown" 
-                        :class="{ 'nav-active': isAnyModalitySelected() }"
-                        @click="collapseAllDropdowns('modalities-list')"
-                        data-bs-toggle="collapse"
-                        data-bs-target="#modalities-list">
-                        <div class="nav-link">
-                            <i class="fa fa-radiation fa-lg nav-icon"></i>
+                    <!-- DICOM Modalities -->
+                    <li v-if="showDicomModalities" class="nav-item nav-dropdown" :class="{ 'active': isAnyModalitySelected() }"
+                        data-bs-toggle="collapse" data-bs-target="#modalities-list" @click="collapseAllDropdowns('modalities-list')">
+                        <div class="nav-link nav-toggle">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
                             <span class="nav-text">{{ $t('dicom_modalities') }}</span>
-                            <span class="nav-arrow"></span>
+                            <svg class="nav-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
                         </div>
                     </li>
                     <ul v-if="showDicomModalities" class="sub-menu collapse" id="modalities-list" ref="modalities-collapsible">
-                        <li v-for="modality of Object.keys(queryableDicomModalities)" :key="modality"
-                            v-bind:class="{ 'active': this.isSelectedModality(modality) }" class="modality-item"
-                            @click="onModalitySelected(modality)">
-                            <router-link class="modality-link"
-                                :to="{ path: '/filtered-studies', query: { 'source-type': 'dicom', 'remote-source': modality } }">
-                                <i :class="getModalityIcon(modality)" class="modality-icon"></i>
-                                <span>{{ formatModalityName(modality) }}</span>
+                        <li v-for="modality of Object.keys(queryableDicomModalities)" :key="modality" :class="{ 'active': isSelectedModality(modality) }" class="modality-item sub-item" @click="onModalitySelected(modality)">
+                            <router-link class="sub-link" :to="{ path: '/filtered-studies', query: { 'source-type': 'dicom', 'remote-source': modality } }">
+                                <svg class="sub-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                                {{ formatModalityName(modality) }}
                             </router-link>
-                            <span v-if="this.isEchoRunning(modality)" class="ms-auto spinner-border spinner-border-sm"
-                                data-bs-toggle="tooltip" title="Checking connectivity"></span>
-                            <span v-else-if="this.isEchoSuccess(modality)" class="ms-auto"><i
-                                    class="bi bi-check2 text-success echo-status" data-bs-toggle="tooltip"
-                                    title="C-Echo succeeded"></i></span>
-                            <span v-else class="ms-auto"><i class="bi bi-x-lg text-danger echo-status" data-bs-toggle="tooltip"
-                                    title="C-Echo failed"></i></span>
+                            <span v-if="isEchoRunning(modality)" class="spinner-border spinner-border-sm" title="Checking connectivity"></span>
+                            <span v-else-if="isEchoSuccess(modality)" class="echo-ok" title="C-Echo succeeded">✓</span>
+                            <span v-else class="echo-fail" title="C-Echo failed">✕</span>
                         </li>
                     </ul>
 
-                    <li v-if="hasQueryableDicomWebServers" class="nav-item nav-dropdown" 
-                        :class="{ 'nav-active': isAnyDicomWebServerSelected() }"
-                        @click="collapseAllDropdowns('dicomweb-servers-list')"
-                        data-bs-toggle="collapse"
-                        data-bs-target="#dicomweb-servers-list">
-                        <div class="nav-link">
-                            <i class="fa fa-globe fa-lg nav-icon"></i>
+                    <!-- DICOM Web Servers -->
+                    <li v-if="hasQueryableDicomWebServers" class="nav-item nav-dropdown"
+                        data-bs-toggle="collapse" data-bs-target="#dicomweb-servers-list" @click="collapseAllDropdowns('dicomweb-servers-list')">
+                        <div class="nav-link nav-toggle" :class="{ 'active': isAnyDicomWebServerSelected() }">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                             <span class="nav-text">{{ $t('dicom_web_servers') }}</span>
-                            <span class="nav-arrow"></span>
+                            <svg class="nav-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
                         </div>
                     </li>
                     <ul class="sub-menu collapse" id="dicomweb-servers-list">
-                        <li v-for="server in queryableDicomWebServers" :key="server" 
-                            v-bind:class="{ 'active': this.isSelectedDicomWebServer(server) }"
-                            @click="onDicomWebServerSelected(server)">
-                            <router-link class="router-link"
-                                :to="{ path: '/filtered-studies', query: { 'source-type': 'dicom-web', 'remote-source': server } }">
-                                {{ server }}
-                            </router-link>
+                        <li v-for="server in queryableDicomWebServers" :key="server" :class="{ 'active': isSelectedDicomWebServer(server) }" class="sub-item" @click="onDicomWebServerSelected(server)">
+                            <router-link class="sub-link" :to="{ path: '/filtered-studies', query: { 'source-type': 'dicom-web', 'remote-source': server } }">{{ server }}</router-link>
                         </li>
                     </ul>
-                    
-                    <li v-if="hasAccessToWorklists" class="nav-item" :class="{ 'nav-active': isRouteActive('/worklists') }" @click="collapseAllDropdowns()">
-                        <router-link class="nav-link" to="/worklists">
-                            <i class="fa fa-list fa-lg nav-icon"></i>
+
+                    <!-- Worklists -->
+                    <li v-if="hasAccessToWorklists" class="nav-item">
+                        <router-link class="nav-link" to="/worklists" :class="{ 'active': isRouteActive('/worklists') }" @click.native="collapseAllDropdowns()">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
                             <span class="nav-text">{{ $t('worklists.side_bar_title') }}</span>
                         </router-link>
                     </li>
-                    
-                    <li v-if="hasAccessToSettings" class="nav-item nav-dropdown" 
-                        :class="{ 'nav-active': isRouteActive('/settings') || isRouteActive('/account-settings') }"
-                        @click="collapseAllDropdowns('settings-list')"
-                        data-bs-toggle="collapse"
-                        data-bs-target="#settings-list">
-                        <div class="nav-link">
-                            <i class="fa fa-cogs fa-lg nav-icon"></i>
+
+                    <!-- Settings -->
+                    <li v-if="hasAccessToSettings" class="nav-item nav-dropdown"
+                        data-bs-toggle="collapse" data-bs-target="#settings-list" @click="collapseAllDropdowns('settings-list')">
+                        <div class="nav-link nav-toggle" :class="{ 'active': isRouteActive('/settings') || isRouteActive('/account-settings') }">
+                            <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
                             <span class="nav-text">{{ $t('settings.title') }}</span>
-                            <span class="nav-arrow"></span>
+                            <svg class="nav-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
                         </div>
                     </li>
                     <ul class="sub-menu collapse" id="settings-list">
-                        <li v-if="showSystemInfoNav" :class="{ 'active': isRouteActive('/settings') }" @click="onSettingsSubmenuSelected()">
-                            <router-link class="router-link" to="/settings">{{ $t('settings.system_info') }}</router-link>
+                        <li v-if="showSystemInfoNav" :class="{ 'active': isRouteActive('/settings') }" class="sub-item" @click="onSettingsSubmenuSelected()">
+                            <router-link class="sub-link" to="/settings">{{ $t('settings.system_info') }}</router-link>
                         </li>
-                        <li :class="{ 'active': isRouteActive('/account-settings') }" @click="onSettingsSubmenuSelected()">
-                            <router-link class="router-link" to="/account-settings">Account Settings</router-link>
+                        <li :class="{ 'active': isRouteActive('/account-settings') }" class="sub-item" @click="onSettingsSubmenuSelected()">
+                            <router-link class="sub-link" to="/account-settings">Account Settings</router-link>
                         </li>
-                        <li v-if="showHospitalSettings" :class="{ 'active': isRouteActive('/hospital-settings') }" @click="onSettingsSubmenuSelected()">
-                            <router-link class="router-link" to="/hospital-settings">Hospital Settings</router-link>
-                        </li>
-                    </ul>
-                    
-                    <!-- Logout button (for auth-token based login) -->
-                    <li v-if="!hasLogout" class="nav-item" @click="handleLogout">
-                        <div class="nav-link">
-                            <i class="fa fa-sign-out-alt fa-lg nav-icon"></i>
-                            <span class="nav-text">Logout</span>
-                        </div>
-                    </li>
-                    
-                    <!-- Logout Confirmation Dialog -->
-                    <div v-if="showLogoutConfirm" class="logout-confirm-overlay" @click.self="showLogoutConfirm = false">
-                        <div class="logout-confirm-dialog">
-                            <div class="logout-confirm-content">
-                                <div class="logout-confirm-header">
-                                    <h5 class="logout-confirm-title">{{ $t('logout') }}</h5>
-                                </div>
-                                <div class="logout-confirm-body">
-                                    <p>{{ $t('logout_confirm_message') || 'Are you sure you want to log out?' }}</p>
-                                </div>
-                                <div class="logout-confirm-footer">
-                                    <button type="button" class="btn btn-secondary" @click="showLogoutConfirm = false">
-                                        {{ $t('cancel') || 'Cancel' }}
-                                    </button>
-                                    <button type="button" class="btn btn-primary" @click="hasLogout ? confirmLogout() : confirmHandleLogout()">
-                                        {{ $t('logout') }}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <li v-if="hasLogout" class="nav-item nav-dropdown" data-bs-toggle="collapse"
-                        data-bs-target="#profile-list">
-                        <div class="nav-link">
-                            <i class="fa fa-user fa-lg nav-icon"></i>
-                            <span class="nav-text" v-if="hasUserProfile">{{ userProfile.name }}</span>
-                            <span class="nav-text" v-if="!hasUserProfile">{{ $t('profile') }}</span>
-                            <span class="nav-arrow"></span>
-                        </div>
-                    </li>
-                    <ul class="sub-menu collapse" id="profile-list" ref="profile-collapsible">
-                        <li v-if="uiOptions.EnableChangePassword">
-                            <a v-bind:href="'#'" @click="changePassword($event)">
-                                <i class="fa fa-solid fa-key fa-lg menu-icon"></i>{{ $t('change_password') }}
-                            </a>
-                        </li>
-                        <li v-if="hasLogout">
-                            <a v-bind:href="'#'" @click="logout($event)">
-                                <i class="fa fa-solid fa-arrow-right-from-bracket fa-lg menu-icon"></i>{{ $t('logout') }}
-                            </a>
+                        <li v-if="showHospitalSettings" :class="{ 'active': isRouteActive('/hospital-settings') }" class="sub-item" @click="onSettingsSubmenuSelected()">
+                            <router-link class="sub-link" to="/hospital-settings">Hospital Settings</router-link>
                         </li>
                     </ul>
-                    
-                    <li v-if="hasJobs" class="nav-item">
-                        <div class="nav-link">
-                            <i class="fa fa-solid fa-bars-progress fa-lg nav-icon"></i>
-                            <span class="nav-text">{{ $t('my_jobs') }}</span>
-                        </div>
-                    </li>
-                    <div v-if="hasJobs" class="collapse show" id="jobs-list">
-                        <JobsList />
-                    </div>
                 </ul>
+            </nav>
+
+            <!-- Summary cards -->
+            <div class="sidebar-cards">
+                <div class="sidebar-card">
+                    <svg class="sidebar-card-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                    <p class="sidebar-card-value">{{ documentCountFormatted }}</p>
+                    <p class="sidebar-card-label">Documents</p>
+                </div>
+                <div class="sidebar-card">
+                    <svg class="sidebar-card-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    <p class="sidebar-card-value">{{ displayedStudyCount }}</p>
+                    <p class="sidebar-card-label">Studies</p>
+                </div>
             </div>
-            <div class="bottom-side-bar">
-                <div class="bottom-side-bar-button">
-                    <LanguagePicker />
+
+            <!-- Logout / Profile -->
+            <div class="sidebar-footer">
+                <div v-if="!hasLogout" class="nav-link logout-link" @click="handleLogout">
+                    <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                    <span class="nav-text">Logout</span>
+                </div>
+                <template v-else>
+                    <div class="nav-link nav-toggle logout-link" data-bs-toggle="collapse" data-bs-target="#profile-list">
+                        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <span class="nav-text">{{ hasUserProfile ? userProfile.name : $t('profile') }}</span>
+                        <svg class="nav-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                    </div>
+                    <ul class="sub-menu collapse" id="profile-list" ref="profile-collapsible">
+                        <li v-if="uiOptions.EnableChangePassword" class="sub-item"><a href="#" @click.prevent="changePassword($event)">{{ $t('change_password') }}</a></li>
+                        <li v-if="hasLogout" class="sub-item"><a href="#" @click.prevent="logout($event)">{{ $t('logout') }}</a></li>
+                    </ul>
+                </template>
+            </div>
+        </div>
+
+        <!-- Logout Confirmation Dialog -->
+        <div v-if="showLogoutConfirm" class="logout-confirm-overlay" @click.self="showLogoutConfirm = false">
+            <div class="logout-confirm-dialog">
+                <div class="logout-confirm-content">
+                    <div class="logout-confirm-header">
+                        <h5 class="logout-confirm-title">{{ $t('logout') }}</h5>
+                    </div>
+                    <div class="logout-confirm-body">
+                        <p>{{ $t('logout_confirm_message') || 'Are you sure you want to log out?' }}</p>
+                    </div>
+                    <div class="logout-confirm-footer">
+                        <button type="button" class="btn btn-secondary" @click="showLogoutConfirm = false">{{ $t('cancel') || 'Cancel' }}</button>
+                        <button type="button" class="btn btn-primary" @click="hasLogout ? confirmLogout() : confirmHandleLogout()">{{ $t('logout') }}</button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+
+        <!-- Jobs (if any) -->
+        <div v-if="hasJobs" class="collapse show" id="jobs-list"><JobsList /></div>
+    </aside>
 </template>
 <style scoped>
-/* Base sidebar styles */
-.nav-side-menu {
-    font-family: verdana;
-    font-size: 12px;
-    font-weight: 200;
-    background: linear-gradient(180deg, var(--nav-side-bg-color-gradient-start) 0%, var(--nav-side-bg-color-gradient-end) 100%);
-    color: var(--nav-side-color);
+/* Disable nav expand/collapse animation */
+.sidebar-modern .collapse,
+.sidebar-modern .collapsing {
+  transition: none !important;
 }
 
-.nav-side-content {
+/* Modern sidebar – uses project primary font (same as modern project) */
+.sidebar-modern {
+    font-family: var(--sidebar-font);
+    font-size: 0.875rem;
+    font-weight: 400;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-foreground);
+    width: var(--nav-bar-width, 260px);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.sidebar-modern::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+.sidebar-inner {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    overflow: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.sidebar-inner::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+.sidebar-header {
+    padding: 1.25rem 1rem;
+    cursor: pointer;
 }
 
-.logo-container {
-    padding: 10px 0;
-    text-align: center;
+.sidebar-logo-text {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--sidebar-foreground);
 }
 
-.emedx-logo {
-    height: 80px;
-    width: 100%;
-    object-fit: contain;
+.sidebar-nav {
+    flex: 1;
+    padding: 0 0.75rem;
+    overflow-y: auto;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
 }
-
-.powered-by-emedx {
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.7);
-    margin-top: 4px;
-}
-
-.powered-by-emedx > img {
-    max-width: 50%;
-    height: auto;
-    max-height: 20px;
-    margin-left: 4px;
-    vertical-align: middle;
-}
-
-.custom-logo {
-    padding: 4px;
-    max-width: 90%;
-    height: auto;
-}
-
-/* Menu list - no horizontal padding */
-.menu-list {
-    font-size: 14px;
+.sidebar-nav::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
 }
 
 .menu-content {
     list-style: none;
     padding: 0;
     margin: 0;
-    display: block !important;
 }
 
-/* Nav item - consistent height, no horizontal padding/margin */
 .nav-item {
     list-style: none;
-    margin: 0;
+    margin: 0 0 2px;
     padding: 0;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    cursor: pointer;
-    transition: background-color 0.2s ease;
 }
 
-.nav-item:hover {
-    background-color: var(--nav-side-selected-bg-color, rgba(255, 255, 255, 0.1));
-}
-
-/* Active nav state - left border indicator, no shadow */
-.nav-item.nav-active {
-    background-color: var(--nav-side-selected-bg-color, rgba(255, 255, 255, 0.15));
-    border-left: 3px solid var(--nav-side-active-border-color, #4a90e2);
-}
-
-.nav-item.nav-active .nav-link {
-    padding-left: 12px; /* Compensate for border */
-}
-
-/* Disabled nav item */
-.nav-item.nav-disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    pointer-events: auto;
-}
-
-.nav-item.nav-disabled .nav-link {
-    cursor: not-allowed;
-    pointer-events: auto;
-}
-
-.nav-item.nav-disabled:hover {
-    opacity: 0.6;
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.nav-item.nav-disabled .nav-icon,
-.nav-item.nav-disabled .nav-text {
-    opacity: 0.6;
-}
-
-/* Nav link - full width */
 .nav-link {
     display: flex;
     align-items: center;
+    gap: 0.75rem;
     width: 100%;
-    height: 100%;
-    padding: 0 15px;
+    padding: 0.625rem 1rem;
+    border-radius: 0.5rem;
     text-decoration: none;
-    color: var(--nav-side-color, #ffffff);
+    color: var(--sidebar-foreground);
+    opacity: 0.85;
+    transition: background-color 0.15s, color 0.15s, opacity 0.15s;
 }
 
-/* Nav icon - fixed width */
+.nav-link:hover {
+    background-color: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+    opacity: 1;
+}
+
+.nav-link.active {
+    background-color: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+    opacity: 1;
+    font-weight: 500;
+}
+
 .nav-icon {
-    width: 24px;
-    min-width: 24px;
-    text-align: center;
-    margin-right: 12px;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    opacity: 0.9;
 }
 
-/* Nav text */
 .nav-text {
     flex: 1;
     white-space: nowrap;
@@ -1076,119 +995,146 @@ export default {
     text-overflow: ellipsis;
 }
 
-/* Nav badge (count) */
-.nav-badge {
-    font-size: 11px;
-    opacity: 0.8;
-    margin-left: auto;
-    padding-left: 10px;
-    padding-right: 10px;
-}
-
-/* Nav arrow for dropdowns */
-.nav-arrow::before {
-    font-family: "Font Awesome 5 Free";
-    font-weight: 900;
-    content: "\f0d7";
-    font-size: 10px;
+.nav-chevron {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
     opacity: 0.7;
 }
 
-/* Sub-menu styles */
+.nav-toggle {
+    cursor: pointer;
+    border: none;
+    background: none;
+}
+
+.nav-disabled .nav-link {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: auto;
+}
+
+.nav-disabled .nav-link:hover {
+    opacity: 0.6;
+    background-color: transparent;
+}
+
+/* Sub-menu */
 .sub-menu {
     list-style: none;
-    padding: 0;
-    margin: 0;
-    background-color: var(--nav-side-sub-bg-color, rgba(0, 0, 0, 0.1));
+    padding: 0 0 0 0.5rem;
+    margin: 0 0 4px 1rem;
+    border-left: 1px solid var(--sidebar-border);
 }
 
-.sub-menu li {
+.sub-item {
     display: flex;
     align-items: center;
-    height: 40px;
-    padding: 0 15px 0 40px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.15s, color 0.15s;
 }
 
-.sub-menu li:hover {
-    background-color: var(--nav-side-selected-bg-color, rgba(255, 255, 255, 0.1));
+.sub-item:hover {
+    background-color: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
 }
 
-.sub-menu li.active {
-    background-color: var(--nav-side-selected-bg-color, rgba(255, 255, 255, 0.15));
-    border-left: 3px solid var(--nav-side-active-border-color, #4a90e2);
-    padding-left: 37px;
+.sub-item.active {
+    background-color: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
 }
 
-.sub-menu li a,
-.sub-menu .router-link {
-    color: var(--nav-side-color, #ffffff);
+.sub-item a,
+.sub-item .sub-link {
+    color: inherit;
     text-decoration: none;
     flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-/* Sub-menu icon */
-.sub-menu-icon {
+.sub-icon {
+    flex-shrink: 0;
     width: 16px;
-    margin-right: 10px;
-    text-align: center;
-    font-size: 12px;
-    opacity: 0.8;
+    height: 16px;
+    opacity: 0.85;
 }
 
-/* Modality item styles */
-.modality-item {
-    display: flex;
-    align-items: center;
+.nav-badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+    margin-left: auto;
 }
 
-.modality-link {
-    display: flex;
-    align-items: center;
+/* Upload panel */
+.upload-panel {
+    margin: 0.5rem 0 0.75rem;
+}
+
+.upload-drop-zone {
+    background: var(--sidebar-accent);
+}
+
+/* Modality item */
+.modality-item .sub-link {
     flex: 1;
-    color: var(--nav-side-color, #ffffff);
-    text-decoration: none;
 }
 
-.modality-icon {
-    width: 20px;
-    margin-right: 10px;
+.echo-ok { color: #22c55e; font-size: 14px; }
+.echo-fail { color: #ef4444; font-size: 14px; }
+
+/* Summary cards */
+.sidebar-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    padding: 1rem 1rem 1.25rem;
+    border-top: 1px solid var(--sidebar-border);
+}
+
+.sidebar-card {
+    background: var(--sidebar-card-bg);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
     text-align: center;
 }
 
-/* Study count in sidebar */
-.study-count {
-    font-size: 11px;
-    opacity: 0.8;
-}
-
-/* Echo status */
-.echo-status {
-    font-size: 14px;
-}
-
-/* Menu icon for sub-menus */
-.menu-icon {
+.sidebar-card-icon {
     width: 20px;
-    margin-right: 10px;
+    height: 20px;
+    margin: 0 auto 0.25rem;
+    display: block;
+    opacity: 0.75;
 }
 
-/* Bottom sidebar */
-.bottom-side-bar {
-    flex: 1;
-    align-self: flex-end;
-    width: 100%;
-    position: relative;
-    min-height: 5rem;
+.sidebar-card-value {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0 0 2px;
 }
 
-.bottom-side-bar-button {
-    position: absolute;
-    bottom: 1rem;
-    width: 100%;
-    height: 3rem;
+.sidebar-card-label {
+    font-size: 0.75rem;
+    opacity: 0.75;
+    margin: 0;
+}
+
+/* Footer */
+.sidebar-footer {
+    padding: 1rem 1rem 1.5rem;
+    border-top: 1px solid var(--sidebar-border);
+}
+
+.logout-link {
+    border-radius: 0.5rem;
 }
 
 /* Logout Confirmation Dialog */

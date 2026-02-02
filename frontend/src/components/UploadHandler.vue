@@ -233,6 +233,14 @@ export default {
                 this.dicomExpanded = false; // Close DICOM section
             }
         },
+        triggerDicomUpload() {
+            if (this.uploadDisabled) return;
+            document.getElementById('filesUpload')?.click();
+        },
+        triggerDocumentUpload() {
+            if (this.uploadDisabled) return;
+            document.getElementById('wordFilesUpload')?.click();
+        },
         openPatientModal() {
             this.showPatientModal = true;
             this.patientNotFound = false;
@@ -496,65 +504,37 @@ export default {
 </script>
 
 <template>
-    <div>
-        <div v-if="!disabledAfterUpload" class="upload-handler-drop-zone" :class="{'upload-handler-drop-zone-disabled': uploadDisabled}"  @drop="this.onDrop" @dragover="this.onDragOver" :disabled="uploadDisabled">
-            <div v-if="uploadDisabled" class="upload-disabled-message mb-3">{{ uploadDisabledMessage }}</div>
-            <div v-if="!uploadDisabled" class="upload-drag-text">Drop files here or</div>
-            
-            <!-- DICOM Upload Section -->
-            <div class="upload-section-item">
-                <div class="upload-section-header" @click="toggleDicomSection">
-                    <span class="upload-section-title">Upload DICOM</span>
-                </div>
-                <div class="upload-section-content" :class="{'expanded': dicomExpanded}">
-                    <div class="upload-buttons">
-                        <label class="upload-btn" :class="{'disabled': uploadDisabled}">
-                            <input :disabled="uploadDisabled" type="file" style="display: none;" id="foldersUpload" required
-                                multiple directory webkitdirectory allowdirs>
-                            <span>Select Folder</span>
-                        </label>
-                        <label class="upload-btn" :class="{'disabled': uploadDisabled}">
-                            <input :disabled="uploadDisabled" type="file" style="display: none;" id="filesUpload" required multiple>
-                            <span>Select Files</span>
-                        </label>
+    <div class="upload-modern">
+        <div v-if="!disabledAfterUpload" class="upload-modern-wrapper" :class="{'upload-modern-disabled': uploadDisabled}">
+            <!-- Drop zone (modern project style) -->
+            <div
+                class="upload-drop-zone"
+                :class="{'upload-drop-zone-disabled': uploadDisabled}"
+                @drop="onDrop"
+                @dragover="onDragOver"
+            >
+                <input type="file" style="display: none;" id="foldersUpload" required multiple directory webkitdirectory allowdirs>
+                <input type="file" style="display: none;" id="filesUpload" required multiple>
+                <input type="file" style="display: none;" id="wordFilesUpload"
+                    accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    multiple @change="handleWordFilesChange">
+
+                <div v-if="uploadDisabled" class="upload-disabled-message">{{ uploadDisabledMessage }}</div>
+                <template v-else>
+                    <svg class="upload-drop-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><polyline points="12 11 12 17"/><line x1="9" x2="15" y1="14" y2="14"/></svg>
+                    <p class="upload-drop-hint">Drop files here or</p>
+                    <button type="button" class="upload-dicom-btn" @click="triggerDicomUpload">Upload DICOM</button>
+                    <div class="upload-links">
+                        <label class="upload-link" for="foldersUpload">Select Folder</label>
+                        <span class="upload-link-sep">·</span>
+                        <label class="upload-link" for="filesUpload">Select Files</label>
                     </div>
-                </div>
+                </template>
             </div>
-            
-            <!-- Document Upload Section -->
-            <div class="upload-section-item">
-                <div class="upload-section-divider"></div>
-                <div class="upload-section-header" @click="toggleDocumentSection">
-                    <span class="upload-section-title">Upload Document</span>
-                </div>
-                <div class="upload-section-content" :class="{'expanded': documentExpanded}">
-                    <!-- Document Upload Progress -->
-                    <div v-if="isUploadingDocument" class="document-upload-progress">
-                        <div class="progress-info">
-                            <span class="progress-label">Uploading document...</span>
-                            <span class="progress-percent">{{ documentUploadProgress }}%</span>
-                        </div>
-                        <div class="progress-bar-container">
-                            <div class="progress-bar-fill" :style="{ width: documentUploadProgress + '%' }"></div>
-                        </div>
-                    </div>
-                    
-                    <div v-else class="upload-buttons">
-                        <label class="upload-btn" :class="{'disabled': uploadDisabled}">
-                            <input :disabled="uploadDisabled" type="file" style="display: none;" id="wordFoldersUpload" 
-                                accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
-                                multiple directory webkitdirectory allowdirs>
-                            <span>Select Folder</span>
-                        </label>
-                        <label class="upload-btn" :class="{'disabled': uploadDisabled}">
-                            <input :disabled="uploadDisabled" type="file" style="display: none;" id="wordFilesUpload" 
-                                accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
-                                multiple @change="handleWordFilesChange">
-                            <span>Select Files</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
+            <!-- Upload Document button -->
+            <button type="button" class="upload-document-btn" :disabled="uploadDisabled" @click="triggerDocumentUpload">
+                Upload Document
+            </button>
         </div>
         
         <!-- Patient Info Modal -->
@@ -629,99 +609,131 @@ export default {
     flex-direction: column-reverse;
 }
 
-.upload-handler-drop-zone {
-    margin: 10px 15px;
-    border-color: rgba(255, 255, 255, 0.3);
-    border-style: solid;
-    border-width: 1px;
-    border-radius: 10px;
-    background-color: var(--nav-side-bg-color-gradient-end, #2c3e50);
-    color: var(--nav-side-color, #ffffff);
-    padding: 15px;
+/* Modern project upload form style - match exactly */
+.upload-modern {
+    margin: 0;
+    font-family: 'Geist', 'Geist Fallback', system-ui, sans-serif;
+    font-size: 0.875rem;
 }
 
-.upload-handler-drop-zone-disabled {
+.upload-modern-wrapper {
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--sidebar-border, rgba(255, 255, 255, 0.2));
+    border-radius: 0.5rem;
+    color: var(--sidebar-foreground, #fff);
+}
+
+.upload-modern-disabled {
     opacity: 0.6;
-    border-color: #ff0000d2;
+    pointer-events: none;
+}
+
+/* Inner drop zone - dark gray #282828, dashed border (modern project) */
+.upload-drop-zone {
+    border: 2px dashed var(--sidebar-border, rgba(255, 255, 255, 0.25));
+    border-radius: 0.5rem;
+    padding: 1rem;
+    text-align: center;
+    margin-bottom: 0.75rem;
+    background: transparent;
+    cursor: pointer;
+}
+
+.upload-drop-zone-disabled {
     cursor: not-allowed;
+    border-color: #ef4444;
 }
 
 .upload-disabled-message {
     text-align: center;
-    color: var(--nav-side-color, #ffffff);
+    color: var(--sidebar-foreground);
+    font-size: 0.875rem;
 }
 
-.upload-drag-text {
-    text-align: center;
-    color: var(--nav-side-color, #ffffff);
-    font-size: 14px;
-    font-weight: 400;
-    margin-bottom: 10px;
+/* Folder with upward arrow icon - light gray */
+.upload-drop-icon {
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 0.5rem;
+    display: block;
+    opacity: 0.5;
+    color: var(--sidebar-foreground, #fff);
 }
 
-.upload-section-item {
-    margin: 5px 0;
+.upload-drop-hint {
+    font-size: 0.875rem;
+    color: var(--sidebar-foreground, #fff);
+    opacity: 0.7;
+    margin: 0 0 0.5rem;
 }
 
-.upload-section-divider {
-    height: 1px;
-    background-color: rgba(255, 255, 255, 0.2);
-    margin: 8px 0;
+/* Upload DICOM button - slightly lighter dark gray bg, white bold text, gently rounded (modern project) */
+.upload-dicom-btn {
+    display: inline-block;
+    padding: 0.375rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #ffffff;
+    background: #3f3f3f;
+    border: none;
+    border-radius: 9999px;
+    cursor: pointer;
+    margin: 0.5rem 0 0.75rem;
+    transition: background 0.15s;
 }
 
-.upload-section-header {
+.upload-dicom-btn:hover {
+    background: #4a4a4a;
+}
+
+/* Select Folder / Select Files - light gray, underlined, gap-4 (modern project) */
+.upload-links {
     display: flex;
     justify-content: center;
     align-items: center;
+    gap: 1rem;
+    font-size: 0.75rem;
+}
+
+.upload-link {
+    color: var(--sidebar-foreground, #fff);
+    opacity: 0.7;
+    text-decoration: underline;
     cursor: pointer;
-    padding: 6px 0;
-    user-select: none;
-}
-
-.upload-section-title {
-    font-weight: 400;
-    font-size: 14px;
-    color: var(--nav-side-color, #ffffff);
-    text-align: center;
-}
-
-.upload-section-content {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease-out;
-}
-
-.upload-section-content.expanded {
-    max-height: 500px;
-    transition: max-height 0.3s ease-in;
-}
-
-.upload-buttons {
-    display: flex;
-    flex-direction: row;
-    justify-content: center;
-    gap: 8px;
-    padding: 8px 0;
-}
-
-.upload-btn {
-    background-color: transparent;
+    background: none;
     border: none;
-    color: var(--nav-side-color, #ffffff);
-    padding: 6px 12px;
-    border-radius: 4px;
+    padding: 0;
+    font: inherit;
+}
+
+.upload-link:hover {
+    opacity: 1;
+}
+
+.upload-link-sep {
+    opacity: 0.5;
+    color: var(--sidebar-foreground, #fff);
+}
+
+.upload-document-btn {
+    width: 100%;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--sidebar-foreground, #fff);
+    background: transparent;
+    border: 1px solid var(--sidebar-border, rgba(255, 255, 255, 0.2));
+    border-radius: 9999px;
     cursor: pointer;
-    text-align: center;
-    font-size: 12px;
-    transition: all 0.2s ease;
-    display: inline-block;
+    transition: background 0.15s, border-color 0.15s;
 }
 
-.upload-btn:hover:not(.disabled) {
-    background-color: rgba(255, 255, 255, 0.15);
+.upload-document-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
 }
 
-.upload-btn.disabled {
+.upload-document-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }

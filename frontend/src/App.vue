@@ -74,7 +74,7 @@ export default {
 
 <style>
 #app {
-    font-family: Avenir, Helvetica, Arial, sans-serif;
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-align: center;
@@ -86,11 +86,19 @@ export default {
     top: 0px;
     width: var(--nav-bar-width);
     height: 100%;
-    background: linear-gradient(180deg, var(--nav-side-bg-color-gradient-start) 0%, var(--nav-side-bg-color-gradient-end) 100%);
-    color: var(--nav-side-color);
+    background: var(--sidebar-bg, var(--nav-side-bg-color));
+    color: var(--sidebar-foreground, var(--nav-side-color));
     box-shadow: 4px 0 15px rgba(0, 0, 0, 0.1);
     transition: box-shadow 0.3s ease, transform 0.3s ease;
     z-index: 1000;
+    /* Hide scrollbar in all cases – never show */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+}
+.nav-side-layout::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
 }
 
 .nav-side-layout .toggle-btn {
@@ -108,32 +116,10 @@ export default {
 
 .main-content {
     min-height: 100vh;
-    background: 
-        linear-gradient(180deg, rgba(249, 250, 251, 0.92) 0%, rgba(243, 244, 246, 0.92) 100%),
-        url('https://images.unsplash.com/photo-1559757148-5c350d0d3c56?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
+    background: var(--content-background);
+    color: var(--content-foreground);
     position: relative;
     padding: 24px;
-}
-
-.main-content::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(249, 250, 251, 0.65) 100%);
-    pointer-events: none;
-    z-index: 0;
-}
-
-.main-content > * {
-    position: relative;
-    z-index: 1;
 }
 
 </style>

@@ -42,6 +42,18 @@ therefore, it overrides all other definitions */
     --nav-side-submenu-color: rgb(255, 255, 255);
     --nav-side-active-border-color: #d19b3d;
 
+    /* Modern sidebar theme (from frontend/modern-project .dark) */
+    --sidebar-bg: oklch(0.12 0.01 60);
+    --sidebar-foreground: oklch(0.95 0.005 80);
+    --sidebar-primary: oklch(0.95 0.005 80);
+    --sidebar-primary-foreground: oklch(0.15 0.01 60);
+    --sidebar-accent: oklch(0.22 0.01 60);
+    --sidebar-accent-foreground: oklch(0.95 0.005 80);
+    --sidebar-border: oklch(0.28 0.01 60);
+    --sidebar-ring: oklch(0.50 0.01 60);
+    --sidebar-card-bg: oklch(0.18 0.01 60);
+    --sidebar-font: var(--font-sans);
+
     --label-bg-color: rgb(61, 116, 141);
 
     --form-placeholder-color: #888;

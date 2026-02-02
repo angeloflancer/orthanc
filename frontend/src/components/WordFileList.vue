@@ -14,7 +14,6 @@ export default {
             selectedWordFileIds: [],
             allSelected: false,
             isPartialSelected: false,
-            expandedWordFileId: null,
             // Search filters
             filterFileName: '',
             filterPatientId: '',
@@ -22,6 +21,12 @@ export default {
             filterHospital: '',
             filterUploadedBy: '',
             filterUploadedAt: null,
+            filterType: '', // '' | 'PDF' | 'DOCX' | 'XLSX' | 'OTHER'
+            viewMode: 'list', // 'list' | 'grid'
+            openRowMenuId: null, // id of row whose actions dropdown is open
+            // Pagination (match reference: 5 per page)
+            pageSize: 5,
+            currentPage: 1,
             // Document viewer modal
             showDocumentViewer: false,
             viewingDocument: null,
@@ -71,8 +76,14 @@ export default {
         filterUploadedAt() {
             this.applyFilters();
         },
+        filterType() {
+            this.applyFilters();
+        },
         wordFiles() {
             this.applyFilters();
+        },
+        currentPage() {
+            this.updateSelectAll();
         },
         '$route'(to, from) {
             // Only handle route changes if we're on the word-files route
@@ -104,13 +115,7 @@ export default {
                 if (queryChanged || (from && from.path !== to.path)) {
                     this.loadWordFiles();
                 } else if (this.highlightedDocumentId && !this.loading) {
-                    // If only documentId was added and data is already loaded, just scroll to it
-                    this.$nextTick(() => {
-                        this.scrollToDocument(this.highlightedDocumentId);
-                        if (!this.isExpanded(this.highlightedDocumentId)) {
-                            this.expandedWordFileId = this.highlightedDocumentId;
-                        }
-                    });
+                    this.$nextTick(() => this.scrollToDocument(this.highlightedDocumentId));
                 }
             }
         }
@@ -124,6 +129,35 @@ export default {
         },
         isDoctor() {
             return this.userRole === 'doctor';
+        },
+        totalPages() {
+            const n = this.filteredWordFiles.length;
+            return n === 0 ? 1 : Math.ceil(n / this.pageSize);
+        },
+        paginatedWordFiles() {
+            const start = (this.currentPage - 1) * this.pageSize;
+            return this.filteredWordFiles.slice(start, start + this.pageSize);
+        },
+        paginationStart() {
+            if (this.filteredWordFiles.length === 0) return 0;
+            return (this.currentPage - 1) * this.pageSize + 1;
+        },
+        paginationEnd() {
+            return Math.min(this.currentPage * this.pageSize, this.filteredWordFiles.length);
+        },
+        paginationPageNumbers() {
+            const total = this.totalPages;
+            if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+            const p = this.currentPage;
+            const pages = [];
+            pages.push(1);
+            if (p > 3) pages.push('...');
+            for (let i = Math.max(2, p - 1); i <= Math.min(total - 1, p + 1); i++) {
+                if (!pages.includes(i)) pages.push(i);
+            }
+            if (p < total - 2) pages.push('...');
+            if (total > 1) pages.push(total);
+            return pages;
         }
     },
     methods: {
@@ -135,15 +169,8 @@ export default {
                     this.wordFiles = response.wordFiles || [];
                     this.applyFilters();
                     
-                    // If there's a highlighted document, scroll to it and expand it
                     if (this.highlightedDocumentId) {
-                        this.$nextTick(() => {
-                            this.scrollToDocument(this.highlightedDocumentId);
-                            // Auto-expand the highlighted document
-                            if (!this.isExpanded(this.highlightedDocumentId)) {
-                                this.expandedWordFileId = this.highlightedDocumentId;
-                            }
-                        });
+                        this.$nextTick(() => this.scrollToDocument(this.highlightedDocumentId));
                     }
                 }
             } catch (error) {
@@ -227,8 +254,11 @@ export default {
                     });
                 }
             }
-            
+            if (this.filterType) {
+                filtered = filtered.filter(file => this.getFileType(file) === this.filterType);
+            }
             this.filteredWordFiles = filtered;
+            this.currentPage = 1;
 
             const temp = "";
             console.log('filteredWordFiles', this.filteredWordFiles, temp.length > 1 ? !(temp[1].hospitalName.length == 0) : '');
@@ -248,16 +278,37 @@ export default {
             this.filterHospital = '';
             this.filterUploadedBy = '';
             this.filterUploadedAt = null;
+            this.filterType = '';
         },
-        toggleExpand(id) {
-            if (this.expandedWordFileId === id) {
-                this.expandedWordFileId = null;
-            } else {
-                this.expandedWordFileId = id;
-            }
+        getFileType(file) {
+            const name = (file.originalFileName || '').toUpperCase();
+            if (name.endsWith('.PDF')) return 'PDF';
+            if (name.endsWith('.DOCX') || name.endsWith('.DOC')) return 'DOCX';
+            if (name.endsWith('.XLSX') || name.endsWith('.XLS')) return 'XLSX';
+            return 'OTHER';
         },
-        isExpanded(id) {
-            return this.expandedWordFileId === id;
+        formatDateShort(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        },
+        fileIconSvg(type) {
+            const icons = {
+                PDF: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M10 13H8"/><path d="M16 17h-6"/><path d="M14 13h-4"/></svg>',
+                DOCX: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>',
+                XLSX: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 15h2"/><path d="M14 11h2"/><path d="M8 11h2"/><path d="M14 15h2"/></svg>',
+                OTHER: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="5" y="2" rx="2"/><path d="M15 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9h4"/><path d="M10 13h4"/><path d="M10 17h2"/></svg>'
+            };
+            return icons[type] || icons.OTHER;
+        },
+        closeRowMenu() {
+            this.openRowMenuId = null;
+        },
+        toggleRowMenu(id) {
+            this.openRowMenuId = this.openRowMenuId === id ? null : id;
         },
         async deleteWordFile(id) {
             if (!confirm('Are you sure you want to delete this document?')) {
@@ -270,9 +321,7 @@ export default {
                 if (response && (response.success || response.message)) {
                     this.wordFiles = this.wordFiles.filter(file => file.id !== id);
                     this.filteredWordFiles = this.filteredWordFiles.filter(file => file.id !== id);
-                    if (this.expandedWordFileId === id) {
-                        this.expandedWordFileId = null;
-                    }
+                    this.openRowMenuId = null;
                     this.messageBus.emit('show-toast', 'Document deleted successfully');
                 } else {
                     throw new Error('Unexpected response format');
@@ -298,7 +347,7 @@ export default {
                 }
                 this.wordFiles = this.wordFiles.filter(file => !this.selectedWordFileIds.includes(file.id));
                 this.selectedWordFileIds = [];
-                this.expandedWordFileId = null;
+                this.openRowMenuId = null;
                 this.messageBus.emit('show-toast', 'Selected documents deleted successfully');
             } catch (error) {
                 console.error('Error deleting word files:', error);
@@ -450,10 +499,12 @@ export default {
             }
         },
         updateSelectAll() {
-            if (this.selectedWordFileIds.length == 0) {
+            const pageIds = this.paginatedWordFiles.map(f => f.id);
+            const selectedOnPage = pageIds.filter(id => this.selectedWordFileIds.includes(id));
+            if (selectedOnPage.length === 0) {
                 this.allSelected = false;
                 this.isPartialSelected = false;
-            } else if (this.selectedWordFileIds.length == this.filteredWordFiles.length) {
+            } else if (selectedOnPage.length === pageIds.length) {
                 this.allSelected = true;
                 this.isPartialSelected = false;
             } else {
@@ -462,10 +513,14 @@ export default {
             }
         },
         clickSelectAll() {
-            if (this.allSelected == '' || !this.allSelected) {
-                this.selectedWordFileIds = this.filteredWordFiles.map(f => f.id);
+            const pageIds = this.paginatedWordFiles.map(f => f.id);
+            const allPageSelected = pageIds.every(id => this.selectedWordFileIds.includes(id));
+            if (allPageSelected) {
+                this.selectedWordFileIds = this.selectedWordFileIds.filter(id => !pageIds.includes(id));
             } else {
-                this.selectedWordFileIds = [];
+                pageIds.forEach(id => {
+                    if (!this.selectedWordFileIds.includes(id)) this.selectedWordFileIds.push(id);
+                });
             }
             this.updateSelectAll();
         },
@@ -511,291 +566,182 @@ export default {
 </script>
 
 <template>
-    <div class="table-container">
-        <table class="table table-sm study-table table-borderless">
-            <thead class="sticky-top">
-                <tr class="study-column-titles">
-                    <th width="3%" scope="col"></th>
-                    <th width="20%" class="study-table-title" scope="col">File Name</th>
-                    <th width="10%" class="study-table-title" scope="col">Patient ID</th>
-                    <th width="15%" class="study-table-title" scope="col">Patient Name</th>
-                    <th width="12%" class="study-table-title" scope="col">Hospital</th>
-                    <th width="12%" class="study-table-title" scope="col">Uploaded By</th>
-                    <th width="15%" class="study-table-title" scope="col">Uploaded At</th>
-                    <th width="7%" class="study-table-title" scope="col">Delete</th>
-                </tr>
-                <tr class="study-table-filters">
-                    <th scope="col">
-                        <button @click="clearFilters" type="button" class="clear-filter-btn"
-                            data-bs-toggle="tooltip" title="Clear filter">
-                            <i class="fa-regular fa-circle-xmark"></i>
-                        </button>
-                    </th>
-                    <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterFileName" placeholder="Search...">
-                    </th>
-                    <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterPatientId" placeholder="Search...">
-                    </th>
-                    <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterPatientName" placeholder="Search...">
-                    </th>
-                    <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterHospital" placeholder="Search hospital...">
-                    </th>
-                    <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterUploadedBy" placeholder="Search...">
-                    </th>
-                    <th>
-                        <Datepicker v-model="filterUploadedAt" :enable-time-picker="false" range
-                            text-input arrow-navigation hide-input-icon placeholder="Select date range">
-                        </Datepicker>
-                    </th>
-                    <th></th>
-                </tr>
-                <tr class="study-table-actions">
-                    <th width="3%" scope="col">
-                        <div class="form-check" style="margin-left: 0.5rem">
-                            <input class="form-check-input" type="checkbox" v-model="allSelected"
-                                :indeterminate="isPartialSelected" @click="clickSelectAll">
-                            <span style="font-weight: 400; font-size: small;">{{ selectedWordFileIds.length }}</span>
-                        </div>
-                    </th>
-                    <th width="97%" colspan="7" scope="col">
-                        <div class="container px-0">
-                            <div class="row g-1">
-                                <div class="col-6 study-list-bulk-buttons">
-                                    <button class="btn btn-sm btn-secondary m-1" @click="downloadSelectedWordFiles" 
-                                        :disabled="!hasSelection" title="Download">
-                                        <i class="bi bi-download"></i> Download
-                                    </button>
-                                    <button class="btn btn-sm btn-secondary m-1" @click="printSelectedWordFiles" 
-                                        :disabled="!hasSelection" title="Print">
-                                        <i class="bi bi-printer"></i> Print
-                                    </button>
-                                    <button class="btn btn-sm btn-danger m-1" @click="deleteSelectedWordFiles" 
-                                        :disabled="!hasSelection || isDoctor" title="Delete">
-                                        <i class="bi bi-trash"></i> Delete
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </th>
-                </tr>
-            </thead>
-            <tbody v-if="loading">
-                <tr>
-                    <td colspan="7" class="text-center" style="padding: 60px 20px;">
-                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-3 text-muted">Loading documents...</p>
-                    </td>
-                </tr>
-            </tbody>
-            <tbody v-else-if="isEmpty" class="empty-state-tbody">
-                <tr class="empty-state-row">
-                    <td colspan="7">
-                        <div class="empty-state">
-                            <div class="empty-state-icon">
-                                <i class="bi bi-file-earmark-x"></i>
-                            </div>
-                            <h5 class="empty-state-title">No Documents Found</h5>
-                            <p class="empty-state-text">
-                                There are no documents matching your criteria.<br>
-                                Try adjusting your filters or upload new documents.
-                            </p>
-                        </div>
-                    </td>
-                </tr>
-            </tbody>
-            <tbody v-for="wordFile in filteredWordFiles" :key="wordFile.id">
-                <tr 
-                    class="data-row" 
-                    :class="{ 
-                        'data-row-expanded': isExpanded(wordFile.id),
-                        'highlighted-document': highlightedDocumentId === wordFile.id
-                    }"
-                    :id="`word-file-${wordFile.id}`"
-                >
-                    <td style="vertical-align: middle; padding-right: 8px;">
-                        <div class="form-check" style="display: flex; align-items: center; justify-content: center; height: 100%;">
-                            <input 
-                                class="form-check-input" 
-                                type="checkbox" 
-                                :checked="selectedWordFileIds.includes(wordFile.id)" 
-                                @change="onWordFileSelected(wordFile.id, $event.target.checked)"
-                                @click.stop
-                                style="margin: 0;"
-                            >
-                        </div>
-                    </td>
-                    <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.originalFileName" @click="toggleExpand(wordFile.id)" style="cursor: pointer;">
-                        {{ wordFile.originalFileName }}
-                    </td>
-                    <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.patientId" @click="toggleExpand(wordFile.id)" style="cursor: pointer;">
-                        {{ wordFile.patientId }}
-                    </td>
-                    <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.patientName" @click="toggleExpand(wordFile.id)" style="cursor: pointer;">
-                        {{ wordFile.patientName }}
-                    </td>
-                    <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.hospitalName" @click="toggleExpand(wordFile.id)" style="cursor: pointer;">
-                        {{ wordFile.hospitalName }}
-                    </td>
-                    <td class="cut-text" data-bs-toggle="tooltip" :title="wordFile.uploadedByName" @click="toggleExpand(wordFile.id)" style="cursor: pointer;">
-                        {{ wordFile.uploadedByName }}
-                    </td>
-                    <td class="cut-text" data-bs-toggle="tooltip" :title="formatDate(wordFile.uploadedAt)" @click="toggleExpand(wordFile.id)" style="cursor: pointer;">
-                        {{ formatDate(wordFile.uploadedAt) }}
-                    </td>
-                    <td class="text-center">
-                        <button 
-                            type="button" 
-                            class="btn btn-sm btn-danger" 
-                            @click.stop="deleteWordFile(wordFile.id)"
-                            :disabled="isDoctor"
-                            title="Delete"
+    <div class="documents-page-modern" @click.self="closeRowMenu">
+        <header class="documents-header">
+            <div class="documents-header-top">
+                <div>
+                    <h1 class="documents-title">All Documents</h1>
+                    <p class="documents-subtitle">Manage patient documents and reports</p>
+                </div>
+                <div class="documents-header-actions">
+                    <button type="button" class="documents-btn documents-btn-ghost documents-btn-icon" @click="loadWordFiles" title="Refresh" :disabled="loading">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    </button>
+                    <a href="#" class="documents-btn documents-btn-primary documents-btn-link" @click.prevent="$router.push('/')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                        Upload Document
+                    </a>
+                </div>
+            </div>
+            <div class="documents-toolbar">
+                <div class="documents-search-wrap">
+                    <svg class="documents-search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input type="search" class="documents-search-input" v-model="filterFileName" placeholder="Search documents..." />
+                </div>
+                <div class="documents-toolbar-right">
+                    <div class="documents-select-wrap">
+                        <select class="documents-select" v-model="filterType">
+                            <option value="">All Types</option>
+                            <option value="PDF">PDF</option>
+                            <option value="DOCX">DOCX</option>
+                            <option value="XLSX">XLSX</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                        <svg class="documents-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                    </div>
+                    <div class="documents-view-toggle">
+                        <button type="button" class="documents-view-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'" title="List"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg></button>
+                        <button type="button" class="documents-view-btn" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'" title="Grid"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div v-if="hasSelection" class="documents-selection-bar">
+            <p class="documents-selection-text"><span class="documents-selection-count">{{ selectedWordFileIds.length }}</span> documents selected</p>
+            <div class="documents-selection-actions">
+                <button type="button" class="documents-btn documents-btn-outline" @click="downloadSelectedWordFiles" :disabled="!hasSelection">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                    Download
+                </button>
+                <button type="button" class="documents-btn documents-btn-destructive" @click="deleteSelectedWordFiles" :disabled="!hasSelection || isDoctor">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                    Delete
+                </button>
+            </div>
+        </div>
+
+        <div class="documents-table-card">
+            <div v-if="loading" class="documents-loading">
+                <div class="documents-spinner"></div>
+                <p>Loading documents...</p>
+            </div>
+            <template v-else-if="isEmpty">
+                <div class="documents-empty">
+                    <svg class="documents-empty-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" x2="12" y1="18" y2="12"/><line x1="9" x2="15" y1="15" y2="15"/></svg>
+                    <h3 class="documents-empty-title">No Documents Found</h3>
+                    <p class="documents-empty-text">There are no documents matching your criteria. Try adjusting your filters or upload new documents.</p>
+                </div>
+            </template>
+            <table v-else class="documents-table">
+                <thead>
+                    <tr class="documents-thead-row">
+                        <th class="documents-th documents-th-checkbox"><input type="checkbox" class="documents-checkbox" :checked="allSelected === true" :indeterminate.prop="isPartialSelected" @change="clickSelectAll" /></th>
+                        <th class="documents-th">Document Name</th>
+                        <th class="documents-th">Type</th>
+                        <th class="documents-th">Size</th>
+                        <th class="documents-th">Patient</th>
+                        <th class="documents-th">Uploaded By</th>
+                        <th class="documents-th">Date</th>
+                        <th class="documents-th documents-th-actions"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template v-for="wordFile in paginatedWordFiles" :key="wordFile.id">
+                        <tr
+                            class="documents-tr"
+                            :class="{ 'documents-tr-highlighted': highlightedDocumentId === wordFile.id }"
+                            :id="`word-file-${wordFile.id}`"
                         >
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    </td>
-                </tr>
-                <!-- Expanded row with details -->
-                <tr v-if="isExpanded(wordFile.id)" class="details-row">
-                    <td colspan="7">
-                        <div class="details-content">
-                            <div class="details-grid">
-                                <!-- Document Preview -->
-                                <div class="preview-section">
-                                    <div class="preview-placeholder">
-                                        <i class="bi bi-file-earmark-word"></i>
-                                        <span>{{ wordFile.originalFileName }}</span>
+                            <td class="documents-td documents-td-checkbox" @click.stop><input type="checkbox" class="documents-checkbox" :checked="selectedWordFileIds.includes(wordFile.id)" @change="onWordFileSelected(wordFile.id, $event.target.checked)" @click.stop /></td>
+                            <td class="documents-td documents-td-name">
+                                <span class="documents-file-icon" :class="'documents-file-icon--' + getFileType(wordFile)" v-html="fileIconSvg(getFileType(wordFile))"></span>
+                                <span class="documents-file-name">{{ wordFile.originalFileName }}</span>
+                            </td>
+                            <td class="documents-td"><span class="documents-badge">{{ getFileType(wordFile) }}</span></td>
+                            <td class="documents-td documents-td-muted">{{ formatFileSize(wordFile.fileSize) }}</td>
+                            <td class="documents-td">
+                                <div class="documents-patient">
+                                    <span class="documents-patient-name">{{ wordFile.patientName }}</span>
+                                    <span class="documents-patient-id">ID: {{ wordFile.patientId }}</span>
+                                </div>
+                            </td>
+                            <td class="documents-td documents-td-muted">{{ wordFile.uploadedByName }}</td>
+                            <td class="documents-td documents-td-muted">{{ formatDateShort(wordFile.uploadedAt) }}</td>
+                            <td class="documents-td documents-td-actions" @click.stop>
+                                <div class="documents-row-menu-wrap">
+                                    <button type="button" class="documents-btn documents-btn-ghost documents-btn-icon documents-row-menu-btn" @click="toggleRowMenu(wordFile.id)" title="Actions">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                                    </button>
+                                    <div v-show="openRowMenuId === wordFile.id" class="documents-row-menu" @click.stop>
+                                        <button type="button" class="documents-row-menu-item" @click="closeRowMenu(); viewWordFile(wordFile.id)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                            View
+                                        </button>
+                                        <button type="button" class="documents-row-menu-item" @click="closeRowMenu(); downloadWordFile(wordFile.id)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                                            Download
+                                        </button>
+                                        <button type="button" class="documents-row-menu-item documents-row-menu-item-danger" @click="closeRowMenu(); deleteWordFile(wordFile.id)" :disabled="isDoctor">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                            Delete
+                                        </button>
                                     </div>
                                 </div>
-                                
-                                <!-- Patient Info -->
-                                <div class="info-section">
-                                    <h6><i class="bi bi-person-fill me-2"></i>Patient Information</h6>
-                                    <div class="info-row">
-                                        <span class="info-label">Patient ID:</span>
-                                        <span class="info-value">{{ wordFile.patientId }}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Patient Name:</span>
-                                        <span class="info-value">{{ wordFile.patientName }}</span>
-                                    </div>
-                                </div>
-                                
-                                <!-- Upload Info -->
-                                <div class="info-section">
-                                    <h6><i class="bi bi-cloud-upload me-2"></i>Upload Information</h6>
-                                    <div class="info-row">
-                                        <span class="info-label">Uploaded User:</span>
-                                        <span class="info-value">{{ wordFile.uploadedByName }}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Uploaded Date:</span>
-                                        <span class="info-value">{{ formatDate(wordFile.uploadedAt) }}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">File Size:</span>
-                                        <span class="info-value">{{ formatFileSize(wordFile.fileSize) }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Actions -->
-                            <div class="actions-section">
-                                <span class="actions-label">Actions:</span>
-                                <div class="action-buttons">
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-sm btn-secondary action-btn"
-                                        @click="viewWordFile(wordFile.id)"
-                                        title="View"
-                                    >
-                                        <i class="bi bi-eye"></i>
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-sm btn-secondary action-btn"
-                                        @click="downloadWordFile(wordFile.id)"
-                                        title="Download"
-                                    >
-                                        <i class="bi bi-download"></i>
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-sm btn-secondary action-btn"
-                                        @click="printWordFile(wordFile.id)"
-                                        title="Print"
-                                    >
-                                        <i class="bi bi-printer"></i>
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-sm btn-danger action-btn"
-                                        @click="deleteWordFile(wordFile.id)"
-                                        :disabled="isDoctor"
-                                        title="Delete"
-                                    >
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <div v-if="!loading && !isEmpty" class="documents-pagination">
+            <p class="documents-pagination-text">Showing <span class="documents-pagination-bold">{{ paginationStart }}</span>-<span class="documents-pagination-bold">{{ paginationEnd }}</span> of <span class="documents-pagination-bold">{{ filteredWordFiles.length }}</span> documents</p>
+            <div class="documents-pagination-nav">
+                <button type="button" class="documents-btn documents-btn-outline documents-btn-sm" :disabled="currentPage <= 1" @click="currentPage = Math.max(1, currentPage - 1)">Previous</button>
+                <template v-for="(num, idx) in paginationPageNumbers" :key="num === '...' ? 'ellipsis-' + idx : num">
+                    <button v-if="num === '...'" type="button" class="documents-btn documents-btn-ghost documents-btn-sm documents-btn-pagination" disabled>...</button>
+                    <button v-else type="button" class="documents-btn documents-btn-ghost documents-btn-sm documents-btn-pagination" :class="{ 'documents-btn-pagination-active': currentPage === num }" @click="currentPage = num">{{ num }}</button>
+                </template>
+                <button type="button" class="documents-btn documents-btn-outline documents-btn-sm" :disabled="currentPage >= totalPages" @click="currentPage = Math.min(totalPages, currentPage + 1)">Next</button>
+            </div>
+        </div>
+
         <Toasts />
-        
+
         <!-- Document Viewer Modal -->
         <div v-if="showDocumentViewer" class="document-viewer-overlay" @click.self="closeDocumentViewer">
             <div class="document-viewer-modal">
                 <div class="document-viewer-header">
                     <h5>{{ viewingDocument?.originalFileName }}</h5>
                     <div class="document-viewer-actions">
-                        <button class="btn btn-sm btn-outline-primary me-2" @click="downloadViewingDocument">
-                            <i class="bi bi-download me-1"></i> Download
+                        <button type="button" class="documents-btn documents-btn-outline documents-btn-sm" @click="downloadViewingDocument">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                            Download
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary me-2" @click="printViewingDocument" title="Print">
-                            <i class="bi bi-printer me-1"></i> Print
+                        <button type="button" class="documents-btn documents-btn-outline documents-btn-sm" @click="printViewingDocument" title="Print">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                            Print
                         </button>
-                        <button class="btn-close" @click="closeDocumentViewer"></button>
+                        <button type="button" class="documents-btn documents-btn-ghost documents-btn-icon" @click="closeDocumentViewer" title="Close">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        </button>
                     </div>
                 </div>
                 <div class="document-viewer-body">
                     <div v-if="documentViewerLoading" class="document-viewer-loading">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
+                        <div class="documents-spinner" role="status"></div>
                         <p>Loading document...</p>
                     </div>
                     <div v-else class="document-viewer-content">
-                        <!-- Always render container so docx-preview can mount -->
-                        <div
-                            ref="docxContainer"
-                            class="docx-preview-container"
-                            v-show="isDocxPreview && !docxPreviewError"
-                        ></div>
-
-                        <!-- Fallback banner when not previewing or on error -->
+                        <div ref="docxContainer" class="docx-preview-container" v-show="isDocxPreview && !docxPreviewError"></div>
                         <div v-if="!isDocxPreview || docxPreviewError" class="document-preview-fallback">
-                            <div class="document-info-banner">
-                                <i class="bi bi-info-circle me-2"></i>
-                                Word documents cannot be fully previewed directly in the browser. Please download the file to view its contents.
-                            </div>
+                            <div class="document-info-banner">Word documents cannot be fully previewed directly in the browser. Please download the file to view its contents.</div>
                             <div class="document-preview-placeholder">
-                                <i class="bi bi-file-earmark-word"></i>
+                                <span v-if="viewingDocument" v-html="fileIconSvg(getFileType(viewingDocument))"></span>
                                 <h4>{{ viewingDocument?.originalFileName }}</h4>
-                                <p class="text-muted">
-                                    Patient: {{ viewingDocument?.patientName }} ({{ viewingDocument?.patientId }})<br>
-                                    Uploaded: {{ formatDate(viewingDocument?.uploadedAt) }}
-                                </p>
-                                <button class="btn btn-primary" @click="downloadViewingDocument">
-                                    <i class="bi bi-download me-2"></i>Download to View
-                                </button>
+                                <p class="documents-td-muted" style="margin: 0 0 1rem;">Patient: {{ viewingDocument?.patientName }} ({{ viewingDocument?.patientId }})<br>Uploaded: {{ formatDate(viewingDocument?.uploadedAt) }}</p>
+                                <button type="button" class="documents-btn documents-btn-primary" @click="downloadViewingDocument">Download to View</button>
                             </div>
                         </div>
                     </div>
@@ -806,172 +752,147 @@ export default {
 </template>
 
 <style scoped>
-.table-container {
-    position: relative;
-}
-
-.study-table {
-    table-layout: fixed;
-}
-
-.study-table> :nth-child(odd) >tr >td{
-    background-color: var(--study-odd-bg-color);
-}
-
-.study-table> :nth-child(even) >tr >td{
-    background-color: var(--study-even-bg-color);
-}
-
-.study-table>tbody>tr:first-child:hover > * {
-    background-color: var(--study-hover-color);
-}
-
-.study-table tr:hover {
-    background-color: var(--study-hover-color);
-}
-
-.study-table> :last-child {
-    border-bottom-width: thin;
-}
-
-.study-column-titles {
-    background-color: var(--study-table-header-bg-color) !important;
-    font-size: 13px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
-.study-table-title {
+.documents-page-modern {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-align: left;
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 14px;
-    padding-bottom: 14px;
-    vertical-align: middle !important;
-    line-height: 1.5;
+    color: var(--content-foreground);
+    background: var(--content-background);
+    min-height: 100vh;
+    margin: -24px;
+    padding: 1.5rem 1rem;
+}
+@media (min-width: 1024px) {
+    .documents-page-modern {
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+}
+.documents-header {
     position: sticky;
-    font-size: 13px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    line-height: 1.5;
-    font-weight: 600;
+    top: 0;
+    z-index: 30;
+    margin-bottom: 1.5rem;
+    padding: 1rem 0;
+    background: oklch(0.96 0.01 80 / 0.8);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--content-border);
 }
+[data-bs-theme="dark"] .documents-header {
+    background: oklch(0.12 0.01 60 / 0.8);
+}
+.documents-header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.documents-title { font-size: 1.25rem; font-weight: 600; color: var(--content-foreground); margin: 0 0 2px; }
+.documents-subtitle { font-size: 0.875rem; color: var(--content-muted-foreground); margin: 0; }
+.documents-header-actions { display: flex; align-items: center; gap: 0.75rem; }
+.documents-toolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+.documents-search-wrap { position: relative; flex: 1; min-width: 200px; max-width: 28rem; }
+.documents-search-icon { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--content-muted-foreground); }
+.documents-search-input { width: 100%; min-height: 2.25rem; padding: 0.5rem 1rem 0.5rem 2.25rem; font-size: 0.875rem; font-family: inherit; color: var(--content-foreground); background: var(--content-secondary); border: 1px solid transparent; border-radius: 9999px; outline: none; box-shadow: var(--content-shadow-xs); transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+.documents-search-input::placeholder { color: var(--content-muted-foreground); }
+.documents-search-input:hover { border-color: var(--content-border); }
+.documents-search-input:focus { border-color: var(--content-primary); box-shadow: 0 0 0 3px rgba(8, 5, 3, 0.12); }
+.documents-toolbar-right { display: flex; align-items: center; gap: 0.5rem; }
+.documents-select-wrap { position: relative; }
+.documents-select { appearance: none; padding: 0.5rem 2rem 0.5rem 0.75rem; font-size: 0.875rem; font-family: inherit; color: var(--content-foreground); background: transparent; border: 1px solid var(--content-border); border-radius: 9999px; cursor: pointer; outline: none; transition: border-color 0.2s ease, background-color 0.2s ease; }
+.documents-select:hover { border-color: var(--content-muted-foreground); }
+.documents-select:focus { border-color: var(--content-primary); outline: none; box-shadow: 0 0 0 2px rgba(8, 5, 3, 0.1); }
+.documents-chevron { position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); color: var(--content-muted-foreground); pointer-events: none; }
+.documents-view-toggle { display: flex; border: 1px solid var(--content-border); border-radius: 9999px; padding: 2px; }
+.documents-view-btn { width: 2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 9999px; background: transparent; color: var(--content-muted-foreground); cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease; }
+.documents-view-btn:hover { background: var(--content-secondary); color: var(--content-foreground); }
+.documents-view-btn:active { background: var(--content-accent); }
+.documents-view-btn.active { background: var(--content-secondary); color: var(--content-foreground); }
+.documents-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 2.25rem; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; font-family: inherit; border-radius: 9999px; border: none; cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; outline: none; }
+.documents-btn:focus-visible { box-shadow: 0 0 0 3px var(--content-ring, rgba(8, 5, 3, 0.15)); }
+.documents-btn:active:not(:disabled) { opacity: 0.9; }
+.documents-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.documents-btn-icon { padding: 0; width: 2.25rem; height: 2.25rem; min-width: 2.25rem; min-height: 2.25rem; }
+.documents-btn-ghost { background: transparent; color: var(--content-foreground); }
+.documents-btn-ghost:hover { background: var(--content-accent); color: var(--content-accent-foreground); }
+.documents-btn-ghost:active:not(:disabled) { background: var(--content-secondary); }
+.documents-btn-primary { background: var(--content-primary); color: var(--content-primary-foreground); }
+.documents-btn-primary:hover { background: color-mix(in srgb, var(--content-primary) 90%, black); color: var(--content-primary-foreground); }
+a.documents-btn-link { text-decoration: none; }
+a.documents-btn-link:hover { text-decoration: none; }
+.documents-btn-outline { background: var(--content-background); color: var(--content-foreground); border: 1px solid var(--content-border); }
+.documents-btn-outline:hover { background: var(--content-accent); color: var(--content-accent-foreground); border-color: var(--content-border); }
+.documents-btn-outline:active:not(:disabled) { background: var(--content-secondary); }
+.documents-btn-destructive { background: var(--content-destructive); color: var(--content-destructive-foreground); }
+.documents-btn-destructive:hover { background: color-mix(in srgb, var(--content-destructive) 90%, black); color: var(--content-destructive-foreground); }
+.documents-btn-sm { padding: 0.25rem 0.75rem; font-size: 0.8125rem; }
+.documents-selection-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; padding: 1rem; margin-bottom: 1rem; background: var(--content-secondary); border-radius: 1rem; }
+.documents-selection-count { font-weight: 500; }
+.documents-table-card { background: var(--content-card); border: 1px solid var(--content-border); border-radius: 1rem; overflow: visible; position: relative; }
+.documents-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; color: var(--content-muted-foreground); font-size: 0.875rem; }
+.documents-spinner { width: 2.5rem; height: 2.5rem; border: 2px solid var(--content-border); border-top-color: var(--content-primary); border-radius: 50%; animation: documents-spin 0.8s linear infinite; margin-bottom: 1rem; }
+@keyframes documents-spin { to { transform: rotate(360deg); } }
+.documents-empty { text-align: center; padding: 4rem 2rem; }
+.documents-empty-icon { color: var(--content-muted-foreground); margin-bottom: 1rem; }
+.documents-empty-title { font-size: 1.25rem; font-weight: 600; color: var(--content-foreground); margin: 0 0 0.5rem; }
+.documents-empty-text { font-size: 0.875rem; color: var(--content-muted-foreground); max-width: 24rem; margin: 0 auto; }
+.documents-table { width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.875rem; table-layout: auto; font-family: var(--font-sans); }
+.documents-thead-row { background: oklch(0.93 0.015 80 / 0.5); border-bottom: 1px solid var(--content-border); }
+.documents-th { text-align: left; font-weight: 500; padding: 0.75rem 0.5rem; height: 2.5rem; color: var(--content-foreground); vertical-align: middle; }
+.documents-tr { transition: background-color 0.15s ease, color 0.15s ease; border-bottom: 1px solid var(--content-border); }
+.documents-tr:last-child { border-bottom: none; }
+.documents-tr:hover { background: var(--content-secondary); }
+.documents-tr-highlighted { background: oklch(0.96 0.08 85); border-left: 4px solid var(--content-primary); }
+.documents-td { padding: 0.75rem 0.5rem; vertical-align: middle; margin-top: 0.6rem; }
+.documents-td-name { display: flex; align-items: center; gap: 0.75rem; }
+.documents-file-icon { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+.documents-file-icon :deep(svg) { width: 20px; height: 20px; }
+.documents-file-icon--PDF { color: #ef4444; }
+.documents-file-icon--DOCX { color: #3b82f6; }
+.documents-file-icon--XLSX { color: #22c55e; }
+.documents-file-icon--OTHER { color: var(--content-muted-foreground); }
+.documents-badge { display: inline-block; padding: 0.125rem 0.5rem; font-size: 0.75rem; font-weight: 500; background: var(--content-secondary); color: var(--content-foreground); border-radius: 9999px; }
+.documents-td-muted { color: var(--content-muted-foreground); }
+.documents-patient { display: flex; flex-direction: column; gap: 0; }
+.documents-patient-name { font-weight: 500; }
+.documents-patient-id { font-size: 0.75rem; color: var(--content-muted-foreground); }
+.documents-th-checkbox, .documents-td-checkbox { width: 3rem; text-align: center; }
+.documents-th-actions, .documents-td-actions { min-width: 2.5rem; width: 2.5rem; white-space: nowrap; overflow: visible; }
+.documents-checkbox { width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem; cursor: pointer; -webkit-appearance: none; appearance: none; border: 1px solid var(--content-input); border-radius: 4px; background: var(--content-card); box-shadow: var(--content-shadow-xs); vertical-align: middle; transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease; }
+.documents-checkbox:hover { border-color: var(--content-primary); }
+.documents-checkbox:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--content-primary); }
+.documents-checkbox:checked { background: var(--content-primary); border-color: var(--content-primary); }
+.documents-checkbox:checked:hover { filter: brightness(0.95); }
+.documents-row-menu-wrap { position: relative; overflow: visible; }
+.documents-row-menu-btn { opacity: 0.7; }
+.documents-tr:hover .documents-row-menu-btn { opacity: 1; }
+.documents-row-menu { position: absolute; right: 0; top: 100%; margin-top: 2px; z-index: 100; min-width: 10rem; padding: 0.25rem; background: var(--content-card); border: 1px solid var(--content-border); border-radius: var(--content-radius); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.documents-row-menu-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.5rem 0.75rem; font-size: 0.875rem; border: none; background: transparent; cursor: pointer; border-radius: 4px; color: var(--content-foreground); }
+.documents-row-menu-item { transition: background-color 0.15s ease; }
+.documents-row-menu-item:hover { background: var(--content-secondary); }
+.documents-row-menu-item:active { background: var(--content-accent); }
+.documents-row-menu-item-danger { color: var(--content-destructive); }
+.documents-row-menu-item-danger:hover { background: rgba(220, 38, 38, 0.08); }
+.documents-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 1.5rem; }
+.documents-pagination-text { font-size: 0.875rem; color: var(--content-muted-foreground); margin: 0; }
+.documents-pagination-bold { font-weight: 500; color: var(--content-foreground); }
+.documents-pagination-nav { display: flex; align-items: center; gap: 0.25rem; }
+.documents-btn-pagination { min-width: 2rem; height: 2rem; transition: background-color 0.2s ease, color 0.2s ease; }
+.documents-btn-pagination:not(.documents-btn-pagination-active):hover { background: var(--content-accent); color: var(--content-accent-foreground); }
+.documents-btn-pagination:not(.documents-btn-pagination-active):active { background: var(--content-secondary); }
+.documents-btn-pagination-active { background: var(--content-primary) !important; color: var(--content-primary-foreground) !important; }
+.document-viewer-overlay { position: fixed; inset: 0; background: oklch(0 0 0 / 0.4); display: flex; align-items: center; justify-content: center; z-index: 10000; }
+.document-viewer-modal { background: var(--content-card); border-radius: var(--content-radius); width: 88%; max-width: 820px; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid var(--content-border); box-shadow: 0 12px 48px oklch(0 0 0 / 0.15); }
+.document-viewer-header { display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1.25rem; border-bottom: 1px solid var(--content-border); }
+.document-viewer-header h5 { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--content-foreground); }
+.document-viewer-actions { display: flex; align-items: center; gap: 8px; }
+.document-viewer-body { flex: 1; overflow: auto; padding: 1.25rem; background: var(--content-secondary); }
+.document-viewer-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; }
+.document-viewer-loading p { margin-top: 1rem; color: var(--content-muted-foreground); }
+.docx-preview-container { width: 100%; overflow: auto; background: var(--content-secondary); border-radius: var(--content-radius); padding: 1.5rem; }
+.document-info-banner { padding: 12px 16px; background: oklch(0.96 0.08 85 / 0.5); border: 1px solid var(--content-border); border-radius: 8px; margin-bottom: 1rem; font-size: 0.875rem; }
+.document-preview-placeholder { text-align: center; padding: 2.5rem; }
+.document-preview-placeholder :deep(svg) { width: 48px; height: 48px; margin-bottom: 1rem; }
+.document-preview-placeholder h4 { font-size: 1.125rem; font-weight: 600; margin: 0 0 0.5rem; color: var(--content-foreground); }
 
-.study-table-filters {
-    background-color: var(--study-table-filter-bg-color);
-}
 
-.study-table-filters > th {
-    background-color: var(--study-table-filter-bg-color);
-    padding: 4px;
-}
-
-.study-table-actions {
-    background-color: var(--study-table-actions-bg-color) !important;
-}
-
-.study-table-actions > th {
-    background-color: var(--study-table-actions-bg-color) !important;
-    vertical-align: middle;
-}
-
-.study-table-actions > th > div {
-    background-color: var(--study-table-actions-bg-color) !important;
-    text-align: left;
-}
-
-.study-table td {
-    text-align: left;
-    padding-left: 10px;
-    font-size: 13px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    vertical-align: middle;
-}
-
-/* Clear filter button - fixed size */
-.clear-filter-btn {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--bs-border-color);
-    border-radius: 6px;
-    background-color: var(--bs-body-bg);
-    color: var(--bs-body-color);
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.clear-filter-btn:hover {
-    background-color: var(--bs-light);
-}
-
-.clear-filter-btn i {
-    font-size: 14px;
-}
-
-input.form-control.study-list-filter {
-    margin-top: var(--filter-margin, 5px);
-    margin-bottom: var(--filter-margin, 5px);
-    padding-top: var(--filter-padding, 2px);
-    padding-bottom: var(--filter-padding, 2px);
-    padding-left: 8px;
-    padding-right: 8px;
-    border-bottom-width: thin;
-    font-size: 13px;
-}
-
-.study-list-bulk-buttons {
-    margin-top: var(--filter-margin, 5px);
-}
-
-.study-list-bulk-buttons .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.cut-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Empty state styles */
-.empty-state-tbody tr.empty-state-row:hover,
-.empty-state-tbody tr.empty-state-row:hover > td {
-    background-color: transparent !important;
-    cursor: default;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 12px;
-    margin: 20px;
-}
-
-.empty-state-icon {
-    font-size: 64px;
-    color: #adb5bd;
-    margin-bottom: 20px;
-}
-
-.empty-state-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 10px;
-}
-
-.empty-state-text {
-    font-size: 14px;
-    color: #6c757d;
-    max-width: 400px;
-    margin: 0 auto;
-    line-height: 1.6;
-}
 
 /* Data row styles */
 .data-row {
