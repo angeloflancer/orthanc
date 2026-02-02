@@ -36,11 +36,11 @@ const wordFileSchema = new mongoose.Schema({
     required: false, // Optional to allow owners to upload without hospital
     index: true
   },
-  // Upload tracking (kept for audit trail)
+  // Upload tracking (kept for audit trail). Optional for owner (no DB user _id).
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false
   },
   uploadedByName: {
     type: String,

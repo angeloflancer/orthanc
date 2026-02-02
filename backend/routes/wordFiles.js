@@ -161,8 +161,8 @@ router.post('/upload', protect, checkFeatureAccess(), upload.single('file'), asy
       patientId: patientId.trim(),
       patientName: patientName.trim(),
       hospital: hospital ? hospital._id : null, // Allow null for owners
-      uploadedBy: req.user._id || undefined,
-      uploadedByName: user.name || req.user.name
+      uploadedBy: req.user._id || null, // null for owner (no DB user)
+      uploadedByName: user.name || req.user.name || 'Owner'
     });
     
     // Check if patient already exists by patientId (one patient ID = one patient record)

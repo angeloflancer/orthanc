@@ -618,7 +618,7 @@ export default {
 
 .upload-modern-wrapper {
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.08);
+    background: #0f0c0a;
     border: 1px solid var(--sidebar-border, rgba(255, 255, 255, 0.2));
     border-radius: 0.5rem;
     color: var(--sidebar-foreground, #fff);
@@ -675,7 +675,7 @@ export default {
     font-size: 0.875rem;
     font-weight: 600;
     color: #ffffff;
-    background: #3f3f3f;
+    background: #181513;
     border: none;
     border-radius: 9999px;
     cursor: pointer;

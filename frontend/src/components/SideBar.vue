@@ -622,6 +622,16 @@ export default {
         }
     },
     created() {
+        // Open upload panel when requested from documents page (so patient modal is visible)
+        this.messageBus.on('open-upload-panel', () => {
+            this.$nextTick(() => {
+                const el = document.getElementById('upload-handler');
+                if (el && typeof bootstrap !== 'undefined') {
+                    const collapse = bootstrap.Collapse.getOrCreateInstance(el);
+                    collapse.show();
+                }
+            });
+        });
         // Listen for label updates from LabelsEditor
         this.messageBus.on('labels-updated', () => {
             // Reload all labels from API

@@ -75,7 +75,7 @@ app.use('/api/subscriptions', express.json());
 app.use('/api/subscriptions', express.urlencoded({ extended: true }));
 app.use('/api/subscriptions', subscriptionRoutes);
 
-// Helper function to get user from token
+// Helper function to get user from token (must match auth.js: owner vs normal user)
 async function getUserFromToken(req) {
   try {
     let token;
@@ -88,6 +88,18 @@ async function getUserFromToken(req) {
     if (!token) return null;
     
     const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Owner token: same shape as in auth.js protect middleware
+    if (decoded.type === 'owner' && decoded.email) {
+      return {
+        _id: null,
+        role: 'owner',
+        email: decoded.email,
+        name: process.env.OWNER_NAME || 'Owner',
+        emailVerified: true
+      };
+    }
+
     const user = await User.findById(decoded.id);
     return user;
   } catch (error) {

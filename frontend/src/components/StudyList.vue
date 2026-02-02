@@ -1,8 +1,9 @@
 <script>
-import StudyItem from "./StudyItem.vue"
 import ResourceButtonGroup from "./ResourceButtonGroup.vue"
 import LabelsEditor from "./LabelsEditor.vue"
 import Toasts from "./Toasts.vue"
+import CopyToClipboardButton from "./CopyToClipboardButton.vue"
+import resourceHelpers from "../helpers/resource-helpers"
 
 import { mapState, mapGetters } from "vuex"
 import { baseOe2Url } from "../globalConfigurations"
@@ -13,7 +14,6 @@ import { endOfMonth, endOfYear, startOfMonth, startOfYear, subMonths, subDays, s
 import api from "../orthancApi";
 import { ref } from 'vue';
 import SourceType from "../helpers/source-type";
-import { ObserveVisibility as vObserveVisibility } from 'vue3-observe-visibility'
 import { nextTick } from 'vue';
 
 const Status = Object.freeze({
@@ -155,6 +155,11 @@ export default {
             showMultiLabelsFilter: false,
             multiLabelsFilterLabelsConstraint: "All",
             multiLabelsComponentKey: 0, // to force refresh the multi-labels filter component
+            // Modern layout: pagination and row menu
+            pageSize: 5,
+            currentPage: 1,
+            openRowMenuId: null,
+            expandedStudyId: null, // row expand on click
         };
     },
     computed: {
@@ -271,6 +276,40 @@ export default {
             } else {
                 return "";
             }
+        },
+        totalPages() {
+            const n = this.studiesIds.length;
+            return n === 0 ? 1 : Math.ceil(n / this.pageSize);
+        },
+        paginatedStudyIds() {
+            const start = (this.currentPage - 1) * this.pageSize;
+            return this.studiesIds.slice(start, start + this.pageSize);
+        },
+        paginatedStudies() {
+            return this.paginatedStudyIds
+                .map(id => this.getStudy(id))
+                .filter(Boolean);
+        },
+        paginationStart() {
+            if (this.studiesIds.length === 0) return 0;
+            return (this.currentPage - 1) * this.pageSize + 1;
+        },
+        paginationEnd() {
+            return Math.min(this.currentPage * this.pageSize, this.studiesIds.length);
+        },
+        paginationPageNumbers() {
+            const total = this.totalPages;
+            if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+            const p = this.currentPage;
+            const pages = [];
+            pages.push(1);
+            if (p > 3) pages.push('...');
+            for (let i = Math.max(2, p - 1); i <= Math.min(total - 1, p + 1); i++) {
+                if (!pages.includes(i)) pages.push(i);
+            }
+            if (p < total - 2) pages.push('...');
+            if (total > 1) pages.push(total);
+            return pages;
         },
         colSpanBeforeMultiLabelsFilter() {
             let span = 1; // the select study col
@@ -402,10 +441,18 @@ export default {
             }
         },
         selectedStudiesIds: {
-            handler(oldValue, newValue) {
+            handler() {
                 this.updateSelectAll();
             },
             deep: true
+        },
+        currentPage() {
+            this.updateSelectAll();
+        },
+        studiesIds() {
+            if (this.currentPage > this.totalPages && this.totalPages > 0) {
+                this.currentPage = this.totalPages;
+            }
         },
         allLabels(newValue, oldValue) {
             this.multiLabelsComponentKey++; // force refresh the multi-labels filter component
@@ -438,24 +485,27 @@ export default {
     },
     methods: {
         updateSelectAll() {
-            if (this.selectedStudiesIds.length == 0) {
+            const ids = this.paginatedStudyIds;
+            if (ids.length === 0) {
                 this.allSelected = false;
                 this.isPartialSelected = false;
-            } else if (this.selectedStudiesIds.length == this.studiesIds.length) {
+            } else if (ids.every(id => this.selectedStudiesIds.includes(id))) {
                 this.allSelected = true;
                 this.isPartialSelected = false;
             } else {
-                this.allSelected = '';
-                this.isPartialSelected = true;
+                this.allSelected = false;
+                this.isPartialSelected = this.selectedStudiesIds.length > 0;
             }
         },
         clickSelectAll() {
-            if (this.allSelected == '' || !this.allSelected) { // this is the value before the click
-                this.$store.dispatch('studies/selectAllStudies', {isSelected: true});
+            const ids = this.paginatedStudyIds;
+            const allOnPageSelected = ids.length > 0 && ids.every(id => this.selectedStudiesIds.includes(id));
+            if (!allOnPageSelected) {
+                ids.forEach(id => this.$store.dispatch('studies/selectStudy', { studyId: id, isSelected: true }));
                 this.messageBus.emit('selected-all');
             } else {
-                this.$store.dispatch('studies/selectAllStudies', {isSelected: false});
-                this.messageBus.emit('unselected-all')
+                ids.forEach(id => this.$store.dispatch('studies/selectStudy', { studyId: id, isSelected: false }));
+                this.messageBus.emit('unselected-all');
             }
         },
         translateDatePicker(languageKey) {
@@ -806,6 +856,7 @@ export default {
             this.filterUploadedBy = '';
             this.filterLabels = [];
             this.clearModalityFilter();
+            if (!('AccessionNumber' in this.filterGenericTags)) this.filterGenericTags['AccessionNumber'] = '';
         },
         isFilteringOnlyOnLabels() {
             let hasGenericTagFilter = false;
@@ -1085,197 +1136,295 @@ export default {
                 this.updateUrlNoReload();
                 this.reloadStudyList();
             }
-        }
+        },
+        getStudy(studyId) {
+            return (this.storeStudies || []).find(s => s.ID === studyId) || null;
+        },
+        formatStudyDateShort(study) {
+            if (!study || !study.MainDicomTags) return '—';
+            return dateHelpers.formatDateForDisplay(study.MainDicomTags.StudyDate, this.uiOptions.DateFormat) || '—';
+        },
+        formatPatientBirthDateShort(study) {
+            if (!study || !study.PatientMainDicomTags) return '—';
+            return dateHelpers.formatDateForDisplay(study.PatientMainDicomTags.PatientBirthDate, this.uiOptions.DateFormat) || '—';
+        },
+        formatPatientName(study) {
+            if (!study || !study.PatientMainDicomTags) return '—';
+            return resourceHelpers.formatPatientName(study.PatientMainDicomTags.PatientName) || '—';
+        },
+        modalityDisplay(study) {
+            if (!study) return '—';
+            if (study.RequestedTags && study.RequestedTags.ModalitiesInStudy) {
+                return study.RequestedTags.ModalitiesInStudy.split('\\').join(', ');
+            }
+            return '—';
+        },
+        seriesInstancesDisplay(study) {
+            if (!study) return '—';
+            const seriesCount = study.sourceType === SourceType.REMOTE_DICOM || study.sourceType === SourceType.REMOTE_DICOM_WEB
+                ? (study.MainDicomTags && study.MainDicomTags.NumberOfStudyRelatedSeries)
+                : (study.Series && study.Series.length);
+            const instancesCount = study.RequestedTags && study.RequestedTags.NumberOfStudyRelatedInstances;
+            if (instancesCount != null) return String(seriesCount ?? '—') + '/' + String(instancesCount);
+            return seriesCount != null ? String(seriesCount) : '—';
+        },
+        openUploadPanel() {
+            this.messageBus.emit('open-upload-panel');
+            this.$nextTick(() => {
+                setTimeout(() => document.getElementById('filesUpload')?.click(), 350);
+            });
+        },
+        goToStudy(studyId) {
+            const study = this.getStudy(studyId);
+            const uid = study && study.MainDicomTags && study.MainDicomTags.StudyInstanceUID;
+            if (uid) {
+                this.$router.push({ path: '/filtered-studies', query: { StudyInstanceUID: uid, expand: 'study' } });
+            }
+        },
+        toggleRowMenu(studyId) {
+            this.openRowMenuId = this.openRowMenuId === studyId ? null : studyId;
+        },
+        closeRowMenu() {
+            this.openRowMenuId = null;
+        },
+        toggleExpand(studyId) {
+            this.expandedStudyId = this.expandedStudyId === studyId ? null : studyId;
+        },
+        patientStudyCount(patientId) {
+            if (!patientId || !this.storeStudies) return 0;
+            return this.storeStudies.filter(s => (s.PatientMainDicomTags && s.PatientMainDicomTags.PatientID) === patientId).length;
+        },
     },
-    components: { StudyItem, ResourceButtonGroup, LabelsEditor, Toasts }
+    components: { ResourceButtonGroup, LabelsEditor, Toasts, CopyToClipboardButton }
 }
 </script>
 
 
 <template>
     <div>
-        <div v-if="isRemoteDicom || isRemoteDicomWeb" class="remote-browsing-warning">
-            <div>
-                <p v-if="isRemoteDicom" v-html="$t('remote_dicom_browsing', { source: remoteSource})"></p>
-                <p v-if="isRemoteDicomWeb" v-html="$t('remote_dicom_web_browsing', { source: remoteSource})"></p>
-            </div>
+        <div v-if="isRemoteDicom || isRemoteDicomWeb" class="studies-remote-warning">
+            <p v-if="isRemoteDicom" v-html="$t('remote_dicom_browsing', { source: remoteSource})"></p>
+            <p v-if="isRemoteDicomWeb" v-html="$t('remote_dicom_web_browsing', { source: remoteSource})"></p>
         </div>
-        <table class="table table-sm study-table table-borderless">
-            <thead class="sticky-top">
-                <tr class="study-column-titles">
-                    <th :width="widthColum1" max-width="40px" scope="col"></th>
-                    <th v-if="hasPrimaryViewerIcon" width="2%" max-width="30px" scope="col" ></th>
-                    <th v-if="hasPdfReportIcon" width="2%" max-width="30px" scope="col" ></th>
-                    <th v-for="columnTag in uiOptions.StudyListColumns" :key="columnTag" data-bs-toggle="tooltip"
-                        v-bind:title="columnTooltip(columnTag)" v-bind:width="columnWidth(columnTag)"
-                        class="study-table-title">
-                        <div class="title-container">
-                            <div v-if="isOrderable(columnTag)" class="title-text is-orderable" @click="toggleOrder($event, columnTag)">{{ columnTitle(columnTag) }}</div>
-                            <div v-if="!isOrderable(columnTag)" class="title-text">{{ columnTitle(columnTag) }}</div>
-                            <div v-if="isOrderTagUp(columnTag)" class="title-arrow"><i class="bi bi-arrow-up"></i></div>
-                            <div v-if="isOrderTagDown(columnTag)" class="title-arrow"><i class="bi bi-arrow-down"></i></div>
-                        </div>
-                    </th>
-                </tr>
-                <tr class="study-table-filters" v-on:keyup.enter="search">
-                    <th scope="col" :colspan="colSpanClearFilter">
-                        <button @click="clearFilters" type="button" class="clear-filter-btn"
-                            data-bs-toggle="tooltip" title="Clear filter">
-                            <i class="fa-regular fa-circle-xmark"></i>
+        <div class="studies-page-modern" @click.self="closeRowMenu">
+            <header class="studies-header">
+                <div class="studies-header-top">
+                    <div>
+                        <h1 class="studies-title">{{ $t('all_studies') || 'All Studies' }}</h1>
+                        <p class="studies-subtitle">Manage and view all DICOM studies</p>
+                    </div>
+                    <div class="studies-header-actions">
+                        <button type="button" class="studies-btn studies-btn-ghost studies-btn-icon" @click="reloadStudyList" title="Refresh" :disabled="isSearching">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                         </button>
-                    </th>
-                    <th v-for="columnTag in uiOptions.StudyListColumns" :key="columnTag">
-                        <div v-if="columnTag == 'StudyDate'">
-                            <Datepicker v-if="columnTag == 'StudyDate'" v-model="filterStudyDateForDatePicker"
-                                :enable-time-picker="false" range :preset-dates="datePickerPresetRanges" :format="datePickerFormat"
-                                :preview-format="datePickerFormat" text-input arrow-navigation hide-input-icon :highlight="{ weekdays: [6, 0]}" :dark="isDarkMode">
-                                <template #yearly="{ label, range, presetDate }">
-                                    <span @click="presetDate(range)">{{ label }}</span>
-                                </template>
-                            </Datepicker>
-                        </div>
-                        <div v-else-if="columnTag == 'modalities'" class="dropdown">
-                            <button type="button" class="btn btn-default btn-sm filter-button dropdown-toggle"
-                                data-bs-toggle="dropdown" id="dropdown-modalities-button" aria-expanded="false"><span
-                                    class="fa fa-list"></span>&nbsp;<span class="caret"></span></button>
-                            <ul class="dropdown-menu" aria-labelledby="dropdown-modalities-button"
-                                @click="modalityFilterClicked" id="modality-filter-dropdown">
-                                <li><label class="dropdown-item"><input type="checkbox" data-value="all"
-                                            @click="toggleModalityFilter" v-model="allModalities" />&nbsp;{{
-                                                $t('all_modalities') }}</label></li>
-                                <li><label class="dropdown-item"><input type="checkbox" data-value="none"
-                                            @click="toggleModalityFilter" v-model="noneModalities" />&nbsp;{{
-                                                $t('no_modalities') }}</label></li>
-                                <li>
-                                    <hr class="dropdown-divider">
-                                </li>
+                        <button type="button" class="studies-btn studies-btn-primary" @click="openUploadPanel">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                            Upload Study
+                        </button>
+                    </div>
+                </div>
+                <!-- Filter row: same style as modern project (rounded inputs, one per criterion) -->
+                <div class="studies-filter-row">
+                    <div class="studies-filter-cell studies-filter-date">
+                        <svg class="studies-filter-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <Datepicker v-model="filterStudyDateForDatePicker" :enable-time-picker="false" range :preset-dates="datePickerPresetRanges" :format="datePickerFormat" :preview-format="datePickerFormat" text-input arrow-navigation hide-input-icon :highlight="{ weekdays: [6, 0]}" :dark="isDarkMode" :placeholder="$t('date_range') || 'Date range'" class="studies-filter-input-wrap">
+                            <template #yearly="{ label, range, presetDate }">
+                                <span @click="presetDate(range)">{{ label }}</span>
+                            </template>
+                        </Datepicker>
+                    </div>
+                    <div class="studies-filter-cell">
+                        <input type="text" class="studies-filter-input" v-model="filterGenericTags['PatientName']" :placeholder="$t('patient_name_placeholder') || 'John^Doe'" @keyup.enter="search" />
+                    </div>
+                    <div class="studies-filter-cell">
+                        <input type="text" class="studies-filter-input" v-model="filterGenericTags['PatientID']" placeholder="1234" @keyup.enter="search" />
+                    </div>
+                    <div class="studies-filter-cell">
+                        <input type="text" class="studies-filter-input" v-model="filterGenericTags['StudyDescription']" :placeholder="$t('study_description_placeholder') || 'Chest'" @keyup.enter="search" />
+                    </div>
+                    <div class="studies-filter-cell">
+                        <input type="text" class="studies-filter-input" v-model="filterHospital" :placeholder="$t('search_hospital') || 'Search hosp.'" @keyup.enter="search" />
+                    </div>
+                    <div class="studies-filter-cell">
+                        <input type="text" class="studies-filter-input" v-model="filterUploadedBy" :placeholder="$t('search_user') || 'Search user.'" @keyup.enter="search" />
+                    </div>
+                    <div class="studies-filter-cell studies-filter-modality">
+                        <div class="studies-modality-dropdown dropdown">
+                            <button type="button" class="studies-btn studies-btn-outline studies-modality-btn dropdown-toggle" data-bs-toggle="dropdown" id="dropdown-modalities-button" aria-expanded="false">
+                                <svg class="studies-filter-list-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+                                {{ $t('modality') || 'Modality' }} <svg class="studies-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                            <ul class="dropdown-menu studies-modality-menu" aria-labelledby="dropdown-modalities-button" @click="modalityFilterClicked">
+                                <li><label class="dropdown-item"><input type="checkbox" data-value="all" @click="toggleModalityFilter" v-model="allModalities" /> {{ $t('all_modalities') }}</label></li>
+                                <li><label class="dropdown-item"><input type="checkbox" data-value="none" @click="toggleModalityFilter" v-model="noneModalities" /> {{ $t('no_modalities') }}</label></li>
+                                <li><hr class="dropdown-divider"></li>
                                 <li v-for="modality in uiOptions.ModalitiesFilter" :key="modality">
-                                    <label class="dropdown-item"><input type="checkbox" v-bind:data-value="modality"
-                                            v-model="filterModalities[modality]" />&nbsp;{{ modality }}</label>
+                                    <label class="dropdown-item"><input type="checkbox" :data-value="modality" v-model="filterModalities[modality]" /> {{ modality }}</label>
                                 </li>
-                                <li><button class="btn btn-primary mx-5" @click="closeModalityFilter">{{ $t('close') }}</button></li>
+                                <li><button type="button" class="studies-btn studies-btn-primary studies-btn-sm mx-2 mt-1" @click="closeModalityFilter">{{ $t('close') }}</button></li>
                             </ul>
                         </div>
-                        <div v-else-if="columnTag == 'PatientBirthDate'">
-                            <Datepicker v-model="filterPatientBirthDateForDatePicker"
-                                :enable-time-picker="false" range :format="datePickerFormat" hide-input-icon :preview-format="datePickerFormat" text-input
-                                arrow-navigation :highlight="{ weekdays: [6, 0]}" :dark="isDarkMode">
-                            </Datepicker>
-                        </div>
-                        <input v-else-if="columnTag == 'Hospital'" type="text" class="form-control study-list-filter"
-                            v-model="filterHospital" placeholder="Search hospital..." />
-                        <input v-else-if="columnTag == 'UploadedBy'" type="text" class="form-control study-list-filter"
-                            v-model="filterUploadedBy" placeholder="Search user..." />
-                        <input v-else-if="hasFilter(columnTag)" type="text" class="form-control study-list-filter"
-                            v-model="this.filterGenericTags[columnTag]" v-bind:placeholder="getFilterPlaceholder(columnTag)"
-                            v-bind:class="getFilterClass(columnTag)" />
-                    </th>
-                </tr>
+                    </div>
+                    <div class="studies-filter-cell">
+                        <input type="text" class="studies-filter-input" v-model="filterGenericTags['AccessionNumber']" placeholder="1234" @keyup.enter="search" />
+                    </div>
+                    <div class="studies-filter-actions">
+                        <button v-if="isSearchButtonEnabled" type="button" class="studies-btn studies-btn-outline studies-btn-sm" @click="search" :disabled="isSearching">
+                            <span v-if="!isSearching" class="studies-btn-search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
+                            <span v-else class="studies-spinner-sm"></span>
+                            {{ isSearching ? $t('searching') : $t('search') }}
+                        </button>
+                        <button type="button" class="studies-btn studies-btn-ghost studies-btn-sm" @click="clearFilters">{{ $t('clear') || 'Clear' }}</button>
+                    </div>
+                </div>
+                <div v-if="isMultiLabelsFilterVisible" class="studies-filters-row">
+                    <label class="studies-filters-label">{{ $t('labels.study_details_title') }}</label>
+                    <LabelsEditor id="multiLabelsFilter" :labels="filterLabels" :key="multiLabelsComponentKey" :studyId="null" @labelsUpdated="onMultiLabelsFilterChanged" :showTitle="false" :isFilter="true"></LabelsEditor>
+                    <div class="studies-filters-constraint">
+                        <input type="radio" name="multiLabelsFilterAll" id="multiLabelsFilterAll" value="All" v-model="multiLabelsFilterLabelsConstraint" />
+                        <label for="multiLabelsFilterAll">{{ $t('labels.filter_labels_constraint_all') }}</label>
+                        <input type="radio" name="multiLabelsFilterAny" id="multiLabelsFilterAny" value="Any" v-model="multiLabelsFilterLabelsConstraint" />
+                        <label for="multiLabelsFilterAny">{{ $t('labels.filter_labels_constraint_any') }}</label>
+                    </div>
+                </div>
+            </header>
 
-                <tr v-if="isMultiLabelsFilterVisible" class="study-table-actions">
-                    <th :colspan="colSpanBeforeMultiLabelsFilter" scope="col">
-                        <div class="w-100 d-flex justify-content-end">
-                            <label class="form-check-label text-end" for="multiLabelsFilter">{{ $t('labels.study_details_title') }}
-                            </label>
-                        </div>
-                    </th>
-                    <th :colspan="colSpanMultiLabelsFilter" scope="col">
-                        <LabelsEditor id="multiLabelsFilter" :labels="filterLabels" :key="multiLabelsComponentKey" :studyId="null" @labelsUpdated="onMultiLabelsFilterChanged"
-                         :showTitle="false" :isFilter="true"></LabelsEditor>
-                    </th>
-                    <th :colspan="colSpanAfterMultiLabelsFilter" scope="col">
-                        <div class="w-100 d-flex">
-                            <input class="form-check-input ms-2 me-1" type="radio" name="multiLabelsFilterAll" id="multiLabelsFilterAll"
-                                value="All" v-model="multiLabelsFilterLabelsConstraint">
-                            <label class="form-check-label" for="multiLabelsFilterAll">{{ $t('labels.filter_labels_constraint_all') }}
-                            </label>
-                            <input class="form-check-input ms-2 me-1" type="radio" name="multiLabelsFilterAny" id="multiLabelsFilterAny"
-                                value="Any" v-model="multiLabelsFilterLabelsConstraint">
-                            <label class="form-check-label" for="multiLabelsFilterAny">{{ $t('labels.filter_labels_constraint_any') }}
-                            </label>
-                        </div>
-                    </th>
-                </tr>
-                <tr class="study-table-actions">
-                    <th width="2%" :colspan="colSpanBeforeMultiLabelsFilter" scope="col">
-                        <div class="form-check" style="margin-left: 0.5rem">
-                            <input class="form-check-input" type="checkbox" v-model="allSelected"
-                                :indeterminate="isPartialSelected" @click="clickSelectAll"><span style="font-weight: 400; font-size: small;">{{ selectedStudiesCount }}</span>
-                        </div>
-                    </th>
-                    <th width="98%" :colspan="colSpanMultiLabelsFilter + colSpanAfterMultiLabelsFilter" scope="col">
-                        <div class="container px-0">
-                            <div class="row g-1">
-                                <div class="col-6 study-list-bulk-buttons">
-                                    <ResourceButtonGroup :resourceLevel="'bulk'" smallIcons="true">
-                                    </ResourceButtonGroup>
-                                </div>
-                                <div class="col-4">
-                                    <div v-if="!isSearching && isLoadingMostRecentStudies" class="alert alert-secondary study-list-alert" role="alert">
-                                        <span v-if="isLoadingMostRecentStudies" class="spinner-border spinner-border-sm alert-icon" role="status"
-                                            aria-hidden="true"></span>{{
-                                                $t('loading_most_recent_studies') }}
-                                    </div>
-                                    <div v-else-if="!isSearching && isDisplayingMostRecentStudies" class="alert alert-info study-list-alert modern-badge" role="alert">
-                                        <i class="bi bi-info-circle alert-icon"></i>{{
-                                                $t('displaying_most_recent_studies') }}
-                                    </div>
-                                    <div v-else-if="!isSearching && notShowingAllResults" class="alert alert-danger study-list-alert"
-                                        role="alert">
-                                        <i class="bi bi-exclamation-triangle-fill alert-icon"></i> {{ $t('not_showing_all_results') }} ! !
-                                    </div>
-                                    <div v-else-if="!isSearching && showEmptyStudyListIfNoSearch && this['studies/isFilterEmpty']"
-                                        class="alert alert-warning study-list-alert" role="alert">
-                                        <i class="bi bi-exclamation-triangle-fill alert-icon"></i> {{ $t('enter_search') }}
-                                    </div>
-                                    <div v-else-if="!isSearching && isStudyListEmpty"
-                                        class="alert alert-warning study-list-alert" role="alert">
-                                        <i class="bi bi-exclamation-triangle-fill alert-icon"></i> {{ $t('no_result_found') }}
-                                    </div>
-                                    <div v-else-if="isSearching" class="alert alert-secondary study-list-alert" role="alert">
-                                        <span v-if="isSearching" class="spinner-border spinner-border-sm alert-icon" role="status"
-                                            aria-hidden="true"></span>{{
-                                                $t('searching') }}
-                                    </div>
-                                </div>
-                                <div class="col-2">
-                                    <button @click="search" v-if="isSearchButtonEnabled" type="submit"
-                                        class="form-control study-list-filter btn filter-button btn-secondary search-button"
-                                        data-bs-toggle="tooltip"
-                                        :class="{ 'is-searching': isSearching, 'is-not-searching': !isSearching }"
-                                        title="Search">
-                                        <i v-if="!isSearching" class="fa-solid fa-magnifying-glass"></i>
-                                        <span v-if="isSearching" class="spinner-border spinner-border-sm" role="status"
-                                            aria-hidden="true"></span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </th>
-                </tr>
-            </thead>
-            <!-- Empty state for no studies -->
-            <tbody v-if="!isSearching && isStudyListEmpty && !showEmptyStudyListIfNoSearch" class="empty-state-tbody">
-                <tr class="empty-state-row">
-                    <td :colspan="uiOptions.StudyListColumns.length + colSpanClearFilter + (hasPrimaryViewerIcon ? 1 : 0) + (hasPdfReportIcon ? 1 : 0)">
-                        <div class="empty-state">
-                            <div class="empty-state-icon">
-                                <i class="bi bi-file-earmark-x"></i>
-                            </div>
-                            <h5 class="empty-state-title">No Studies Found</h5>
-                            <p class="empty-state-text">
-                                There are no studies matching your criteria.<br>
-                                Try adjusting your filters or upload new studies.
-                            </p>
-                        </div>
-                    </td>
-                </tr>
-            </tbody>
-            <StudyItem v-for="studyId in studiesIds" :key="studyId" :id="studyId" :studyId="studyId" v-observe-visibility="{callback: visibilityChanged, once: true}"
-                @deletedStudy="onDeletedStudy">
-            </StudyItem>
-        </table>
-        <Toasts/>
+            <div v-if="selectedStudiesIds.length > 0" class="studies-selection-bar">
+                <p class="studies-selection-text"><span class="studies-selection-count">{{ selectedStudiesIds.length }}</span> {{ $t('studies_selected') || 'studies selected' }}</p>
+                <div class="studies-selection-actions">
+                    <ResourceButtonGroup :resourceLevel="'bulk'" smallIcons="true"></ResourceButtonGroup>
+                </div>
+            </div>
+
+            <div v-if="!isSearching && (isLoadingMostRecentStudies || (showEmptyStudyListIfNoSearch && this['studies/isFilterEmpty']) || notShowingAllResults)" class="studies-alerts">
+                <div v-if="isLoadingMostRecentStudies" class="studies-alert studies-alert-info">{{ $t('loading_most_recent_studies') }}</div>
+                <div v-else-if="showEmptyStudyListIfNoSearch && this['studies/isFilterEmpty']" class="studies-alert studies-alert-warning">{{ $t('enter_search') }}</div>
+                <div v-else-if="notShowingAllResults" class="studies-alert studies-alert-danger">{{ $t('not_showing_all_results') }}</div>
+            </div>
+            <div v-else-if="!isSearching && isDisplayingMostRecentStudies" class="studies-alerts">
+                <div class="studies-alert studies-alert-info">{{ $t('displaying_most_recent_studies') }}</div>
+            </div>
+
+            <div class="studies-table-card">
+                <div v-if="isSearching" class="studies-loading">
+                    <div class="studies-spinner"></div>
+                    <p>{{ $t('searching') }}</p>
+                </div>
+                <template v-else-if="!isStudyListEmpty && !showEmptyStudyListIfNoSearch">
+                    <table class="studies-table">
+                        <thead>
+                            <tr class="studies-thead-row">
+                                <th class="studies-th studies-th-checkbox"><input type="checkbox" class="studies-checkbox" :checked="allSelected === true" :indeterminate.prop="isPartialSelected" @change="clickSelectAll" /></th>
+                                <th class="studies-th">Birth Date</th>
+                                <th class="studies-th">Patient Name</th>
+                                <th class="studies-th">Patient ID</th>
+                                <th class="studies-th">Study Description</th>
+                                <th class="studies-th">Study Date</th>
+                                <th class="studies-th">Hospital</th>
+                                <th class="studies-th">Uploaded By</th>
+                                <th class="studies-th">Modality</th>
+                                <th class="studies-th">Accession #</th>
+                                <th class="studies-th"># Ser/Inst</th>
+                                <th class="studies-th studies-th-actions"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template v-for="study in paginatedStudies" :key="study.ID">
+                                <tr class="studies-tr" :id="'study-row-' + study.ID" :class="{ 'studies-tr-expanded': expandedStudyId === study.ID }" @click="toggleExpand(study.ID)">
+                                    <td class="studies-td studies-td-checkbox" @click.stop>
+                                        <input type="checkbox" class="studies-checkbox" :checked="selectedStudiesIds.includes(study.ID)" @change="$store.dispatch('studies/selectStudy', { studyId: study.ID, isSelected: $event.target.checked })" @click.stop />
+                                    </td>
+                                    <td class="studies-td studies-td-muted">{{ formatPatientBirthDateShort(study) }}</td>
+                                    <td class="studies-td">{{ formatPatientName(study) }}</td>
+                                    <td class="studies-td studies-td-muted">{{ (study.PatientMainDicomTags && study.PatientMainDicomTags.PatientID) || '—' }}</td>
+                                    <td class="studies-td">{{ (study.MainDicomTags && study.MainDicomTags.StudyDescription) || '—' }}</td>
+                                    <td class="studies-td studies-td-muted">{{ formatStudyDateShort(study) }}</td>
+                                    <td class="studies-td studies-td-muted">{{ (study._hospitalName) || '—' }}</td>
+                                    <td class="studies-td studies-td-muted">{{ (study._uploadedBy) || '—' }}</td>
+                                    <td class="studies-td">{{ modalityDisplay(study) }}</td>
+                                    <td class="studies-td studies-td-muted">{{ (study.MainDicomTags && study.MainDicomTags.AccessionNumber) || '—' }}</td>
+                                    <td class="studies-td studies-td-muted">{{ seriesInstancesDisplay(study) }}</td>
+                                    <td class="studies-td studies-td-actions" @click.stop>
+                                        <div class="studies-row-menu-wrap">
+                                            <button type="button" class="studies-btn studies-btn-ghost studies-btn-icon studies-row-menu-btn" @click="toggleRowMenu(study.ID)" title="Actions">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                                            </button>
+                                            <div v-show="openRowMenuId === study.ID" class="studies-row-menu" @click.stop>
+                                                <button type="button" class="studies-row-menu-item" @click="closeRowMenu(); goToStudy(study.ID)">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                    View
+                                                </button>
+                                                <button type="button" class="studies-row-menu-item studies-row-menu-item-danger" @click="closeRowMenu(); $router.push('/study/' + study.ID); onDeletedStudy(study.ID)">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <!-- Expanded row: labels, study/patient details, actions -->
+                                <tr v-if="expandedStudyId === study.ID" class="studies-detail-row" @click.stop>
+                                    <td colspan="12" class="studies-detail-cell">
+                                        <div class="studies-detail-content">
+                                            <div class="studies-detail-labels">
+                                                <LabelsEditor :labels="study.Labels || []" :studyId="study.ID" :showTitle="false" :key="'labels-' + study.ID" />
+                                            </div>
+                                            <div class="studies-detail-grid">
+                                                <div class="studies-detail-col">
+                                                    <div class="studies-detail-item" v-if="study.MainDicomTags"><span class="studies-detail-label">Study Date:</span> <span class="studies-detail-value">{{ (study.MainDicomTags.StudyDate) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.MainDicomTags && study.MainDicomTags.StudyDate) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.MainDicomTags"><span class="studies-detail-label">Study Time:</span> <span class="studies-detail-value">{{ (study.MainDicomTags.StudyTime) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.MainDicomTags && study.MainDicomTags.StudyTime) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.MainDicomTags"><span class="studies-detail-label">Study Description:</span> <span class="studies-detail-value">{{ (study.MainDicomTags.StudyDescription) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.MainDicomTags && study.MainDicomTags.StudyDescription) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.MainDicomTags"><span class="studies-detail-label">Accession Number:</span> <span class="studies-detail-value">{{ (study.MainDicomTags.AccessionNumber) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.MainDicomTags && study.MainDicomTags.AccessionNumber) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.MainDicomTags"><span class="studies-detail-label">Study ID:</span> <span class="studies-detail-value">{{ (study.MainDicomTags.StudyID) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.MainDicomTags && study.MainDicomTags.StudyID) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.MainDicomTags"><span class="studies-detail-label">Study Instance UID:</span> <span class="studies-detail-value studies-detail-value-truncate">{{ (study.MainDicomTags.StudyInstanceUID) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.MainDicomTags && study.MainDicomTags.StudyInstanceUID) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.MainDicomTags"><span class="studies-detail-label">Requesting Physician:</span> <span class="studies-detail-value">{{ (study.MainDicomTags.RequestingPhysician) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.MainDicomTags && study.MainDicomTags.RequestingPhysician) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.MainDicomTags"><span class="studies-detail-label">Referring Physician:</span> <span class="studies-detail-value">{{ (study.MainDicomTags.ReferringPhysicianName) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.MainDicomTags && study.MainDicomTags.ReferringPhysicianName) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.MainDicomTags"><span class="studies-detail-label">Institution Name:</span> <span class="studies-detail-value">{{ (study.MainDicomTags.InstitutionName) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.MainDicomTags && study.MainDicomTags.InstitutionName) || ''" /></div>
+                                                </div>
+                                                <div class="studies-detail-col">
+                                                    <div class="studies-detail-item" v-if="study.PatientMainDicomTags"><span class="studies-detail-label">Patient ID:</span> <span class="studies-detail-value">{{ (study.PatientMainDicomTags.PatientID) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.PatientMainDicomTags && study.PatientMainDicomTags.PatientID) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.PatientMainDicomTags"><span class="studies-detail-label">Patient Name:</span> <span class="studies-detail-value">{{ (study.PatientMainDicomTags.PatientName) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.PatientMainDicomTags && study.PatientMainDicomTags.PatientName) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.PatientMainDicomTags"><span class="studies-detail-label">Patient Birth Date:</span> <span class="studies-detail-value">{{ (study.PatientMainDicomTags.PatientBirthDate) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.PatientMainDicomTags && study.PatientMainDicomTags.PatientBirthDate) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.PatientMainDicomTags"><span class="studies-detail-label">Patient Sex:</span> <span class="studies-detail-value">{{ (study.PatientMainDicomTags.PatientSex) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.PatientMainDicomTags && study.PatientMainDicomTags.PatientSex) || ''" /></div>
+                                                    <div class="studies-detail-item" v-if="study.PatientMainDicomTags"><span class="studies-detail-label">Patient Other IDs:</span> <span class="studies-detail-value">{{ (study.PatientMainDicomTags.OtherPatientIDs) || '—' }}</span> <CopyToClipboardButton :valueToCopy="(study.PatientMainDicomTags && study.PatientMainDicomTags.OtherPatientIDs) || ''" /></div>
+                                                    <p class="studies-detail-patient-link" v-if="study.PatientMainDicomTags && patientStudyCount(study.PatientMainDicomTags.PatientID) > 1">
+                                                        This patient has {{ patientStudyCount(study.PatientMainDicomTags.PatientID) }} studies in total. <router-link :to="{ path: '/filtered-studies', query: { PatientID: study.PatientMainDicomTags.PatientID } }">Show them!</router-link>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div class="studies-detail-actions">
+                                                <ResourceButtonGroup :resourceOrthancId="study.ID" :resourceLevel="'study'" :studyMainDicomTags="study.MainDicomTags" :patientMainDicomTags="study.PatientMainDicomTags" smallIcons="true" />
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </template>
+                <template v-else-if="isStudyListEmpty && !showEmptyStudyListIfNoSearch">
+                    <div class="studies-empty">
+                        <svg class="studies-empty-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" x2="12" y1="18" y2="12"/><line x1="9" x2="15" y1="15" y2="15"/></svg>
+                        <h3 class="studies-empty-title">{{ $t('no_result_found') || 'No Studies Found' }}</h3>
+                        <p class="studies-empty-text">{{ $t('no_studies_matching') || 'There are no studies matching your criteria. Try adjusting your filters or upload new studies.' }}</p>
+                    </div>
+                </template>
+            </div>
+
+            <div v-if="!isSearching && !isStudyListEmpty && !showEmptyStudyListIfNoSearch" class="studies-pagination">
+                <p class="studies-pagination-text">Showing <span class="studies-pagination-bold">{{ paginationStart }}</span>-<span class="studies-pagination-bold">{{ paginationEnd }}</span> of <span class="studies-pagination-bold">{{ studiesIds.length }}</span> studies</p>
+                <div class="studies-pagination-nav">
+                    <button type="button" class="studies-btn studies-btn-outline studies-btn-sm" :disabled="currentPage <= 1" @click="currentPage = Math.max(1, currentPage - 1)">Previous</button>
+                    <template v-for="(num, idx) in paginationPageNumbers" :key="num === '...' ? 'ellipsis-' + idx : num">
+                        <button v-if="num === '...'" type="button" class="studies-btn studies-btn-ghost studies-btn-sm studies-btn-pagination" disabled>...</button>
+                        <button v-else type="button" class="studies-btn studies-btn-ghost studies-btn-sm studies-btn-pagination" :class="{ 'studies-btn-pagination-active': currentPage === num }" @click="currentPage = num">{{ num }}</button>
+                    </template>
+                    <button type="button" class="studies-btn studies-btn-outline studies-btn-sm" :disabled="currentPage >= totalPages" @click="currentPage = Math.min(totalPages, currentPage + 1)">Next</button>
+                </div>
+            </div>
+
+            <Toasts />
+        </div>
     </div>
 </template>
 
@@ -1690,4 +1839,165 @@ button.form-control.study-list-filter {
     margin: 0 auto;
     line-height: 1.6;
 }
+</style>
+
+<style scoped>
+/* Modern DICOM studies page – same design system as document page (v0-modernize-emedx) */
+.studies-page-modern {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-align: left;
+    color: var(--content-foreground);
+    background: var(--content-background);
+    min-height: 100vh;
+    margin: -24px;
+    padding: 1.5rem 1rem;
+}
+@media (min-width: 1024px) {
+    .studies-page-modern {
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+}
+.studies-remote-warning {
+    margin: -24px -24px 0 -24px;
+    padding: 0.5rem 1rem;
+    background: var(--content-secondary);
+    border-bottom: 1px solid var(--content-border);
+    font-size: 0.875rem;
+    color: var(--content-muted-foreground);
+}
+.studies-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    margin-bottom: 1.5rem;
+    padding: 1rem 0;
+    background: oklch(0.96 0.01 80 / 0.8);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--content-border);
+}
+[data-bs-theme="dark"] .studies-header {
+    background: oklch(0.12 0.01 60 / 0.8);
+}
+.studies-header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.studies-title { font-size: 1.25rem; font-weight: 600; color: var(--content-foreground); margin: 0 0 2px; }
+.studies-subtitle { font-size: 0.875rem; color: var(--content-muted-foreground); margin: 0; }
+.studies-header-actions { display: flex; align-items: center; gap: 0.75rem; }
+.studies-toolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+.studies-search-wrap { position: relative; flex: 1; min-width: 200px; max-width: 28rem; }
+.studies-search-icon { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--content-muted-foreground); }
+.studies-search-input { width: 100%; min-height: 2.25rem; padding: 0.5rem 1rem 0.5rem 2.25rem; font-size: 0.875rem; font-family: inherit; color: var(--content-foreground); background: var(--content-secondary); border: 1px solid transparent; border-radius: 9999px; outline: none; box-shadow: var(--content-shadow-xs); transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+.studies-search-input::placeholder { color: var(--content-muted-foreground); }
+.studies-search-input:hover { border-color: var(--content-border); }
+.studies-search-input:focus { border-color: var(--content-primary); box-shadow: 0 0 0 3px rgba(8, 5, 3, 0.12); }
+.studies-toolbar-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.studies-date-wrap :deep(.dp__input_wrap) { height: 2.25rem; display: flex; align-items: center; }
+.studies-date-wrap :deep(.dp__input) { min-height: 2.25rem; padding: 0.5rem 1rem 0.5rem 2rem; font-size: 0.875rem; border-radius: 9999px; border: 1px solid var(--content-border); background: var(--content-secondary); }
+.studies-date-wrap :deep(.dp__input:focus) { border-color: var(--content-primary); box-shadow: 0 0 0 3px rgba(8, 5, 3, 0.12); }
+.studies-modality-dropdown .studies-modality-btn { padding: 0.5rem 1rem 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 9999px; border: 1px solid var(--content-border); background: var(--content-background); color: var(--content-foreground); }
+.studies-chevron { margin-left: 0.25rem; }
+.studies-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 2.25rem; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; font-family: inherit; border-radius: 9999px; border: none; cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; outline: none; }
+.studies-btn:focus-visible { box-shadow: 0 0 0 3px var(--content-ring, rgba(8, 5, 3, 0.15)); }
+.studies-btn:active:not(:disabled) { opacity: 0.9; }
+.studies-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.studies-btn-icon { padding: 0; width: 2.25rem; height: 2.25rem; min-width: 2.25rem; min-height: 2.25rem; }
+.studies-btn-ghost { background: transparent; color: var(--content-foreground); }
+.studies-btn-ghost:hover { background: var(--content-accent); color: var(--content-accent-foreground); }
+.studies-btn-primary { background: var(--content-primary); color: var(--content-primary-foreground); }
+.studies-btn-primary:hover { background: color-mix(in srgb, var(--content-primary) 90%, black); color: var(--content-primary-foreground); }
+.studies-btn-outline { background: var(--content-background); color: var(--content-foreground); border: 1px solid var(--content-border); }
+.studies-btn-outline:hover { background: var(--content-accent); color: var(--content-accent-foreground); border-color: var(--content-border); }
+.studies-btn-sm { padding: 0.25rem 0.75rem; font-size: 0.8125rem; }
+.studies-selection-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; padding: 1rem; margin-bottom: 1rem; background: var(--content-secondary); border-radius: 1rem; }
+.studies-selection-count { font-weight: 500; }
+.studies-alerts { margin-bottom: 1rem; }
+.studies-alert { padding: 0.75rem 1rem; border-radius: var(--content-radius); font-size: 0.875rem; }
+.studies-alert-info { background: oklch(0.92 0.08 220 / 0.5); color: oklch(0.25 0.1 250); }
+.studies-alert-warning { background: oklch(0.96 0.08 85 / 0.5); color: oklch(0.35 0.1 85); }
+.studies-alert-danger { background: oklch(0.95 0.08 25 / 0.5); color: oklch(0.4 0.12 25); }
+.studies-table-card { background: var(--content-card); border: 1px solid var(--content-border); border-radius: 1rem; overflow: visible; position: relative; }
+.studies-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; color: var(--content-muted-foreground); font-size: 0.875rem; }
+.studies-spinner { width: 2.5rem; height: 2.5rem; border: 2px solid var(--content-border); border-top-color: var(--content-primary); border-radius: 50%; animation: studies-spin 0.8s linear infinite; margin-bottom: 1rem; }
+.studies-spinner-sm { width: 1.25rem; height: 1.25rem; border-width: 2px; border-top-color: var(--content-primary); border-radius: 50%; animation: studies-spin 0.8s linear infinite; }
+@keyframes studies-spin { to { transform: rotate(360deg); } }
+.studies-empty { text-align: center; padding: 4rem 2rem; }
+.studies-empty-icon { color: var(--content-muted-foreground); margin-bottom: 1rem; }
+.studies-empty-title { font-size: 1.25rem; font-weight: 600; color: var(--content-foreground); margin: 0 0 0.5rem; }
+.studies-empty-text { font-size: 0.875rem; color: var(--content-muted-foreground); max-width: 24rem; margin: 0 auto; }
+.studies-table { width: 100%; border-collapse: collapse; border-spacing: 0; font-size: 0.875rem; table-layout: auto; font-family: var(--font-sans); }
+.studies-thead-row { background: oklch(0.93 0.015 80 / 0.5); border-bottom: 1px solid var(--content-border); }
+.studies-th { text-align: left; font-weight: 500; padding: 0.75rem 0.5rem; height: 2.5rem; color: var(--content-foreground); vertical-align: middle; }
+.studies-tr { transition: background-color 0.15s ease; border-bottom: 1px solid var(--content-border); }
+.studies-tr:last-child { border-bottom: none; }
+.studies-tr:hover { background: var(--content-secondary); }
+.studies-td { padding: 0.75rem 0.5rem; vertical-align: middle; }
+.studies-td-muted { color: var(--content-muted-foreground); }
+.studies-th-checkbox, .studies-td-checkbox { width: 3rem; text-align: center; }
+.studies-th-actions, .studies-td-actions { min-width: 2.5rem; width: 2.5rem; white-space: nowrap; overflow: visible; }
+.studies-checkbox { width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem; cursor: pointer; -webkit-appearance: none; appearance: none; border: 1px solid var(--content-input); border-radius: 4px; background: var(--content-card); box-shadow: var(--content-shadow-xs); vertical-align: middle; transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease; }
+.studies-checkbox:hover { border-color: var(--content-primary); }
+.studies-checkbox:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--content-primary); }
+.studies-checkbox:checked { background: var(--content-primary); border-color: var(--content-primary); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: center; background-size: 65%; }
+.studies-checkbox:checked:hover { filter: brightness(0.95); }
+.studies-row-menu-wrap { position: relative; overflow: visible; }
+.studies-row-menu-btn { opacity: 0.7; }
+.studies-tr:hover .studies-row-menu-btn { opacity: 1; }
+.studies-row-menu { position: absolute; right: 0; top: 100%; margin-top: 2px; z-index: 100; min-width: 10rem; padding: 0.25rem; background: var(--content-card); border: 1px solid var(--content-border); border-radius: var(--content-radius); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.studies-row-menu-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.5rem 0.75rem; font-size: 0.875rem; border: none; background: transparent; cursor: pointer; border-radius: 4px; color: var(--content-foreground); transition: background-color 0.15s ease; }
+.studies-row-menu-item:hover { background: var(--content-secondary); }
+.studies-row-menu-item:active { background: var(--content-accent); }
+.studies-row-menu-item-danger { color: var(--content-destructive); }
+.studies-row-menu-item-danger:hover { background: rgba(220, 38, 38, 0.08); }
+.studies-modality-menu { border-radius: var(--content-radius); border: 1px solid var(--content-border); box-shadow: 0 4px 12px rgba(0,0,0,0.12); padding: 0.25rem; }
+.studies-filters-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; padding: 0.75rem 0; border-top: 1px solid var(--content-border); }
+.studies-filters-label { font-size: 0.875rem; font-weight: 500; color: var(--content-foreground); }
+.studies-filters-constraint { display: flex; align-items: center; gap: 0.75rem; font-size: 0.875rem; color: var(--content-muted-foreground); }
+.studies-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 1.5rem; }
+.studies-pagination-text { font-size: 0.875rem; color: var(--content-muted-foreground); margin: 0; }
+.studies-pagination-bold { font-weight: 500; color: var(--content-foreground); }
+.studies-pagination-nav { display: flex; align-items: center; gap: 0.25rem; }
+.studies-btn-pagination { min-width: 2rem; height: 2rem; transition: background-color 0.2s ease, color 0.2s ease; }
+.studies-btn-pagination:not(.studies-btn-pagination-active):hover { background: var(--content-accent); color: var(--content-accent-foreground); }
+.studies-btn-pagination:not(.studies-btn-pagination-active):active { background: var(--content-secondary); }
+.studies-btn-pagination-active { background: var(--content-primary) !important; color: var(--content-primary-foreground) !important; }
+
+/* Filter row: same style as modern project (rounded inputs, horizontal) */
+.studies-filter-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; padding: 0.5rem 0; }
+.studies-filter-cell { flex: 1; min-width: 0; max-width: 12rem; }
+.studies-filter-cell.studies-filter-date { display: flex; align-items: center; gap: 0.5rem; max-width: 14rem; }
+.studies-filter-cell.studies-filter-modality { max-width: 10rem; }
+.studies-filter-icon { flex-shrink: 0; color: var(--content-muted-foreground); }
+.studies-filter-input { width: 100%; min-height: 2.25rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; font-family: inherit; color: var(--content-foreground); background: var(--content-secondary); border: 1px solid transparent; border-radius: 9999px; outline: none; box-shadow: var(--content-shadow-xs); transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+.studies-filter-input::placeholder { color: var(--content-muted-foreground); }
+.studies-filter-input:hover { border-color: var(--content-border); }
+.studies-filter-input:focus { border-color: var(--content-primary); box-shadow: 0 0 0 3px rgba(8, 5, 3, 0.12); }
+.studies-filter-input-wrap { flex: 1; min-width: 0; }
+.studies-filter-input-wrap :deep(.dp__input) { min-height: 2.25rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 9999px; border: 1px solid transparent; background: var(--content-secondary); }
+.studies-filter-input-wrap :deep(.dp__input:focus) { border-color: var(--content-primary); box-shadow: 0 0 0 3px rgba(8, 5, 3, 0.12); }
+.studies-filter-list-icon { margin-right: 0.25rem; vertical-align: middle; }
+.studies-filter-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+
+/* Expanded row: labels, two-column details, copy buttons, actions */
+.studies-tr { cursor: pointer; }
+.studies-tr-expanded { background: var(--content-secondary) !important; }
+.studies-detail-row { background: var(--content-secondary) !important; }
+.studies-detail-row:hover { background: var(--content-secondary) !important; }
+.studies-detail-cell { padding: 1rem 1.25rem !important; vertical-align: top !important; border-bottom: 1px solid var(--content-border); }
+.studies-detail-content { display: flex; flex-direction: column; gap: 1rem; }
+.studies-detail-labels { margin-bottom: 0.25rem; }
+.studies-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+@media (max-width: 768px) { .studies-detail-grid { grid-template-columns: 1fr; } }
+.studies-detail-col { display: flex; flex-direction: column; gap: 0.5rem; }
+.studies-detail-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; flex-wrap: wrap; }
+.studies-detail-label { font-weight: 500; color: var(--content-muted-foreground); min-width: 8rem; }
+.studies-detail-value { color: var(--content-foreground); }
+.studies-detail-value-truncate { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studies-detail-patient-link { font-size: 0.875rem; margin: 0.5rem 0 0; color: var(--content-muted-foreground); }
+.studies-detail-patient-link a { color: var(--content-primary); text-decoration: none; }
+.studies-detail-patient-link a:hover { text-decoration: underline; }
+.studies-detail-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--content-border); }
+.studies-detail-actions :deep(.btn-clipboard) { margin-left: 0.25rem; }
 </style>

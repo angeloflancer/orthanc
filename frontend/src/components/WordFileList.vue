@@ -560,6 +560,14 @@ export default {
             } catch (error) {
                 console.error('Error loading user role:', error);
             }
+        },
+        openUploadPanel() {
+            this.messageBus.emit('open-upload-panel');
+            this.$nextTick(() => {
+                setTimeout(() => {
+                    document.getElementById('wordFilesUpload')?.click();
+                }, 350);
+            });
         }
     }
 }
@@ -577,7 +585,7 @@ export default {
                     <button type="button" class="documents-btn documents-btn-ghost documents-btn-icon" @click="loadWordFiles" title="Refresh" :disabled="loading">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                     </button>
-                    <a href="#" class="documents-btn documents-btn-primary documents-btn-link" @click.prevent="$router.push('/')">
+                    <a href="#" class="documents-btn documents-btn-primary documents-btn-link" @click.prevent="openUploadPanel">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
                         Upload Document
                     </a>
@@ -589,8 +597,8 @@ export default {
                     <input type="search" class="documents-search-input" v-model="filterFileName" placeholder="Search documents..." />
                 </div>
                 <div class="documents-toolbar-right">
-                    <div class="documents-select-wrap">
-                        <select class="documents-select" v-model="filterType">
+                    <div class="documents-select-wrap documents-disabled-control">
+                        <select class="documents-select" v-model="filterType" disabled title="Not yet implemented">
                             <option value="">All Types</option>
                             <option value="PDF">PDF</option>
                             <option value="DOCX">DOCX</option>
@@ -599,9 +607,9 @@ export default {
                         </select>
                         <svg class="documents-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
                     </div>
-                    <div class="documents-view-toggle">
-                        <button type="button" class="documents-view-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'" title="List"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg></button>
-                        <button type="button" class="documents-view-btn" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'" title="Grid"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
+                    <div class="documents-view-toggle documents-disabled-control">
+                        <button type="button" class="documents-view-btn" :class="{ active: viewMode === 'list' }" disabled title="Not yet implemented"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg></button>
+                        <button type="button" class="documents-view-btn" :class="{ active: viewMode === 'grid' }" disabled title="Not yet implemented"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
                     </div>
                 </div>
             </div>
@@ -805,6 +813,9 @@ export default {
 .documents-view-btn:hover { background: var(--content-secondary); color: var(--content-foreground); }
 .documents-view-btn:active { background: var(--content-accent); }
 .documents-view-btn.active { background: var(--content-secondary); color: var(--content-foreground); }
+.documents-disabled-control { opacity: 0.6; pointer-events: none; cursor: not-allowed; }
+.documents-disabled-control .documents-select,
+.documents-disabled-control .documents-view-btn { cursor: not-allowed; }
 .documents-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 2.25rem; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; font-family: inherit; border-radius: 9999px; border: none; cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; outline: none; }
 .documents-btn:focus-visible { box-shadow: 0 0 0 3px var(--content-ring, rgba(8, 5, 3, 0.15)); }
 .documents-btn:active:not(:disabled) { opacity: 0.9; }
@@ -858,7 +869,7 @@ a.documents-btn-link:hover { text-decoration: none; }
 .documents-checkbox { width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem; cursor: pointer; -webkit-appearance: none; appearance: none; border: 1px solid var(--content-input); border-radius: 4px; background: var(--content-card); box-shadow: var(--content-shadow-xs); vertical-align: middle; transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease; }
 .documents-checkbox:hover { border-color: var(--content-primary); }
 .documents-checkbox:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--content-primary); }
-.documents-checkbox:checked { background: var(--content-primary); border-color: var(--content-primary); }
+.documents-checkbox:checked { background: var(--content-primary); border-color: var(--content-primary); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: center; background-size: 65%; }
 .documents-checkbox:checked:hover { filter: brightness(0.95); }
 .documents-row-menu-wrap { position: relative; overflow: visible; }
 .documents-row-menu-btn { opacity: 0.7; }
