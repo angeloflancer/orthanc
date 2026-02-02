@@ -17,12 +17,14 @@ async function getRequestUser(req) {
   return User.findById(req.user._id).select('-password');
 }
 
-// Get upload directory from environment variable or use default
-const uploadsDir = process.env.WORD_FILES_UPLOAD_PATH 
+// Get upload directory: when running as pkg exe, use cwd so we don't mkdir in snapshot
+const uploadsDir = process.env.WORD_FILES_UPLOAD_PATH
   ? path.resolve(process.env.WORD_FILES_UPLOAD_PATH)
-  : path.join(__dirname, '../uploads/wordfiles');
+  : (typeof process.pkg !== 'undefined' && process.pkg)
+    ? path.join(process.cwd(), 'uploads', 'wordfiles')
+    : path.join(__dirname, '../uploads/wordfiles');
 
-// Create uploads directory if it doesn't exist
+// Create uploads directory if it doesn't exist (when pkg exe, uploadsDir is under cwd)
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }

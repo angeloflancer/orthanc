@@ -5,6 +5,7 @@ const Patient = require('../models/Patient');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
 const { checkFeatureAccess } = require('../middleware/accessControl');
+const orthancClient = require('../utils/orthancClient');
 
 /** Get request user: for owner use req.user (not in DB); for others load from DB. */
 async function getRequestUser(req) {
@@ -260,12 +261,9 @@ router.delete('/:orthancStudyId', protect, checkFeatureAccess(), async (req, res
     // Owner and admin can delete any study; doctors cannot delete (handled above)
     // No hospital check - admin can delete any study
     
-    // Delete from Orthanc
-    const axios = require('axios');
-    const TARGET_SERVICE = process.env.TARGET_SERVICE || 'http://localhost:8042';
-    
+    // Delete from Orthanc (uses IPv4 localhost via orthancClient)
     try {
-      await axios.delete(`${TARGET_SERVICE}/studies/${orthancStudyId}`);
+      await orthancClient.delete(`/studies/${orthancStudyId}`);
     } catch (err) {
       console.error(`Error deleting study ${orthancStudyId} from Orthanc:`, err.message);
       // Continue with database deletion even if Orthanc deletion fails

@@ -1,11 +1,50 @@
-require('dotenv').config();
+// Load .env from a known location so the backend always uses it (dotenv default is process.cwd(), which fails when run from another dir).
+const path = require('path');
+const fs = require('fs');
+
+function loadEnv() {
+  const dotenv = require('dotenv');
+  // 1) When packaged (pkg): load from exe directory, then parent (e.g. backend/.env when exe is in backend/dist/).
+  if (typeof process.pkg !== 'undefined' && process.pkg) {
+    const exeDir = path.dirname(process.execPath);
+    const exeEnv = path.resolve(exeDir, '.env');
+    const parentEnv = path.resolve(exeDir, '..', '.env');
+    if (fs.existsSync(exeEnv)) {
+      dotenv.config({ path: exeEnv });
+    }
+    if (fs.existsSync(parentEnv)) {
+      dotenv.config({ path: parentEnv, override: true });
+    }
+    return;
+  }
+  // 2) When running with Node: load from the directory that contains server.js (backend/.env), regardless of process.cwd().
+  const envPath = path.resolve(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+  } else {
+    dotenv.config(); // fallback to default (cwd)
+  }
+}
+loadEnv();
+
+// Force IPv4 for localhost so nothing connects to ::1 (avoids ECONNREFUSED ::1:27017 etc.)
+function normalizeLocalhostToIPv4(str) {
+  if (!str || typeof str !== 'string') return str;
+  return str
+    .replace(/\/\/localhost:/gi, '//127.0.0.1:')
+    .replace(/@localhost:/gi, '@127.0.0.1:')
+    .replace(/\/\/localhost\//gi, '//127.0.0.1/')
+    .replace(/@localhost\//gi, '@127.0.0.1/');
+}
+if (process.env.MONGODB_URI) {
+  process.env.MONGODB_URI = normalizeLocalhostToIPv4(process.env.MONGODB_URI);
+}
+
 const express = require('express');
 const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 const jwt = require('jsonwebtoken');
-const axios = require('axios');
+const orthancClient = require('./utils/orthancClient');
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const wordFileRoutes = require('./routes/wordFiles');
@@ -22,7 +61,7 @@ const HospitalMember = require('./models/HospitalMember');
 
 const app = express();
 const PORT = process.env.PORT || 5830;
-const TARGET_SERVICE = process.env.TARGET_SERVICE || 'http://localhost:8042';
+const TARGET_SERVICE = orthancClient.getTargetBase();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // Connect to MongoDB
@@ -137,13 +176,8 @@ app.post('/tools/find', express.json(), async (req, res) => {
       });
     }
     
-    // Forward the request to Orthanc
-    const orthancResponse = await axios.post(`${TARGET_SERVICE}/tools/find`, req.body, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-    
+    // Forward the request to Orthanc (IPv4 localhost via orthancClient)
+    const orthancResponse = await orthancClient.post('/tools/find', req.body);
     let results = orthancResponse.data;
     
     // Get query level
@@ -219,7 +253,7 @@ app.post('/tools/find', express.json(), async (req, res) => {
       for (const resourceId of results) {
         try {
           // Get the resource details to find parent study
-          const resourceResponse = await axios.get(`${TARGET_SERVICE}/${queryLevel.toLowerCase()}s/${resourceId}`);
+          const resourceResponse = await orthancClient.get(`/${queryLevel.toLowerCase()}s/${resourceId}`);
           const parentStudyId = resourceResponse.data.ParentStudy;
           
           if (allowedStudyIds.includes(parentStudyId)) {
@@ -239,7 +273,7 @@ app.post('/tools/find', express.json(), async (req, res) => {
       for (const patientId of results) {
         try {
           // Get patient's studies
-          const patientResponse = await axios.get(`${TARGET_SERVICE}/patients/${patientId}`);
+          const patientResponse = await orthancClient.get(`/patients/${patientId}`);
           const patientStudies = patientResponse.data.Studies || [];
           
           // Check if user has access to any of the patient's studies
@@ -261,7 +295,6 @@ app.post('/tools/find', express.json(), async (req, res) => {
     console.error('DICOM find filter error:', error.message);
     
     if (error.response) {
-      // Forward Orthanc error response
       return res.status(error.response.status).json(error.response.data);
     }
     
@@ -307,8 +340,14 @@ const proxyOptions = {
       // Convert buffer to string
       let modifiedHtml = responseBuffer.toString('utf8');
       
-      // Replace logo and product info
-      const assetsDir = path.join(__dirname, 'assets');
+      // Replace logo and product info (pkg exe: try snapshot path first, then next to exe)
+      const assetsDirCandidates = [
+        path.join(__dirname, 'assets'),
+        ...(typeof process.pkg !== 'undefined' && process.pkg
+          ? [path.join(path.dirname(process.execPath), 'assets')]
+          : [])
+      ];
+      const assetsDir = assetsDirCandidates.find(d => fs.existsSync(d)) || assetsDirCandidates[0];
       const logoPath = path.join(assetsDir, 'emedx-logo.png');
       const faviconLogoPath = path.join(assetsDir, 'logo.png');
       let logoDataUrl = null;

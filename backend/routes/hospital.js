@@ -6,6 +6,7 @@ const User = require('../models/User');
 const HospitalSubscription = require('../models/HospitalSubscription');
 const { protect } = require('../middleware/auth');
 const { requireAdmin, requireRole, requireOwner } = require('../middleware/roleAuth');
+const orthancClient = require('../utils/orthancClient');
 
 // Create hospital (Admin only)
 router.post('/', protect, requireRole('admin'), async (req, res) => {
@@ -397,19 +398,17 @@ router.delete('/', protect, requireRole('admin'), async (req, res) => {
     const DicomStudy = require('../models/DicomStudy');
     const WordFile = require('../models/WordFile');
     const Patient = require('../models/Patient');
-    const axios = require('axios');
     const fs = require('fs');
     const path = require('path');
-    const TARGET_SERVICE = process.env.TARGET_SERVICE || 'http://localhost:8042';
     
     // Get all DICOM studies for this hospital
     const dicomStudies = await DicomStudy.find({ hospital: hospital._id }).select('orthancStudyId');
     
-    // Delete studies from Orthanc
+    // Delete studies from Orthanc (uses IPv4 localhost via orthancClient)
     for (const study of dicomStudies) {
       if (study.orthancStudyId) {
         try {
-          await axios.delete(`${TARGET_SERVICE}/studies/${study.orthancStudyId}`);
+          await orthancClient.delete(`/studies/${study.orthancStudyId}`);
         } catch (err) {
           console.error(`Error deleting study ${study.orthancStudyId} from Orthanc:`, err.message);
           // Continue with deletion even if Orthanc deletion fails
