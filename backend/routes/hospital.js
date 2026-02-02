@@ -97,18 +97,29 @@ router.get('/', protect, requireRole('admin', 'owner'), async (req, res) => {
   }
 });
 
-// Get all hospitals (Owner only) - for Hospital Management
+// Get all hospitals (Owner only) - for Hospital Management (paginated)
 router.get('/all', protect, requireOwner(), async (req, res) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const total = await Hospital.countDocuments();
     const hospitals = await Hospital.find()
       .populate('admin', 'name email username')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     const result = await Promise.all(hospitals.map(async (h) => {
       const subscription = await HospitalSubscription.findOne({ hospital: h._id });
       const memberCount = await HospitalMember.countDocuments({
         hospital: h._id,
         status: 'accepted'
+      });
+      const pendingCount = await HospitalMember.countDocuments({
+        hospital: h._id,
+        status: { $in: ['pending', 'pending_invitation'] }
       });
       return {
         id: h._id,
@@ -122,6 +133,7 @@ router.get('/all', protect, requireOwner(), async (req, res) => {
           email: h.admin.email
         } : null,
         memberCount,
+        pendingCount,
         subscription: subscription ? {
           planType: subscription.planType,
           expiresAt: subscription.expiresAt,
@@ -136,10 +148,206 @@ router.get('/all', protect, requireOwner(), async (req, res) => {
 
     res.json({
       success: true,
-      hospitals: result
+      hospitals: result,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1
+      }
     });
   } catch (error) {
     console.error('Get all hospitals error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ----- Owner-only: manage members of any hospital -----
+
+// Get members of a hospital (Owner only) (paginated)
+router.get('/:hospitalId/members', protect, requireOwner(), async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.params.hospitalId);
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital not found' });
+    }
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const total = await HospitalMember.countDocuments({ hospital: hospital._id });
+    const members = await HospitalMember.find({ hospital: hospital._id })
+      .populate('user', 'username name email')
+      .sort({ status: 1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    res.json({
+      success: true,
+      members: members.map(m => ({
+        id: m._id,
+        user: m.user ? {
+          id: m.user._id,
+          username: m.user.username,
+          name: m.user.name,
+          email: m.user.email
+        } : null,
+        status: m.status,
+        joinedAt: m.joinedAt,
+        statusChangedAt: m.statusChangedAt,
+        createdAt: m.createdAt
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1
+      }
+    });
+  } catch (error) {
+    console.error('Get hospital members error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Invite doctor to hospital by username (Owner only)
+router.post('/:hospitalId/members/invite', protect, requireOwner(), async (req, res) => {
+  try {
+    const { username } = req.body;
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+    const hospital = await Hospital.findById(req.params.hospitalId);
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital not found' });
+    }
+    const user = await User.findOne({ username: username.trim().toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (user.role !== 'doctor') {
+      return res.status(400).json({ error: 'Only doctors can be invited to a hospital' });
+    }
+    if (user.blocked && user.blockedBy === 'owner') {
+      return res.status(400).json({ error: 'This user account is suspended' });
+    }
+    const existing = await HospitalMember.findOne({ hospital: hospital._id, user: user._id });
+    if (existing) {
+      if (existing.status === 'accepted') {
+        return res.status(400).json({ error: 'This doctor is already a member' });
+      }
+      if (existing.status === 'pending_invitation') {
+        return res.status(400).json({ error: 'This doctor already has a pending invitation' });
+      }
+      if (existing.status === 'blocked') {
+        return res.status(400).json({ error: 'This doctor is blocked from this hospital' });
+      }
+      existing.status = 'pending_invitation';
+      existing.invitedBy = req.user._id || null;
+      existing.statusChangedAt = new Date();
+      await existing.save();
+      return res.json({ success: true, message: 'Re-invitation sent' });
+    }
+    const otherAccepted = await HospitalMember.findOne({ user: user._id, status: 'accepted' });
+    if (otherAccepted) {
+      return res.status(400).json({ error: 'This doctor is already a member of another hospital' });
+    }
+    await HospitalMember.create({
+      hospital: hospital._id,
+      user: user._id,
+      status: 'pending_invitation',
+      invitedBy: req.user._id || null
+    });
+    res.status(201).json({ success: true, message: 'Invitation sent successfully' });
+  } catch (error) {
+    console.error('Invite to hospital error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Kick member (Owner only)
+router.put('/:hospitalId/members/:memberId/kick', protect, requireOwner(), async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.params.hospitalId);
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital not found' });
+    }
+    const membership = await HospitalMember.findOne({
+      _id: req.params.memberId,
+      hospital: hospital._id
+    });
+    if (!membership) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    if (membership.status === 'kicked') {
+      return res.status(400).json({ error: 'Member is already kicked' });
+    }
+    membership.status = 'kicked';
+    await membership.save();
+    res.json({ success: true, message: 'Member kicked successfully' });
+  } catch (error) {
+    console.error('Kick member error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Block member (Owner only) - also sets user.blockedBy = 'owner' for app-wide block
+router.put('/:hospitalId/members/:memberId/block', protect, requireOwner(), async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.params.hospitalId);
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital not found' });
+    }
+    const membership = await HospitalMember.findOne({
+      _id: req.params.memberId,
+      hospital: hospital._id
+    }).populate('user');
+    if (!membership) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    if (membership.status === 'blocked') {
+      return res.status(400).json({ error: 'Member is already blocked' });
+    }
+    membership.status = 'blocked';
+    await membership.save();
+    await User.findByIdAndUpdate(membership.user._id, {
+      $set: { blocked: true, blockedBy: 'owner' }
+    });
+    res.json({ success: true, message: 'Member blocked successfully' });
+  } catch (error) {
+    console.error('Block member error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Unblock member (Owner only)
+router.put('/:hospitalId/members/:memberId/unblock', protect, requireOwner(), async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.params.hospitalId);
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital not found' });
+    }
+    const membership = await HospitalMember.findOne({
+      _id: req.params.memberId,
+      hospital: hospital._id
+    });
+    if (!membership) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    if (membership.status !== 'blocked') {
+      return res.status(400).json({ error: 'Member is not blocked' });
+    }
+    membership.status = 'kicked';
+    await membership.save();
+    const user = await User.findById(membership.user);
+    if (user && user.blockedBy === 'owner') {
+      user.blocked = false;
+      user.blockedBy = null;
+      await user.save();
+    }
+    res.json({ success: true, message: 'Member unblocked successfully' });
+  } catch (error) {
+    console.error('Unblock member error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

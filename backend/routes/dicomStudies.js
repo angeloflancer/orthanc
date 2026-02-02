@@ -164,7 +164,7 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
   }
 });
 
-// Get all DICOM studies
+// Get all DICOM studies (paginated)
 router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const user = await getRequestUser(req);
@@ -172,30 +172,19 @@ router.get('/', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Build query based on user role and hospital
-    let query = {};
-    
-    if (user.role === 'owner') {
-      // Owner can see all studies
-      query = {};
-    } else {
-      // Admin and doctor can only see their hospital's studies
-      const hospital = req.hospital;
-      if (!hospital) {
-        return res.status(403).json({ error: 'Hospital not found' });
-      }
-      query.hospital = hospital._id;
-      
-      // Doctors can only see their own data
-      if (user.role === 'doctor') {
-        query.uploadedBy = req.user._id;
-      }
-    }
-    
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    const total = await DicomStudy.countDocuments(query);
+
     const studies = await DicomStudy.find(query)
       .sort({ uploadedAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
-    
+
     res.json({
       success: true,
       studies: studies.map(study => ({
@@ -213,7 +202,13 @@ router.get('/', protect, checkFeatureAccess(), async (req, res) => {
         instancesCount: study.instancesCount,
         uploadedByName: study.uploadedByName,
         uploadedAt: study.uploadedAt
-      }))
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1
+      }
     });
   } catch (error) {
     console.error('Get DICOM studies error:', error);
@@ -262,13 +257,8 @@ router.delete('/:orthancStudyId', protect, checkFeatureAccess(), async (req, res
       return res.status(404).json({ error: 'DICOM study not found in database' });
     }
     
-    // Check hospital access for non-owners
-    if (user.role !== 'owner') {
-      const hospital = req.hospital;
-      if (!hospital || !dicomStudy.hospital || !dicomStudy.hospital.equals(hospital._id)) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
+    // Owner and admin can delete any study; doctors cannot delete (handled above)
+    // No hospital check - admin can delete any study
     
     // Delete from Orthanc
     const axios = require('axios');

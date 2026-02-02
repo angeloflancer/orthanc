@@ -31,7 +31,13 @@ export default {
             docxPreviewError: false,
             printAfterOpen: false,
             userRole: 'doctor', // Default to doctor, will be loaded
-            highlightedDocumentId: null // ID of document to highlight
+            highlightedDocumentId: null, // ID of document to highlight
+            pagination: {
+                page: 1,
+                limit: 20,
+                total: 0,
+                pages: 0
+            }
         };
     },
     async created() {
@@ -54,25 +60,32 @@ export default {
             deep: true
         },
         filterFileName() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadWordFiles();
         },
         filterPatientId() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadWordFiles();
         },
         filterPatientName() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadWordFiles();
         },
         filterHospital() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadWordFiles();
         },
         filterUploadedBy() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadWordFiles();
         },
         filterUploadedAt() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadWordFiles();
         },
         wordFiles() {
-            this.applyFilters();
+            this.filteredWordFiles = [...this.wordFiles];
+            this.updateSelectAll();
         },
         '$route'(to, from) {
             // Only handle route changes if we're on the word-files route
@@ -120,26 +133,45 @@ export default {
             return this.selectedWordFileIds.length > 0;
         },
         isEmpty() {
-            return !this.loading && this.filteredWordFiles.length === 0;
+            return !this.loading && this.pagination.total === 0;
         },
         isDoctor() {
             return this.userRole === 'doctor';
         }
     },
     methods: {
+        buildWordFileParams() {
+            const range = Array.isArray(this.filterUploadedAt) ? this.filterUploadedAt : (this.filterUploadedAt ? [this.filterUploadedAt] : []);
+            let uploadedAtFrom, uploadedAtTo;
+            if (range.length >= 1 && range[0]) uploadedAtFrom = new Date(range[0]).toISOString();
+            if (range.length >= 2 && range[1]) uploadedAtTo = new Date(range[1]).toISOString();
+            return {
+                page: this.pagination.page,
+                limit: this.pagination.limit,
+                fileName: this.filterFileName.trim() || undefined,
+                patientId: this.filterPatientId.trim() || undefined,
+                patientName: this.filterPatientName.trim() || undefined,
+                hospital: this.filterHospital.trim() || undefined,
+                uploadedBy: this.filterUploadedBy.trim() || undefined,
+                uploadedAtFrom,
+                uploadedAtTo
+            };
+        },
         async loadWordFiles() {
             this.loading = true;
             try {
-                const response = await api.getWordFiles();
+                const params = this.buildWordFileParams();
+                const response = await api.getWordFiles(params);
                 if (response.success) {
                     this.wordFiles = response.wordFiles || [];
-                    this.applyFilters();
-                    
-                    // If there's a highlighted document, scroll to it and expand it
+                    this.filteredWordFiles = [...(response.wordFiles || [])];
+                    if (response.pagination) {
+                        this.pagination = { ...this.pagination, ...response.pagination };
+                    }
+                    this.updateSelectAll();
                     if (this.highlightedDocumentId) {
                         this.$nextTick(() => {
                             this.scrollToDocument(this.highlightedDocumentId);
-                            // Auto-expand the highlighted document
                             if (!this.isExpanded(this.highlightedDocumentId)) {
                                 this.expandedWordFileId = this.highlightedDocumentId;
                             }
@@ -170,76 +202,14 @@ export default {
             });
         },
         applyFilters() {
-            let filtered = [...this.wordFiles];
-            
-            if (this.filterFileName.trim()) {
-                const search = this.filterFileName.toLowerCase();
-                filtered = filtered.filter(file => 
-                    file.originalFileName.toLowerCase().includes(search)
-                );
-            }
-            
-            if (this.filterPatientId.trim()) {
-                const search = this.filterPatientId.toLowerCase();
-                filtered = filtered.filter(file => 
-                    file.patientId.toLowerCase().includes(search)
-                );
-            }
-            
-            if (this.filterPatientName.trim()) {
-                const search = this.filterPatientName.toLowerCase();
-                filtered = filtered.filter(file => 
-                    file.patientName.toLowerCase().includes(search)
-                );
-            }
-            
-            if (this.filterHospital.trim()) {
-                const search = this.filterHospital.toLowerCase();
-                filtered = filtered.filter(file => 
-                    (file.hospitalName || '').toLowerCase().includes(search)
-                );
-            }
-            
-            if (this.filterUploadedBy.trim()) {
-                const search = this.filterUploadedBy.toLowerCase();
-                filtered = filtered.filter(file => 
-                    file.uploadedByName.toLowerCase().includes(search)
-                );
-            }
-            
-            // Date filter
-            if (this.filterUploadedAt) {
-                const filterDate = Array.isArray(this.filterUploadedAt) ? this.filterUploadedAt : [this.filterUploadedAt];
-                if (filterDate.length >= 1 && filterDate[0]) {
-                    const startDate = new Date(filterDate[0]);
-                    startDate.setHours(0, 0, 0, 0);
-                    filtered = filtered.filter(file => {
-                        const fileDate = new Date(file.uploadedAt);
-                        return fileDate >= startDate;
-                    });
-                }
-                if (filterDate.length >= 2 && filterDate[1]) {
-                    const endDate = new Date(filterDate[1]);
-                    endDate.setHours(23, 59, 59, 999);
-                    filtered = filtered.filter(file => {
-                        const fileDate = new Date(file.uploadedAt);
-                        return fileDate <= endDate;
-                    });
-                }
-            }
-            
-            this.filteredWordFiles = filtered;
-
-            const temp = "";
-            console.log('filteredWordFiles', this.filteredWordFiles, temp.length > 1 ? !(temp[1].hospitalName.length == 0) : '');
+            // Server-side filtering is used; filteredWordFiles is set from response in loadWordFiles
+            this.filteredWordFiles = [...this.wordFiles];
             this.updateSelectAll();
-            
-            // If there's a highlighted document, scroll to it after filters are applied
-            if (this.highlightedDocumentId) {
-                this.$nextTick(() => {
-                    this.scrollToDocument(this.highlightedDocumentId);
-                });
-            }
+        },
+        goToPage(page) {
+            if (page < 1 || page > this.pagination.pages) return;
+            this.pagination.page = page;
+            this.loadWordFiles();
         },
         clearFilters() {
             this.filterFileName = '';
@@ -248,6 +218,8 @@ export default {
             this.filterHospital = '';
             this.filterUploadedBy = '';
             this.filterUploadedAt = null;
+            this.pagination.page = 1;
+            this.loadWordFiles();
         },
         toggleExpand(id) {
             if (this.expandedWordFileId === id) {
@@ -268,12 +240,11 @@ export default {
                 const response = await api.deleteWordFile(id);
                 // Check if response indicates success
                 if (response && (response.success || response.message)) {
-                    this.wordFiles = this.wordFiles.filter(file => file.id !== id);
-                    this.filteredWordFiles = this.filteredWordFiles.filter(file => file.id !== id);
                     if (this.expandedWordFileId === id) {
                         this.expandedWordFileId = null;
                     }
                     this.messageBus.emit('show-toast', 'Document deleted successfully');
+                    await this.loadWordFiles();
                 } else {
                     throw new Error('Unexpected response format');
                 }
@@ -296,10 +267,10 @@ export default {
                 for (const id of this.selectedWordFileIds) {
                     await api.deleteWordFile(id);
                 }
-                this.wordFiles = this.wordFiles.filter(file => !this.selectedWordFileIds.includes(file.id));
                 this.selectedWordFileIds = [];
                 this.expandedWordFileId = null;
                 this.messageBus.emit('show-toast', 'Selected documents deleted successfully');
+                await this.loadWordFiles();
             } catch (error) {
                 console.error('Error deleting word files:', error);
                 this.messageBus.emit('show-toast', 'Failed to delete some documents');
@@ -748,6 +719,26 @@ export default {
                 </tr>
             </tbody>
         </table>
+        <!-- Pagination -->
+        <div v-if="!loading && pagination.pages > 1" class="pagination-section">
+            <button
+                class="btn btn-sm btn-outline-secondary"
+                :disabled="pagination.page <= 1"
+                @click="goToPage(pagination.page - 1)"
+            >
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <span class="page-info">
+                Page {{ pagination.page }} of {{ pagination.pages }}
+            </span>
+            <button
+                class="btn btn-sm btn-outline-secondary"
+                :disabled="pagination.page >= pagination.pages"
+                @click="goToPage(pagination.page + 1)"
+            >
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
         <Toasts />
         
         <!-- Document Viewer Modal -->
@@ -1264,6 +1255,20 @@ input.form-control.study-list-filter {
     font-weight: 600;
     color: var(--bs-body-color);
     margin-bottom: 12px;
+}
+
+.pagination-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 0;
+    margin-top: 8px;
+}
+
+.page-info {
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color);
 }
 </style>
 

@@ -75,7 +75,7 @@ app.use('/api/subscriptions', express.json());
 app.use('/api/subscriptions', express.urlencoded({ extended: true }));
 app.use('/api/subscriptions', subscriptionRoutes);
 
-// Helper function to get user from token
+// Helper function to get user from token (supports owner token and DB user)
 async function getUserFromToken(req) {
   try {
     let token;
@@ -88,56 +88,35 @@ async function getUserFromToken(req) {
     if (!token) return null;
     
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(decoded.id);
+
+    // Owner token: not in DB, return synthetic user
+    if (decoded.type === 'owner' && decoded.email) {
+      return {
+        _id: null,
+        role: 'owner',
+        email: decoded.email,
+        name: process.env.OWNER_NAME || 'Owner',
+        emailVerified: true,
+        blocked: false,
+        blockedBy: null
+      };
+    }
+
+    const user = await User.findById(decoded.id).select('-password');
     return user;
   } catch (error) {
     return null;
   }
 }
 
-// Helper function to get allowed Orthanc study IDs based on user role and hospital
+// Helper function to get allowed Orthanc study IDs based on user role
+// Owner, admin, and doctor all see all DICOM data (no filtering)
 async function getAllowedOrthancStudyIds(user) {
   if (!user) return [];
-  
-  if (user.role === 'owner') {
-    // Owner can access all data - return null to indicate no filtering
+  // All authenticated roles see all studies - return null to indicate no filtering
+  if (user.role === 'owner' || user.role === 'admin' || user.role === 'doctor') {
     return null;
   }
-  
-  if (user.role === 'admin') {
-    // Admin can access all data from their hospital
-    const hospital = await Hospital.findOne({ admin: user._id });
-    
-    if (!hospital) {
-      // Admin without hospital has no data
-      return [];
-    }
-    
-    // Get all studies for this hospital
-    const studies = await DicomStudy.find({ hospital: hospital._id }).select('orthancStudyId');
-    return studies.map(s => s.orthancStudyId);
-  }
-  
-  if (user.role === 'doctor') {
-    // Doctor can only access their own data from their hospital
-    const membership = await HospitalMember.findOne({ 
-      user: user._id,
-      status: 'accepted'
-    });
-    
-    if (!membership) {
-      // Doctor without hospital membership has no data
-      return [];
-    }
-    
-    // Get only studies uploaded by this doctor for this hospital
-    const studies = await DicomStudy.find({ 
-      hospital: membership.hospital,
-      uploadedBy: user._id
-    }).select('orthancStudyId');
-    return studies.map(s => s.orthancStudyId);
-  }
-  
   return [];
 }
 

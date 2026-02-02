@@ -430,12 +430,13 @@ export default {
         
         return (await axios.post(orthancApiUrl + "api/wordfiles/upload", formData, config)).data;
     },
-    async getWordFiles() {
+    async getWordFiles(params = {}) {
         const token = localStorage.getItem('auth-token');
         const config = {
             headers: {
                 'Authorization': `Bearer ${token}`
-            }
+            },
+            params: { page: params.page, limit: params.limit, fileName: params.fileName, patientId: params.patientId, patientName: params.patientName, hospital: params.hospital, uploadedBy: params.uploadedBy, uploadedAtFrom: params.uploadedAtFrom, uploadedAtTo: params.uploadedAtTo }
         };
         return (await axios.get(orthancApiUrl + "api/wordfiles", config)).data;
     },
@@ -500,12 +501,13 @@ export default {
         return (await axios.delete(orthancApiUrl + "api/dicom-studies/" + encodeURIComponent(orthancStudyId), config)).data;
     },
     // Patient API methods
-    async getPatients() {
+    async getPatients(params = {}) {
         const token = localStorage.getItem('auth-token');
         const config = {
             headers: {
                 'Authorization': `Bearer ${token}`
-            }
+            },
+            params: { page: params.page, limit: params.limit, patientId: params.patientId, patientName: params.patientName, patientSex: params.patientSex, birthDateFrom: params.birthDateFrom, birthDateTo: params.birthDateTo }
         };
         return (await axios.get(orthancApiUrl + "api/patients", config)).data;
     },

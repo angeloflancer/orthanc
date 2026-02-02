@@ -18,7 +18,13 @@ export default {
             filterPatientName: '',
             filterPatientBirthDate: null,
             filterPatientSex: '',
-            filterLastReported: null
+            filterLastReported: null,
+            pagination: {
+                page: 1,
+                limit: 20,
+                total: 0,
+                pages: 0
+            }
         };
     },
     async created() {
@@ -26,16 +32,20 @@ export default {
     },
     watch: {
         filterPatientId() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadPatients();
         },
         filterPatientName() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadPatients();
         },
         filterPatientBirthDate() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadPatients();
         },
         filterPatientSex() {
-            this.applyFilters();
+            this.pagination.page = 1;
+            this.loadPatients();
         },
         filterLastReported() {
             this.applyFilters();
@@ -46,7 +56,7 @@ export default {
     },
     computed: {
         isEmpty() {
-            return !this.loading && this.filteredPatients.length === 0;
+            return !this.loading && this.pagination.total === 0;
         },
         sexOptions() {
             return [
@@ -58,12 +68,31 @@ export default {
         }
     },
     methods: {
+        buildPatientParams() {
+            const range = Array.isArray(this.filterPatientBirthDate) ? this.filterPatientBirthDate : (this.filterPatientBirthDate ? [this.filterPatientBirthDate] : []);
+            let birthDateFrom, birthDateTo;
+            if (range.length >= 1 && range[0]) birthDateFrom = new Date(range[0]).toISOString().slice(0, 10);
+            if (range.length >= 2 && range[1]) birthDateTo = new Date(range[1]).toISOString().slice(0, 10);
+            return {
+                page: this.pagination.page,
+                limit: this.pagination.limit,
+                patientId: this.filterPatientId.trim() || undefined,
+                patientName: this.filterPatientName.trim() || undefined,
+                patientSex: this.filterPatientSex || undefined,
+                birthDateFrom,
+                birthDateTo
+            };
+        },
         async loadPatients() {
             this.loading = true;
             try {
-                const response = await api.getPatients();
+                const params = this.buildPatientParams();
+                const response = await api.getPatients(params);
                 if (response.success) {
                     this.patients = response.patients || [];
+                    if (response.pagination) {
+                        this.pagination = { ...this.pagination, ...response.pagination };
+                    }
                     this.applyFilters();
                 }
             } catch (error) {
@@ -74,50 +103,8 @@ export default {
             }
         },
         applyFilters() {
+            // Client-side filter only for lastReported (server doesn't have this field)
             let filtered = [...this.patients];
-            
-            if (this.filterPatientId.trim()) {
-                const search = this.filterPatientId.toLowerCase();
-                filtered = filtered.filter(patient => 
-                    patient.patientId.toLowerCase().includes(search)
-                );
-            }
-            
-            if (this.filterPatientName.trim()) {
-                const search = this.filterPatientName.toLowerCase();
-                filtered = filtered.filter(patient => 
-                    patient.patientName.toLowerCase().includes(search)
-                );
-            }
-            
-            // Birth date filter using datepicker
-            if (this.filterPatientBirthDate) {
-                const filterDate = Array.isArray(this.filterPatientBirthDate) ? this.filterPatientBirthDate : [this.filterPatientBirthDate];
-                if (filterDate.length >= 1 && filterDate[0]) {
-                    const startDate = new Date(filterDate[0]);
-                    startDate.setHours(0, 0, 0, 0);
-                    filtered = filtered.filter(patient => {
-                        const birthDate = this.parseDicomDate(patient.patientBirthDate);
-                        return birthDate && birthDate >= startDate;
-                    });
-                }
-                if (filterDate.length >= 2 && filterDate[1]) {
-                    const endDate = new Date(filterDate[1]);
-                    endDate.setHours(23, 59, 59, 999);
-                    filtered = filtered.filter(patient => {
-                        const birthDate = this.parseDicomDate(patient.patientBirthDate);
-                        return birthDate && birthDate <= endDate;
-                    });
-                }
-            }
-            
-            if (this.filterPatientSex) {
-                filtered = filtered.filter(patient => 
-                    patient.patientSex === this.filterPatientSex
-                );
-            }
-            
-            // Last reported date filter
             if (this.filterLastReported) {
                 const filterDate = Array.isArray(this.filterLastReported) ? this.filterLastReported : [this.filterLastReported];
                 if (filterDate.length >= 1 && filterDate[0]) {
@@ -139,8 +126,12 @@ export default {
                     });
                 }
             }
-            
             this.filteredPatients = filtered;
+        },
+        goToPage(page) {
+            if (page < 1 || page > this.pagination.pages) return;
+            this.pagination.page = page;
+            this.loadPatients();
         },
         parseDicomDate(dateString) {
             if (!dateString) return null;
@@ -316,11 +307,8 @@ export default {
                             <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                             Loading...
                         </div>
-                        <div v-else-if="filteredPatients.length === 0" class="patient-count-badge empty">
-                            0 patients
-                        </div>
                         <div v-else class="patient-count-badge">
-                            {{ filteredPatients.length }} patient(s)
+                            {{ pagination.total }} patient(s)
                         </div>
                     </th>
                     <th></th>
@@ -458,6 +446,26 @@ export default {
             accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             @change="handlePatientDocumentUpload"
         />
+        <!-- Pagination -->
+        <div v-if="!loading && pagination.pages > 1" class="pagination-section">
+            <button
+                class="btn btn-sm btn-outline-secondary"
+                :disabled="pagination.page <= 1"
+                @click="goToPage(pagination.page - 1)"
+            >
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <span class="page-info">
+                Page {{ pagination.page }} of {{ pagination.pages }}
+            </span>
+            <button
+                class="btn btn-sm btn-outline-secondary"
+                :disabled="pagination.page >= pagination.pages"
+                @click="goToPage(pagination.page + 1)"
+            >
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
         <Toasts />
     </div>
 </template>
@@ -730,6 +738,20 @@ select.form-select.study-list-filter {
 .action-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.pagination-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 0;
+    margin-top: 8px;
+}
+
+.page-info {
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color);
 }
 
 @media (max-width: 768px) {

@@ -241,7 +241,7 @@ async function getUserHospitalId(user) {
   return null;
 }
 
-// Get all Word files
+// Get all Word files (paginated)
 router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const user = await getRequestUser(req);
@@ -249,28 +249,50 @@ router.get('/', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Build query based on hospital
-    let query = {};
-    if (user.role !== 'owner') {
-      const hospital = req.hospital;
-      if (!hospital) {
-        return res.json({ success: true, wordFiles: [] });
-      }
-      query.hospital = hospital._id;
-      
-      // Doctors can only see their own data
-      if (user.role === 'doctor') {
-        query.uploadedBy = req.user._id;
-      }
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    // All roles can see all documents - no role filtering
+    const query = {};
+
+    if (req.query.fileName && req.query.fileName.trim()) {
+      query.$or = [
+        { fileName: { $regex: req.query.fileName.trim(), $options: 'i' } },
+        { originalFileName: { $regex: req.query.fileName.trim(), $options: 'i' } }
+      ];
     }
-    // If owner, query remains empty (all documents)
-    
+    if (req.query.patientId && req.query.patientId.trim()) {
+      query.patientId = { $regex: req.query.patientId.trim(), $options: 'i' };
+    }
+    if (req.query.patientName && req.query.patientName.trim()) {
+      query.patientName = { $regex: req.query.patientName.trim(), $options: 'i' };
+    }
+    if (req.query.uploadedBy && req.query.uploadedBy.trim()) {
+      query.uploadedByName = { $regex: req.query.uploadedBy.trim(), $options: 'i' };
+    }
+    if (req.query.uploadedAtFrom || req.query.uploadedAtTo) {
+      query.uploadedAt = {};
+      if (req.query.uploadedAtFrom) query.uploadedAt.$gte = new Date(req.query.uploadedAtFrom);
+      if (req.query.uploadedAtTo) query.uploadedAt.$lte = new Date(req.query.uploadedAtTo);
+    }
+    if (req.query.hospital && req.query.hospital.trim()) {
+      const hospitals = await Hospital.find({ name: { $regex: req.query.hospital.trim(), $options: 'i' } }).select('_id').lean();
+      const hospitalIds = hospitals.map(h => h._id);
+      if (hospitalIds.length) query.hospital = { $in: hospitalIds };
+      else query._id = { $in: [] }; // no hospital name match -> no results
+    }
+
+    const total = await WordFile.countDocuments(query);
+
     const wordFiles = await WordFile.find(query)
       .sort({ uploadedAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .select('-filePath')
       .populate('hospital', 'name')
       .lean();
-    
+
     res.json({
       success: true,
       wordFiles: wordFiles.map(file => ({
@@ -284,7 +306,13 @@ router.get('/', protect, checkFeatureAccess(), async (req, res) => {
         uploadedByName: file.uploadedByName,
         uploadStatus: file.uploadStatus,
         uploadedAt: file.uploadedAt
-      }))
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1
+      }
     });
   } catch (error) {
     console.error('Get word files error:', error);
@@ -301,26 +329,11 @@ router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(404).json({ error: 'Word file not found' });
     }
     
-    // Check if user has permission to access this file (check hospital)
     const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-
-    // Check hospital access
-    if (user.role !== 'owner') {
-      const hospital = req.hospital;
-      // For non-owners, file must have a hospital and match user's hospital
-      if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-
-      // Doctors can only access their own files
-      if (user.role === 'doctor' && (!wordFile.uploadedBy || !wordFile.uploadedBy.equals(req.user._id))) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-    // Owners can access all files (including those with null hospital)
+    // All roles (owner, admin, doctor) can access any file
 
     res.json({
       success: true,
@@ -351,26 +364,11 @@ router.get('/:id/download', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(404).json({ error: 'Word file not found' });
     }
 
-    // Check if user has permission to access this file (check hospital)
     const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    
-    // Check hospital access
-    if (user.role !== 'owner') {
-      const hospital = req.hospital;
-      // For non-owners, file must have a hospital and match user's hospital
-      if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-      
-      // Doctors can only access their own files
-      if (user.role === 'doctor' && (!wordFile.uploadedBy || !wordFile.uploadedBy.equals(req.user._id))) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-    // Owners can access all files (including those with null hospital)
+    // All roles (owner, admin, doctor) can download any file
     
     if (!fs.existsSync(wordFile.filePath)) {
       return res.status(404).json({ error: 'File not found on server' });
@@ -394,26 +392,15 @@ router.delete('/:id', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(404).json({ error: 'Word file not found' });
     }
 
-    // Check if user has permission to delete this file (check hospital)
     const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    
-    // Prevent doctors from deleting documents
+    // Prevent doctors from deleting documents (admin and owner can delete any)
     if (user.role === 'doctor') {
       return res.status(403).json({ error: 'Doctors are not allowed to delete documents' });
     }
-    
-    // Check hospital access
-    if (user.role !== 'owner') {
-      const hospital = req.hospital;
-      // For non-owners, file must have a hospital and match user's hospital
-      if (!hospital || !wordFile.hospital || !wordFile.hospital.equals(hospital._id)) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-    // Owners can delete all files (including those with null hospital)
+    // Owner and admin can delete any file
     
     // Delete file from filesystem
     if (fs.existsSync(wordFile.filePath)) {

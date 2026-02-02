@@ -381,12 +381,16 @@ export default {
             }
         },
         hasDeleteButton() {
+            // Hide delete for doctors when deleting studies (single or bulk)
+            if (this.userRole === 'doctor' && (this.resourceLevel === 'study' || this.resourceLevel === 'bulk')) {
+                return false;
+            }
             return this.studiesSourceType == SourceType.LOCAL_ORTHANC && 
                 this.uiOptions.EnableDeleteResources;
         },
         isDeleteEnabled() {
-            // Disable delete for doctors when deleting studies
-            if (this.resourceLevel == 'study' && this.userRole === 'doctor') {
+            // Disable delete for doctors when deleting studies (single or bulk)
+            if ((this.resourceLevel === 'study' || this.resourceLevel === 'bulk') && this.userRole === 'doctor') {
                 return false;
             }
             if (this.resourceLevel == 'bulk') {

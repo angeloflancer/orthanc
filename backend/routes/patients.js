@@ -42,110 +42,51 @@ async function getUserHospitalId(user) {
   return null;
 }
 
-// Get all patients
+// Get all patients (paginated)
 router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
     const user = await getRequestUser(req);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    
-    // Build query based on studies/files from user's hospital
-    // Since patientId is unique globally, we find patients by their IDs from studies/files
-    let patientIds = [];
-    
-    if (user.role !== 'owner') {
-      const hospital = req.hospital;
-      if (!hospital) {
-        return res.json({ success: true, patients: [] });
-      }
-      
-      if (user.role === 'doctor') {
-        // Doctors can only see patients from their own studies/files
-        const doctorStudies = await DicomStudy.find({ 
-          hospital: hospital._id,
-          uploadedBy: req.user._id
-        }).select('patientId').lean();
-        
-        const doctorWordFiles = await WordFile.find({ 
-          hospital: hospital._id,
-          uploadedBy: req.user._id
-        }).select('patientId').lean();
-        
-        patientIds = [...new Set([
-          ...doctorStudies.map(s => s.patientId),
-          ...doctorWordFiles.map(f => f.patientId)
-        ])];
-      } else {
-        // Admins can see all patients with studies/files from their hospital
-        const hospitalStudies = await DicomStudy.find({ 
-          hospital: hospital._id
-        }).select('patientId').lean();
-        
-        const hospitalWordFiles = await WordFile.find({ 
-          hospital: hospital._id
-        }).select('patientId').lean();
-        
-        patientIds = [...new Set([
-          ...hospitalStudies.map(s => s.patientId),
-          ...hospitalWordFiles.map(f => f.patientId)
-        ])];
-      }
-      
-      if (patientIds.length === 0) {
-        return res.json({ success: true, patients: [] });
-      }
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    // Owner, admin, and doctor can see all patients - no role filtering
+    const patientQuery = {};
+
+    // Optional search/filter
+    if (req.query.patientId && req.query.patientId.trim()) {
+      patientQuery.patientId = { $regex: req.query.patientId.trim(), $options: 'i' };
     }
-    
-    // Get patients - all for owner, or filtered by patientIds for others
-    let patientQuery = {};
-    if (patientIds.length > 0) {
-      patientQuery.patientId = { $in: patientIds };
+    if (req.query.patientName && req.query.patientName.trim()) {
+      patientQuery.patientName = { $regex: req.query.patientName.trim(), $options: 'i' };
     }
-    
+    if (req.query.patientSex && req.query.patientSex.trim()) {
+      patientQuery.patientSex = req.query.patientSex.trim();
+    }
+    if (req.query.birthDateFrom || req.query.birthDateTo) {
+      patientQuery.patientBirthDate = {};
+      if (req.query.birthDateFrom) patientQuery.patientBirthDate.$gte = req.query.birthDateFrom;
+      if (req.query.birthDateTo) patientQuery.patientBirthDate.$lte = req.query.birthDateTo;
+    }
+
+    const total = await Patient.countDocuments(patientQuery);
+
     const patients = await Patient.find(patientQuery)
       .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
-    
-    // Calculate counts based on user's access
-    let patientsWithCounts = await Promise.all(patients.map(async (patient) => {
-      let dicomCount = patient.dicomStudyCount || 0;
-      let wordFileCount = patient.wordFileCount || 0;
-      
-      if (user.role !== 'owner') {
-        const hospital = req.hospital;
-        // Recalculate counts based on user's hospital access
-        if (user.role === 'doctor') {
-          dicomCount = await DicomStudy.countDocuments({
-            patientId: patient.patientId,
-            hospital: hospital._id,
-            uploadedBy: req.user._id
-          });
-          wordFileCount = await WordFile.countDocuments({
-            patientId: patient.patientId,
-            hospital: hospital._id,
-            uploadedBy: req.user._id
-          });
-        } else {
-          dicomCount = await DicomStudy.countDocuments({
-            patientId: patient.patientId,
-            hospital: hospital._id
-          });
-          wordFileCount = await WordFile.countDocuments({
-            patientId: patient.patientId,
-            hospital: hospital._id
-          });
-        }
-      }
-      
-      return {
-        ...patient,
-        dicomStudyCount: dicomCount,
-        wordFileCount: wordFileCount
-      };
+
+    const patientsWithCounts = patients.map((patient) => ({
+      ...patient,
+      dicomStudyCount: patient.dicomStudyCount || 0,
+      wordFileCount: patient.wordFileCount || 0
     }));
-    
-    // Return patients with their counts
+
     res.json({
       success: true,
       patients: patientsWithCounts.map(patient => ({
@@ -157,10 +98,16 @@ router.get('/', protect, checkFeatureAccess(), async (req, res) => {
         otherPatientIds: patient.otherPatientIds,
         dicomStudyCount: patient.dicomStudyCount || 0,
         wordFileCount: patient.wordFileCount || 0,
-        lastDocumentUpload: null, // Can be calculated if needed
+        lastDocumentUpload: null,
         createdAt: patient.createdAt,
         updatedAt: patient.updatedAt
-      }))
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1
+      }
     });
   } catch (error) {
     console.error('Get patients error:', error);
