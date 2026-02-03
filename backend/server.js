@@ -431,8 +431,15 @@ const proxyOptions = {
 // Create proxy middleware
 const proxy = createProxyMiddleware(proxyOptions);
 
+// Block direct access to Orthanc UI – URL should appear non-existent (404). Users must use the frontend (e.g. :5829).
+// Set BLOCK_ORTHANC_UI=false in .env to allow /ui/app again (e.g. for debugging).
+if (process.env.BLOCK_ORTHANC_UI !== 'false') {
+  app.use('/ui/app', (req, res) => {
+    res.status(404).send('Not Found');
+  });
+}
+
 // Proxy all other routes to Orthanc service (conditionally - only for Orthanc API routes)
-// Routes that start with /api/ (except /api/auth and /api/wordfiles) and other Orthanc routes will be proxied
 app.use((req, res, next) => {
   // Don't proxy our custom API routes
   if (req.path.startsWith('/api/auth') || 
@@ -450,7 +457,12 @@ app.use((req, res, next) => {
     return next();
   }
   
-  // Proxy all other routes to Orthanc service
+  // Block Orthanc UI: /ui/app and /ui/app/* – do not proxy (return 404)
+  if (req.path === '/ui/app' || req.path.startsWith('/ui/app/')) {
+    return res.status(404).send('Not Found');
+  }
+  
+  // Proxy all other routes to Orthanc service (e.g. /ui/api/ for frontend)
   proxy(req, res, next);
 });
 
