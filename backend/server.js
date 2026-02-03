@@ -4,20 +4,15 @@ const fs = require('fs');
 
 function loadEnv() {
   const dotenv = require('dotenv');
-  // 1) When packaged (pkg): load from exe directory, then parent (e.g. backend/.env when exe is in backend/dist/).
+  // 1) When packaged (pkg): load .env from inside the exe (snapshot). No separate .env file required.
   if (typeof process.pkg !== 'undefined' && process.pkg) {
-    const exeDir = path.dirname(process.execPath);
-    const exeEnv = path.resolve(exeDir, '.env');
-    const parentEnv = path.resolve(exeDir, '..', '.env');
-    if (fs.existsSync(exeEnv)) {
-      dotenv.config({ path: exeEnv });
-    }
-    if (fs.existsSync(parentEnv)) {
-      dotenv.config({ path: parentEnv, override: true });
+    const snapshotEnv = path.join(__dirname, '.env');
+    if (fs.existsSync(snapshotEnv)) {
+      dotenv.config({ path: snapshotEnv });
     }
     return;
   }
-  // 2) When running with Node: load from the directory that contains server.js (backend/.env), regardless of process.cwd().
+  // 2) When running with Node: load from the directory that contains server.js (backend/.env).
   const envPath = path.resolve(__dirname, '.env');
   if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath });
@@ -431,10 +426,9 @@ const proxyOptions = {
 // Create proxy middleware
 const proxy = createProxyMiddleware(proxyOptions);
 
-// Frontend: serve built files from backend/frontend-dist on port 5829 only (backend stays on 5830 only)
-const frontendDistDir = typeof process.pkg !== 'undefined' && process.pkg
-  ? path.join(path.dirname(process.execPath), 'frontend-dist')
-  : path.join(__dirname, 'frontend-dist');
+// Frontend: serve built files on port 5829 only (backend stays on 5830 only).
+// When packaged (pkg), frontend is embedded in the exe and read from the snapshot (__dirname).
+const frontendDistDir = path.join(__dirname, 'frontend-dist');
 if (fs.existsSync(frontendDistDir)) {
   const frontendApp = express();
   frontendApp.use(express.static(frontendDistDir));

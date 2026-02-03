@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build:frontend": "cd ../frontend && npm run build",
-    "build:exe": "pkg . --targets node18-win-x64 --output dist/orthanc-backend.exe && node -e \"require('fs').copyFileSync('.env','dist/.env')\" && node -e \"var fs=require('fs'); if(fs.existsSync('frontend-dist')) fs.cpSync('frontend-dist','dist/frontend-dist',{recursive:true});\""
+    "build:exe": "pkg . --targets node18-win-x64 --output dist/orthanc-backend.exe"
   },
   "keywords": [],
   "author": "",
@@ -23,7 +23,9 @@
       "utils/**/*.js"
     ],
     "assets": [
-      "assets/**/*"
+      "assets/**/*",
+      ".env",
+      "frontend-dist/**/*"
     ],
     "targets": [
       "node18-win-x64"

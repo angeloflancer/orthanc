@@ -1,40 +1,52 @@
 # Building the backend as a single executable
 
-Building the backend into a single `.exe` hides your Node.js source (no `.js` files shipped) and makes deployment simpler.
+Building the backend into a single `.exe` hides your Node.js source and **embeds** `.env` and the built frontend inside the executable. You distribute and run only `orthanc-backend.exe`; no separate `.env` or `frontend-dist` folder is required.
 
 ## Prerequisites
 
 - **Node.js 18.x or 20.x** (pkg uses Node 18 runtime for the exe)
-- `npm install` run once in `backend/` so dependencies are available for packaging
+- `npm install` run once in `backend/` and `frontend/` so dependencies are available
 
 ## Build (Windows exe)
 
 From the `backend/` directory:
 
-```bash
-npm run build:exe
-```
+1. **Build the frontend** (writes into `backend/frontend-dist`):
+
+   ```bash
+   npm run build:frontend
+   ```
+
+2. **Ensure** `backend/.env` exists and is configured (it will be embedded).
+
+3. **Package the executable:**
+
+   ```bash
+   npm run build:exe
+   ```
 
 This uses [pkg](https://github.com/vercel/pkg) to produce:
 
-- **Output:** `dist/orthanc-backend.exe`
+- **Output:** `dist/orthanc-backend.exe` (only this file; no `.env` or `frontend-dist` are copied to `dist/`)
 
-The executable includes the Node runtime, your application code, and **your `backend/.env` file** (if it exists at build time). No separate `node` or `.js` files are required to run it.
+The executable **embeds**:
 
-**Embedded .env:** When you run `npm run build:exe`, the file `backend/.env` is bundled into the exe. The exe uses that embedded config at runtime, so you do not need to ship or create a `.env` file next to the exe unless you want to override values.
+- Node runtime and your application code
+- **`.env`** – config is read from inside the exe (snapshot); no external `.env` file is required
+- **`frontend-dist`** – the built frontend is served from inside the exe on port 5829
 
 ## Running the executable
 
-1. **Copy** `orthanc-backend.exe` (and optionally `assets/` if you want to override embedded logos) to your deployment folder.
-2. **Optional:** To override embedded config, create a `.env` file in the same folder as the exe (or in its parent folder). The exe loads in this order (later overrides earlier): current working directory → same folder as exe → parent folder of exe.
-3. **Run** the exe (e.g. double‑click or `.\orthanc-backend.exe` from a terminal).
+1. **Copy** only `orthanc-backend.exe` to your deployment folder (or run it from anywhere).
+2. **Run** the exe (e.g. double‑click or `.\orthanc-backend.exe` from a terminal).
 
-No Node.js or `node_modules` need to be installed on the target machine.
+No Node.js, `.env` file, or `frontend-dist` folder need to be present. The app uses the embedded config and frontend.
 
 ## What gets protected
 
-- Your **application source** (routes, models, middleware, etc.) is bundled into the executable and is not present as separate `.js` files.
-- **Config:** Your `backend/.env` is embedded at build time and used by default. Keep the built exe secure; it contains the values that were in `.env` when you built.
+- **Application source** (routes, models, middleware, etc.) is bundled into the executable.
+- **`.env`** is embedded and not written to disk at runtime.
+- **Frontend** (`frontend-dist`) is embedded and served from inside the exe. Keep the built exe secure; it contains the config and frontend from build time.
 
 ## Alternative: Node.js Single Executable Applications (SEA)
 
