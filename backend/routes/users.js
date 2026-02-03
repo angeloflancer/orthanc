@@ -15,8 +15,16 @@ router.get('/', protect, requireOwner(), async (req, res) => {
     const query = {};
 
     // Default to doctors only for User Management list; owner is not in DB
-    if (role && ['doctor', 'admin'].includes(role)) {
-      query.role = role;
+    // Support role=doctor,admin to list both (e.g. for "create hospital" admin dropdown)
+    if (role) {
+      const roles = role.split(',').map(r => r.trim()).filter(r => ['doctor', 'admin'].includes(r));
+      if (roles.length === 1) {
+        query.role = roles[0];
+      } else if (roles.length > 1) {
+        query.role = { $in: roles };
+      } else {
+        query.role = 'doctor';
+      }
     } else {
       query.role = 'doctor';
     }

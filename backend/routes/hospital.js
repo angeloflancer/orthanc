@@ -8,30 +8,53 @@ const { protect } = require('../middleware/auth');
 const { requireAdmin, requireRole, requireOwner } = require('../middleware/roleAuth');
 const orthancClient = require('../utils/orthancClient');
 
-// Create hospital (Admin only)
-router.post('/', protect, requireRole('admin'), async (req, res) => {
+// Create hospital (Owner only, and only when no hospital exists)
+// Server allows only one hospital. Owner can create it when there are none; when one exists, owner can only delete it.
+// Body: { name, address, adminUserId }
+router.post('/', protect, requireOwner(), async (req, res) => {
   try {
-    const { name, address } = req.body;
-    
+    const { name, address, adminUserId } = req.body;
+
     if (!name) {
       return res.status(400).json({ error: 'Hospital name is required' });
     }
-    
-    // Check if admin already has a hospital
-    const existingHospital = await Hospital.findOne({ admin: req.user._id });
-    if (existingHospital) {
-      return res.status(400).json({ 
-        error: 'You already have a hospital. An admin can only manage one hospital.' 
+
+    const existingCount = await Hospital.countDocuments();
+    if (existingCount > 0) {
+      return res.status(400).json({
+        error: 'Only one hospital is allowed on this server. Delete the existing hospital first if you want to create a new one.'
       });
     }
-    
-    // Create hospital
+
+    if (!adminUserId) {
+      return res.status(400).json({ error: 'adminUserId is required.' });
+    }
+    const adminUser = await User.findById(adminUserId);
+    if (!adminUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (adminUser.blocked && adminUser.blockedBy === 'owner') {
+      return res.status(400).json({ error: 'Cannot assign a suspended user as hospital admin.' });
+    }
+    if (adminUser.role !== 'doctor' && adminUser.role !== 'admin') {
+      return res.status(400).json({ error: 'Only a doctor or admin can be assigned as hospital admin.' });
+    }
+    const existingHospital = await Hospital.findOne({ admin: adminUser._id });
+    if (existingHospital) {
+      return res.status(400).json({
+        error: 'That user is already the admin of a hospital.'
+      });
+    }
+
     const hospital = await Hospital.create({
       name,
       address: address || '',
-      admin: req.user._id
+      admin: adminUser._id
     });
-    
+    if (adminUser.role !== 'admin') {
+      adminUser.role = 'admin';
+      await adminUser.save();
+    }
     res.status(201).json({
       success: true,
       message: 'Hospital created successfully',
@@ -94,6 +117,59 @@ router.get('/', protect, requireRole('admin', 'owner'), async (req, res) => {
     });
   } catch (error) {
     console.error('Get hospital error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete a hospital by ID (Owner only)
+router.delete('/:hospitalId', protect, requireOwner(), async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.params.hospitalId);
+    if (!hospital) {
+      return res.status(404).json({ error: 'Hospital not found' });
+    }
+    const DicomStudy = require('../models/DicomStudy');
+    const WordFile = require('../models/WordFile');
+    const Patient = require('../models/Patient');
+    const fs = require('fs');
+
+    const dicomStudies = await DicomStudy.find({ hospital: hospital._id }).select('orthancStudyId');
+    for (const study of dicomStudies) {
+      if (study.orthancStudyId) {
+        try {
+          await orthancClient.delete(`/studies/${study.orthancStudyId}`);
+        } catch (err) {
+          console.error(`Error deleting study ${study.orthancStudyId} from Orthanc:`, err.message);
+        }
+      }
+    }
+    const wordFiles = await WordFile.find({ hospital: hospital._id }).select('filePath');
+    for (const wordFile of wordFiles) {
+      if (wordFile.filePath && fs.existsSync(wordFile.filePath)) {
+        try {
+          fs.unlinkSync(wordFile.filePath);
+        } catch (err) {
+          console.error(`Error deleting file ${wordFile.filePath}:`, err.message);
+        }
+      }
+    }
+    await DicomStudy.deleteMany({ hospital: hospital._id });
+    await WordFile.deleteMany({ hospital: hospital._id });
+    await Patient.deleteMany({ hospital: hospital._id });
+    await HospitalSubscription.deleteOne({ hospital: hospital._id });
+    await HospitalMember.deleteMany({ hospital: hospital._id });
+    await Hospital.findByIdAndDelete(hospital._id);
+
+    if (hospital.admin) {
+      await User.findByIdAndUpdate(hospital.admin, { $set: { role: 'doctor' } });
+    }
+
+    res.json({
+      success: true,
+      message: 'Hospital and all associated data deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete hospital by ID error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

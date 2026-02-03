@@ -2,8 +2,20 @@
   <div class="hospital-management">
     <div class="hm-container">
       <header class="hm-header">
-        <h1 class="hm-title">Hospital Management</h1>
-        <p class="hm-subtitle">Manage hospitals, members, and subscriptions.</p>
+        <div class="hm-header-row">
+          <div>
+            <h1 class="hm-title">Hospital Management</h1>
+            <p class="hm-subtitle">Manage hospitals, members, and subscriptions.</p>
+          </div>
+          <button
+            v-if="!loading && hospitals.length === 0"
+            type="button"
+            class="btn btn-primary"
+            @click="openCreateHospital"
+          >
+            <i class="bi bi-plus-lg me-1"></i>Create hospital
+          </button>
+        </div>
       </header>
 
       <div v-if="loading" class="hm-loading">
@@ -17,7 +29,10 @@
           <i class="bi bi-building"></i>
         </div>
         <h3>No hospitals yet</h3>
-        <p>Hospitals are created by admins. Assign an admin in User Management or wait for an admin to create a hospital.</p>
+        <p>Create the first hospital and assign a user as its admin (they must be a registered doctor).</p>
+        <button type="button" class="btn btn-primary mt-3" @click="openCreateHospital">
+          <i class="bi bi-plus-lg me-1"></i>Create hospital
+        </button>
       </div>
 
       <div v-else>
@@ -161,6 +176,9 @@
               <button type="button" class="btn btn-outline-secondary" @click.stop="openChangeAdmin(hospital)">
                 <i class="bi bi-person-gear me-1"></i>Change admin
               </button>
+              <button type="button" class="btn btn-outline-danger" @click.stop="confirmDeleteHospital(hospital)">
+                <i class="bi bi-trash me-1"></i>Delete hospital
+              </button>
             </div>
           </div>
         </section>
@@ -219,6 +237,45 @@
             <button type="button" class="btn btn-primary" :disabled="!selectedPlan || applyingPlan" @click="applyPlan">
               <span v-if="applyingPlan" class="spinner-border spinner-border-sm me-2"></span>
               Apply
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Create hospital modal (Owner) -->
+      <div v-if="showCreateHospitalModal" class="hm-modal-overlay" @click.self="showCreateHospitalModal = false">
+        <div class="hm-modal">
+          <div class="hm-modal-header">
+            <h3>Create hospital</h3>
+            <button type="button" class="btn-close" @click="showCreateHospitalModal = false" aria-label="Close"></button>
+          </div>
+          <div class="hm-modal-body">
+            <p class="text-muted small mb-3">Create a new hospital and assign a user as its admin. The user must be a registered doctor (or existing admin without a hospital).</p>
+            <div class="mb-3">
+              <label class="form-label">Hospital name <span class="text-danger">*</span></label>
+              <input v-model="createName" type="text" class="form-control" placeholder="e.g. City General Hospital" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Address (optional)</label>
+              <input v-model="createAddress" type="text" class="form-control" placeholder="Street, City" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Admin user <span class="text-danger">*</span></label>
+              <div v-if="usersForAdminLoading" class="text-muted small">Loading users...</div>
+              <select v-else v-model="createAdminUserId" class="form-select">
+                <option value="">Select a user...</option>
+                <option v-for="u in usersForAdmin" :key="u.id" :value="u.id">
+                  {{ u.name }} (@{{ u.username }}) – {{ u.email }}
+                </option>
+              </select>
+              <p v-if="!usersForAdminLoading && usersForAdmin.length === 0" class="text-muted small mt-2 mb-0">No users found. Register doctors first in User Management.</p>
+            </div>
+          </div>
+          <div class="hm-modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showCreateHospitalModal = false">Cancel</button>
+            <button type="button" class="btn btn-primary" :disabled="!createName.trim() || !createAdminUserId || createLoading" @click="createHospital">
+              <span v-if="createLoading" class="spinner-border spinner-border-sm me-2"></span>
+              Create
             </button>
           </div>
         </div>
@@ -332,10 +389,17 @@ export default {
       membersPagination: {},
       membersLoading: {},
       showSubscribeModal: false,
+      showCreateHospitalModal: false,
       showChangeAdminModal: false,
       showAddDoctorModal: false,
       showConfirmModal: false,
       selectedHospital: null,
+      createName: '',
+      createAddress: '',
+      createAdminUserId: '',
+      createLoading: false,
+      usersForAdmin: [],
+      usersForAdminLoading: false,
       selectedPlan: null,
       selectedDoctorId: null,
       doctors: [],
@@ -458,6 +522,56 @@ export default {
         alert(message);
       }
     },
+    openCreateHospital() {
+      this.createName = '';
+      this.createAddress = '';
+      this.createAdminUserId = '';
+      this.showCreateHospitalModal = true;
+      this.usersForAdmin = [];
+      this.usersForAdminLoading = true;
+      axios.get(`${orthancApiUrl}api/users?limit=500&role=doctor,admin`, {
+        headers: { Authorization: `Bearer ${this.getToken()}` }
+      }).then((response) => {
+        if (response.data.success) {
+          this.usersForAdmin = response.data.users || [];
+        }
+      }).catch(() => {
+        this.usersForAdmin = [];
+      }).finally(() => {
+        this.usersForAdminLoading = false;
+      });
+    },
+    async createHospital() {
+      if (!this.createName.trim() || !this.createAdminUserId) return;
+      this.createLoading = true;
+      try {
+        await axios.post(
+          `${orthancApiUrl}api/hospital`,
+          {
+            name: this.createName.trim(),
+            address: this.createAddress.trim(),
+            adminUserId: this.createAdminUserId
+          },
+          { headers: { Authorization: `Bearer ${this.getToken()}` } }
+        );
+        this.showCreateHospitalModal = false;
+        this.toast('Hospital created successfully', 'success');
+        await this.loadHospitals();
+      } catch (error) {
+        this.toast(error.response?.data?.error || 'Failed to create hospital', 'error');
+      } finally {
+        this.createLoading = false;
+      }
+    },
+    confirmDeleteHospital(hospital) {
+      this.selectedHospital = hospital;
+      this.confirmMember = null;
+      this.confirmActionType = 'delete_hospital';
+      this.confirmTitle = 'Delete hospital';
+      this.confirmMessage = `Delete "${hospital.name}" and all its data (studies, files, members, subscription)? This cannot be undone.`;
+      this.confirmButtonText = 'Delete hospital';
+      this.showConfirmModal = true;
+    },
     openSubscribe(hospital) {
       this.selectedHospital = hospital;
       this.selectedPlan = hospital.subscription?.planType || 'monthly';
@@ -576,23 +690,34 @@ export default {
       this.showConfirmModal = true;
     },
     async executeConfirm() {
-      if (!this.selectedHospital || !this.confirmMember || !this.confirmActionType) return;
+      if (!this.confirmActionType) return;
+      if (this.confirmActionType !== 'delete_hospital' && (!this.selectedHospital || !this.confirmMember)) return;
+      if (this.confirmActionType === 'delete_hospital' && !this.selectedHospital) return;
       this.confirming = true;
       try {
-        const base = `${orthancApiUrl}api/hospital/${this.selectedHospital.id}/members/${this.confirmMember.id}`;
-        if (this.confirmActionType === 'kick') {
-          await axios.put(base + '/kick', {}, { headers: { Authorization: `Bearer ${this.getToken()}` } });
-          this.toast('Member kicked', 'success');
-        } else if (this.confirmActionType === 'block') {
-          await axios.put(base + '/block', {}, { headers: { Authorization: `Bearer ${this.getToken()}` } });
-          this.toast('Member blocked', 'success');
+        if (this.confirmActionType === 'delete_hospital') {
+          await axios.delete(`${orthancApiUrl}api/hospital/${this.selectedHospital.id}`, {
+            headers: { Authorization: `Bearer ${this.getToken()}` }
+          });
+          this.toast('Hospital deleted', 'success');
+          this.showConfirmModal = false;
+          await this.loadHospitals();
         } else {
-          await axios.put(base + '/unblock', {}, { headers: { Authorization: `Bearer ${this.getToken()}` } });
-          this.toast('Member unblocked', 'success');
+          const base = `${orthancApiUrl}api/hospital/${this.selectedHospital.id}/members/${this.confirmMember.id}`;
+          if (this.confirmActionType === 'kick') {
+            await axios.put(base + '/kick', {}, { headers: { Authorization: `Bearer ${this.getToken()}` } });
+            this.toast('Member kicked', 'success');
+          } else if (this.confirmActionType === 'block') {
+            await axios.put(base + '/block', {}, { headers: { Authorization: `Bearer ${this.getToken()}` } });
+            this.toast('Member blocked', 'success');
+          } else {
+            await axios.put(base + '/unblock', {}, { headers: { Authorization: `Bearer ${this.getToken()}` } });
+            this.toast('Member unblocked', 'success');
+          }
+          this.showConfirmModal = false;
+          await this.loadMembers(this.selectedHospital.id, 1);
+          await this.loadHospitals();
         }
-        this.showConfirmModal = false;
-        await this.loadMembers(this.selectedHospital.id, 1);
-        await this.loadHospitals();
       } catch (error) {
         this.toast(error.response?.data?.error || 'Action failed', 'error');
       } finally {
@@ -615,6 +740,14 @@ export default {
 
 .hm-header {
   margin-bottom: 28px;
+}
+
+.hm-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .hm-title {
