@@ -431,11 +431,25 @@ const proxyOptions = {
 // Create proxy middleware
 const proxy = createProxyMiddleware(proxyOptions);
 
-// Block direct access to Orthanc UI – URL should appear non-existent (404). Users must use the frontend (e.g. :5829).
-// Set BLOCK_ORTHANC_UI=false in .env to allow /ui/app again (e.g. for debugging).
-if (process.env.BLOCK_ORTHANC_UI !== 'false') {
-  app.use('/ui/app', (req, res) => {
-    res.status(404).send('Not Found');
+// Frontend: serve built files from backend/frontend-dist on port 5829 only (backend stays on 5830 only)
+const frontendDistDir = typeof process.pkg !== 'undefined' && process.pkg
+  ? path.join(path.dirname(process.execPath), 'frontend-dist')
+  : path.join(__dirname, 'frontend-dist');
+if (fs.existsSync(frontendDistDir)) {
+  const frontendApp = express();
+  frontendApp.use(express.static(frontendDistDir));
+  frontendApp.get('*', (req, res) => {
+    res.sendFile(path.join(frontendDistDir, 'index.html'));
+  });
+  const frontendServer = frontendApp.listen(5829, '0.0.0.0', () => {
+    console.log('Frontend serving on http://localhost:5829');
+  });
+  frontendServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log('Port 5829 in use; start backend only. Serve frontend separately on 5829.');
+    } else {
+      console.error('Frontend server error:', err.message);
+    }
   });
 }
 

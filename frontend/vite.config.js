@@ -14,6 +14,7 @@ export default defineConfig({
     strictPort: false // Allow port fallback if 5829 is busy
   },
   build: {
+    outDir: resolve(__dirname, '../backend/frontend-dist'),
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       input: {
