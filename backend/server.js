@@ -22,25 +22,12 @@ function loadEnv() {
 }
 loadEnv();
 
-// Force IPv4 for localhost so nothing connects to ::1 (avoids ECONNREFUSED ::1:27017 etc.)
-function normalizeLocalhostToIPv4(str) {
-  if (!str || typeof str !== 'string') return str;
-  return str
-    .replace(/\/\/localhost:/gi, '//127.0.0.1:')
-    .replace(/@localhost:/gi, '@127.0.0.1:')
-    .replace(/\/\/localhost\//gi, '//127.0.0.1/')
-    .replace(/@localhost\//gi, '@127.0.0.1/');
-}
-if (process.env.MONGODB_URI) {
-  process.env.MONGODB_URI = normalizeLocalhostToIPv4(process.env.MONGODB_URI);
-}
-
 const express = require('express');
 const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const orthancClient = require('./utils/orthancClient');
-const connectDB = require('./config/database');
+const initDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const wordFileRoutes = require('./routes/wordFiles');
 const patientRoutes = require('./routes/patients');
@@ -49,18 +36,18 @@ const hospitalRoutes = require('./routes/hospital');
 const memberRoutes = require('./routes/members');
 const userRoutes = require('./routes/users');
 const subscriptionRoutes = require('./routes/subscriptions');
-const User = require('./models/User');
-const DicomStudy = require('./models/DicomStudy');
-const Hospital = require('./models/Hospital');
-const HospitalMember = require('./models/HospitalMember');
+const userRepo = require('./db/userRepo');
+const hospitalRepo = require('./db/hospitalRepo');
+const hospitalMemberRepo = require('./db/hospitalMemberRepo');
+const dicomStudyRepo = require('./db/dicomStudyRepo');
 
 const app = express();
 const PORT = process.env.PORT || 5830;
 const TARGET_SERVICE = orthancClient.getTargetBase();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Connect to MongoDB
-connectDB();
+// Initialize SQLite database
+initDB();
 
 // Middleware
 app.use(cors({
@@ -136,21 +123,20 @@ async function getUserFromToken(req) {
       };
     }
 
-    const user = await User.findById(decoded.id).select('-password');
-    return user;
+    const user = userRepo.findById(decoded.id);
+    if (!user) return null;
+    const { password, ...safe } = user;
+    safe.id = user.id;
+    safe._id = user.id;
+    return safe;
   } catch (error) {
     return null;
   }
 }
 
-// Helper function to get allowed Orthanc study IDs based on user role
-// Owner, admin, and doctor all see all DICOM data (no filtering)
-async function getAllowedOrthancStudyIds(user) {
+function getAllowedOrthancStudyIds(user) {
   if (!user) return [];
-  // All authenticated roles see all studies - return null to indicate no filtering
-  if (user.role === 'owner' || user.role === 'admin' || user.role === 'doctor') {
-    return null;
-  }
+  if (user.role === 'owner' || user.role === 'admin' || user.role === 'doctor') return null;
   return [];
 }
 
@@ -178,21 +164,18 @@ app.post('/tools/find', express.json(), async (req, res) => {
     // Get query level
     const queryLevel = req.body.Level;
     
-    // Get allowed study IDs based on user role
-    const allowedStudyIds = await getAllowedOrthancStudyIds(user);
+    const allowedStudyIds = getAllowedOrthancStudyIds(user);
     
-    // Helper function to get hospital name for a user
-    const getHospitalNameForUser = async (userId) => {
+    const getHospitalNameForUser = (userId) => {
       try {
-        const user = await User.findById(userId);
+        const user = userRepo.findById(userId);
         if (!user) return '';
-        
         if (user.role === 'admin') {
-          const hospital = await Hospital.findOne({ admin: user._id });
+          const hospital = hospitalRepo.findOne({ admin: user.id });
           return hospital ? hospital.name : '';
-        } else if (user.role === 'doctor') {
-          const member = await HospitalMember.findOne({ user: user._id, status: 'accepted' })
-            .populate('hospital');
+        }
+        if (user.role === 'doctor') {
+          const member = hospitalMemberRepo.findOne({ user: user.id, status: 'accepted' }, { withHospital: true });
           return member && member.hospital ? member.hospital.name : '';
         }
         return '';
@@ -201,18 +184,14 @@ app.post('/tools/find', express.json(), async (req, res) => {
         return '';
       }
     };
-    
-    // Helper function to enrich study with hospital and uploaded by info
-    const enrichStudy = async (study) => {
+
+    const enrichStudy = (study) => {
       try {
-        const dicomStudyRecord = await DicomStudy.findOne({ orthancStudyId: study.ID })
-          .populate('hospital', 'name')
-          .populate('uploadedBy', 'name')
-          .lean();
-        
+        const dicomStudyRecord = dicomStudyRepo.findOne({ orthancStudyId: study.ID });
         if (dicomStudyRecord) {
-          // Get hospital name from hospital field
-          study._hospitalName = dicomStudyRecord.hospital ? dicomStudyRecord.hospital.name : '';
+          study._hospitalName = dicomStudyRecord.hospital
+            ? (hospitalRepo.findById(dicomStudyRecord.hospital) || {}).name || ''
+            : '';
           study._uploadedBy = dicomStudyRecord.uploadedByName || '';
         } else {
           study._hospitalName = '';
@@ -226,21 +205,16 @@ app.post('/tools/find', express.json(), async (req, res) => {
       return study;
     };
     
-    // If allowedStudyIds is null, user is owner
     if (allowedStudyIds === null) {
       if (queryLevel === 'Study') {
-        // Enrich all studies with hospital name and uploaded by info
-        results = await Promise.all(results.map(enrichStudy));
+        results = results.map(enrichStudy);
       }
       return res.json(results);
     }
-    
+
     if (queryLevel === 'Study') {
-      // Filter studies directly
       results = results.filter(dicomStudy => allowedStudyIds.includes(dicomStudy?.ID));
-      
-      // Enrich studies with hospital name and uploaded by info
-      results = await Promise.all(results.map(enrichStudy));
+      results = results.map(enrichStudy);
     } else if (queryLevel === 'Series' || queryLevel === 'Instance') {
       // For series/instances, we need to get the parent study and check
       const filteredResults = [];

@@ -1,6 +1,6 @@
-const Hospital = require('../models/Hospital');
-const HospitalMember = require('../models/HospitalMember');
-const HospitalSubscription = require('../models/HospitalSubscription');
+const hospitalRepo = require('../db/hospitalRepo');
+const hospitalMemberRepo = require('../db/hospitalMemberRepo');
+const hospitalSubscriptionRepo = require('../db/hospitalSubscriptionRepo');
 
 /**
  * Middleware to check if hospital has active subscription
@@ -18,62 +18,48 @@ exports.requireActiveSubscription = () => {
     }
 
     try {
-      // For admin, check their hospital's subscription
+      const userId = req.user.id || req.user._id;
       if (req.user.role === 'admin') {
-        const hospital = await Hospital.findOne({ admin: req.user._id });
+        const hospital = hospitalRepo.findOne({ admin: userId });
         if (!hospital) {
-          return res.status(403).json({ 
-            error: 'Access denied. No hospital found. Please contact the owner to set up your hospital subscription.' 
+          return res.status(403).json({
+            error: 'Access denied. No hospital found. Please contact the owner to set up your hospital subscription.'
           });
         }
-
-        const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+        const subscription = hospitalSubscriptionRepo.findOne({ hospital: hospital.id });
         if (!subscription) {
-          return res.status(403).json({ 
-            error: 'Access denied. Hospital subscription not found. Please contact the owner to set up your hospital subscription.' 
+          return res.status(403).json({
+            error: 'Access denied. Hospital subscription not found. Please contact the owner to set up your hospital subscription.'
           });
         }
-
-        if (!subscription.isActive) {
-          return res.status(403).json({ 
-            error: 'Access denied. Hospital subscription has expired. Please contact the owner to extend the subscription.' 
+        if (!hospitalSubscriptionRepo.isActive(subscription)) {
+          return res.status(403).json({
+            error: 'Access denied. Hospital subscription has expired. Please contact the owner to extend the subscription.'
           });
         }
-
         req.subscription = subscription;
         req.hospital = hospital;
         return next();
       }
 
-      // For doctor, check their hospital's subscription through membership
       if (req.user.role === 'doctor') {
-        const membership = await HospitalMember.findOne({ 
-          user: req.user._id,
-          status: 'accepted'
-        }).populate('hospital');
-
+        const membership = hospitalMemberRepo.findOne({ user: userId, status: 'accepted' }, { withHospital: true });
         if (!membership || !membership.hospital) {
-          return res.status(403).json({ 
-            error: 'Access denied. You must be a member of a hospital to access this feature.' 
+          return res.status(403).json({
+            error: 'Access denied. You must be a member of a hospital to access this feature.'
           });
         }
-
-        const subscription = await HospitalSubscription.findOne({ 
-          hospital: membership.hospital._id 
-        });
-
+        const subscription = hospitalSubscriptionRepo.findOne({ hospital: membership.hospital.id });
         if (!subscription) {
-          return res.status(403).json({ 
-            error: 'Access denied. Hospital subscription not found. Please contact the administrator.' 
+          return res.status(403).json({
+            error: 'Access denied. Hospital subscription not found. Please contact the administrator.'
           });
         }
-
-        if (!subscription.isActive) {
-          return res.status(403).json({ 
-            error: 'Access denied. Hospital is currently suspended. Please wait for the administrator to renew the subscription.' 
+        if (!hospitalSubscriptionRepo.isActive(subscription)) {
+          return res.status(403).json({
+            error: 'Access denied. Hospital is currently suspended. Please wait for the administrator to renew the subscription.'
           });
         }
-
         req.subscription = subscription;
         req.hospital = membership.hospital;
         req.membership = membership;
@@ -104,20 +90,15 @@ exports.requireHospitalMembership = () => {
       return next();
     }
 
-    // Doctor must be an accepted member
     if (req.user.role === 'doctor') {
       try {
-        const membership = await HospitalMember.findOne({ 
-          user: req.user._id,
-          status: 'accepted'
-        }).populate('hospital');
-
+        const userId = req.user.id || req.user._id;
+        const membership = hospitalMemberRepo.findOne({ user: userId, status: 'accepted' }, { withHospital: true });
         if (!membership) {
-          return res.status(403).json({ 
-            error: 'Access denied. You can\'t use this before join the hospital. Please join a hospital first.' 
+          return res.status(403).json({
+            error: 'Access denied. You can\'t use this before join the hospital. Please join a hospital first.'
           });
         }
-
         req.membership = membership;
         req.hospital = membership.hospital;
         return next();
@@ -147,50 +128,38 @@ exports.checkFeatureAccess = () => {
     }
 
     try {
-      // For admin, check subscription
+      const userId = req.user.id || req.user._id;
       if (req.user.role === 'admin') {
-        const hospital = await Hospital.findOne({ admin: req.user._id });
+        const hospital = hospitalRepo.findOne({ admin: userId });
         if (!hospital) {
-          return res.status(403).json({ 
-            error: 'Access denied. Contact the owner to set up your hospital subscription.' 
+          return res.status(403).json({
+            error: 'Access denied. Contact the owner to set up your hospital subscription.'
           });
         }
-
-        const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
-        if (!subscription || !subscription.isActive) {
-          return res.status(403).json({ 
-            error: 'Access denied. Contact the owner to extend the subscription.' 
+        const subscription = hospitalSubscriptionRepo.findOne({ hospital: hospital.id });
+        if (!subscription || !hospitalSubscriptionRepo.isActive(subscription)) {
+          return res.status(403).json({
+            error: 'Access denied. Contact the owner to extend the subscription.'
           });
         }
-
         req.subscription = subscription;
         req.hospital = hospital;
         return next();
       }
 
-      // For doctor, check membership and subscription
       if (req.user.role === 'doctor') {
-        const membership = await HospitalMember.findOne({ 
-          user: req.user._id,
-          status: 'accepted'
-        }).populate('hospital');
-
+        const membership = hospitalMemberRepo.findOne({ user: userId, status: 'accepted' }, { withHospital: true });
         if (!membership) {
-          return res.status(403).json({ 
-            error: 'Access denied. You can\'t use this before join the hospital.' 
+          return res.status(403).json({
+            error: 'Access denied. You can\'t use this before join the hospital.'
           });
         }
-
-        const subscription = await HospitalSubscription.findOne({ 
-          hospital: membership.hospital._id 
-        });
-
-        if (!subscription || !subscription.isActive) {
-          return res.status(403).json({ 
-            error: 'Access denied. Hospital is currently suspended, wait for the administrator to renew.' 
+        const subscription = hospitalSubscriptionRepo.findOne({ hospital: membership.hospital.id });
+        if (!subscription || !hospitalSubscriptionRepo.isActive(subscription)) {
+          return res.status(403).json({
+            error: 'Access denied. Hospital is currently suspended, wait for the administrator to renew.'
           });
         }
-
         req.membership = membership;
         req.hospital = membership.hospital;
         req.subscription = subscription;

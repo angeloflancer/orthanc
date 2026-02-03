@@ -1,5 +1,5 @@
-const Hospital = require('../models/Hospital');
-const HospitalMember = require('../models/HospitalMember');
+const hospitalRepo = require('../db/hospitalRepo');
+const hospitalMemberRepo = require('../db/hospitalMemberRepo');
 
 /**
  * Middleware to check if user has one of the required roles
@@ -78,15 +78,13 @@ exports.requireHospitalAdmin = () => {
     }
     
     try {
-      // Find the hospital where this user is the admin
-      const hospital = await Hospital.findOne({ admin: req.user._id });
-      
+      const userId = req.user.id || req.user._id;
+      const hospital = hospitalRepo.findOne({ admin: userId });
       if (!hospital && req.user.role === 'admin') {
-        return res.status(404).json({ 
-          error: 'No hospital found. Please create a hospital first.' 
+        return res.status(404).json({
+          error: 'No hospital found. Please create a hospital first.'
         });
       }
-      
       req.hospital = hospital;
       next();
     } catch (error) {
@@ -107,11 +105,8 @@ exports.requireHospitalMember = () => {
     }
     
     try {
-      const membership = await HospitalMember.findOne({ 
-        user: req.user._id,
-        status: 'accepted'
-      }).populate('hospital');
-      
+      const userId = req.user.id || req.user._id;
+      const membership = hospitalMemberRepo.findOne({ user: userId, status: 'accepted' }, { withHospital: true });
       req.membership = membership;
       req.hospital = membership ? membership.hospital : null;
       next();
@@ -129,35 +124,20 @@ exports.requireHospitalMember = () => {
  */
 exports.getAllowedUserIds = async (user) => {
   if (user.role === 'owner') {
-    // Owner can access all data
     return null;
   }
-  
+  const userId = user.id || user._id;
   if (user.role === 'admin') {
-    // Admin can access their own data + all accepted hospital members' data
-    const hospital = await Hospital.findOne({ admin: user._id });
-    
+    const hospital = hospitalRepo.findOne({ admin: userId });
     if (!hospital) {
-      // Admin without hospital can only see their own data
-      return [user._id];
+      return [userId];
     }
-    
-    // Get all accepted members of the hospital
-    const members = await HospitalMember.find({ 
-      hospital: hospital._id,
-      status: 'accepted'
-    }).select('user');
-    
-    const memberIds = members.map(m => m.user);
-    
-    // Include admin's own ID
-    if (!memberIds.some(id => id.equals(user._id))) {
-      memberIds.push(user._id);
+    const { rows: members } = hospitalMemberRepo.find({ hospital: hospital.id }, { limit: 1000 });
+    const memberIds = members.filter(m => m.status === 'accepted').map(m => m.user);
+    if (!memberIds.includes(userId)) {
+      memberIds.push(userId);
     }
-    
     return memberIds;
   }
-  
-  // Doctor can only access their own data
-  return [user._id];
+  return [userId];
 };

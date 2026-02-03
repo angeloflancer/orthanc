@@ -1,16 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const DicomStudy = require('../models/DicomStudy');
-const Patient = require('../models/Patient');
-const User = require('../models/User');
+const dicomStudyRepo = require('../db/dicomStudyRepo');
+const patientRepo = require('../db/patientRepo');
+const userRepo = require('../db/userRepo');
 const { protect } = require('../middleware/auth');
 const { checkFeatureAccess } = require('../middleware/accessControl');
 const orthancClient = require('../utils/orthancClient');
 
-/** Get request user: for owner use req.user (not in DB); for others load from DB. */
-async function getRequestUser(req) {
+function getRequestUser(req) {
   if (req.user.role === 'owner') return req.user;
-  return User.findById(req.user._id).select('-password');
+  const user = userRepo.findById(req.user.id || req.user._id);
+  if (!user) return null;
+  const { password, ...safe } = user;
+  safe.id = user.id;
+  safe._id = user.id;
+  return safe;
 }
 
 // Save DICOM study info after upload
@@ -47,43 +51,29 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       return res.status(400).json({ error: 'Patient ID is required' });
     }
     
-    // Get user info first (owner is not in DB)
-    const user = await getRequestUser(req);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
+    const user = getRequestUser(req);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+
+    const existingStudy = dicomStudyRepo.findOne({ studyInstanceUid });
+    if (existingStudy) {
+      const updates = {
+        orthancStudyId: orthancStudyId || existingStudy.orthancStudyId,
+        seriesCount: seriesCount ?? existingStudy.seriesCount,
+        instancesCount: instancesCount ?? existingStudy.instancesCount,
+        modalitiesInStudy: modalitiesInStudy || existingStudy.modalitiesInStudy
+      };
+      if (!existingStudy.uploadedByName && user.name) updates.uploadedByName = user.name;
+      dicomStudyRepo.update(existingStudy.id, updates);
+      const updated = dicomStudyRepo.findById(existingStudy.id);
+      return res.json({ success: true, message: 'Study already exists, updated info', study: updated, isNew: false });
     }
 
-    // Check if study already exists
-    const existingStudy = await DicomStudy.findOne({ studyInstanceUid });
-    if (existingStudy) {
-      // Update existing study info
-      existingStudy.orthancStudyId = orthancStudyId || existingStudy.orthancStudyId;
-      existingStudy.seriesCount = seriesCount || existingStudy.seriesCount;
-      existingStudy.instancesCount = instancesCount || existingStudy.instancesCount;
-      existingStudy.modalitiesInStudy = modalitiesInStudy || existingStudy.modalitiesInStudy;
-      // Update uploadedByName if it's empty (for existing studies uploaded by owners)
-      if (!existingStudy.uploadedByName && user.name) {
-        existingStudy.uploadedByName = user.name;
-      }
-      await existingStudy.save();
-      
-      return res.json({
-        success: true,
-        message: 'Study already exists, updated info',
-        study: existingStudy,
-        isNew: false
-      });
-    }
-    
-    // Get hospital from middleware (set by checkFeatureAccess)
-    // Owners don't have a hospital but can still upload
     const hospital = req.hospital;
     if (!hospital && user.role !== 'owner') {
       return res.status(403).json({ error: 'Hospital not found. You must be a member of a hospital to upload data.' });
     }
-    
-    // Create new DICOM study record
-    const dicomStudy = await DicomStudy.create({
+
+    const dicomStudy = dicomStudyRepo.create({
       studyInstanceUid,
       orthancStudyId: orthancStudyId || '',
       patientId,
@@ -98,20 +88,16 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
       modalitiesInStudy: modalitiesInStudy || '',
       seriesCount: seriesCount || 0,
       instancesCount: instancesCount || 0,
-      hospital: hospital ? hospital._id : null, // Allow null for owners
-      uploadedBy: req.user._id || undefined,
+      hospital: hospital ? hospital.id : null,
+      uploadedBy: req.user.id || req.user._id || null,
       uploadedByName: user.name || req.user.name || ''
     });
-    
-    // Check if patient already exists by patientId (one patient ID = one patient record)
-    // If exists, use the existing patient; if not, create a new one
-    let patient = await Patient.findOne({ patientId });
+
+    let patient = patientRepo.findOne({ patientId });
     if (!patient) {
-      // Create new patient record
-      const patientHospital = hospital ? hospital._id : null;
-      patient = await Patient.create({
+      patient = patientRepo.create({
         patientId,
-        hospital: patientHospital, // null for owners
+        hospital: hospital ? hospital.id : null,
         patientName: patientName || '',
         patientBirthDate: patientBirthDate || '',
         patientSex: patientSex || '',
@@ -119,31 +105,22 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
         wordFileCount: 0
       });
     } else {
-      // Patient already exists - update counts and info, but don't create duplicate
-      // Increment DICOM study count
-      patient.dicomStudyCount += 1;
-      // Update patient info if more complete
-      if (!patient.patientName && patientName) {
-        patient.patientName = patientName;
-      }
-      if (!patient.patientBirthDate && patientBirthDate) {
-        patient.patientBirthDate = patientBirthDate;
-      }
-      if (!patient.patientSex && patientSex) {
-        patient.patientSex = patientSex;
-      }
-      // Update hospital if patient doesn't have one and we have one
-      if (!patient.hospital && hospital) {
-        patient.hospital = hospital._id;
-      }
-      await patient.save();
+      const updates = {
+        dicomStudyCount: (patient.dicomStudyCount || 0) + 1
+      };
+      if (!patient.patientName && patientName) updates.patientName = patientName;
+      if (!patient.patientBirthDate && patientBirthDate) updates.patientBirthDate = patientBirthDate;
+      if (!patient.patientSex && patientSex) updates.patientSex = patientSex;
+      if (!patient.hospital && hospital) updates.hospital = hospital.id;
+      patientRepo.update(patient.id, updates);
+      patient = patientRepo.findById(patient.id);
     }
-    
+
     res.status(201).json({
       success: true,
       message: 'DICOM study saved successfully',
       study: {
-        id: dicomStudy._id,
+        id: dicomStudy.id,
         studyInstanceUid: dicomStudy.studyInstanceUid,
         orthancStudyId: dicomStudy.orthancStudyId,
         patientId: dicomStudy.patientId,
@@ -152,11 +129,7 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
         studyDescription: dicomStudy.studyDescription,
         uploadedAt: dicomStudy.uploadedAt
       },
-      patient: {
-        id: patient._id,
-        patientId: patient.patientId,
-        patientName: patient.patientName
-      },
+      patient: { id: patient.id, patientId: patient.patientId, patientName: patient.patientName },
       isNew: true
     });
   } catch (error) {
@@ -168,48 +141,33 @@ router.post('/save', protect, checkFeatureAccess(), async (req, res) => {
 // Get all DICOM studies (paginated)
 router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await getRequestUser(req);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
+    const user = getRequestUser(req);
+    if (!user) return res.status(401).json({ error: 'User not found' });
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const skip = (page - 1) * limit;
-
     const query = {};
-    const total = await DicomStudy.countDocuments(query);
-
-    const studies = await DicomStudy.find(query)
-      .sort({ uploadedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
+    const total = dicomStudyRepo.countDocuments(query);
+    const studies = dicomStudyRepo.find(query, { limit, skip });
     res.json({
       success: true,
-      studies: studies.map(study => ({
-        id: study._id,
-        studyInstanceUid: study.studyInstanceUid,
-        orthancStudyId: study.orthancStudyId,
-        patientId: study.patientId,
-        patientName: study.patientName,
-        patientBirthDate: study.patientBirthDate,
-        studyDate: study.studyDate,
-        studyDescription: study.studyDescription,
-        accessionNumber: study.accessionNumber,
-        modalitiesInStudy: study.modalitiesInStudy,
-        seriesCount: study.seriesCount,
-        instancesCount: study.instancesCount,
-        uploadedByName: study.uploadedByName,
-        uploadedAt: study.uploadedAt
+      studies: studies.map(s => ({
+        id: s.id,
+        studyInstanceUid: s.studyInstanceUid,
+        orthancStudyId: s.orthancStudyId,
+        patientId: s.patientId,
+        patientName: s.patientName,
+        patientBirthDate: s.patientBirthDate,
+        studyDate: s.studyDate,
+        studyDescription: s.studyDescription,
+        accessionNumber: s.accessionNumber,
+        modalitiesInStudy: s.modalitiesInStudy,
+        seriesCount: s.seriesCount,
+        instancesCount: s.instancesCount,
+        uploadedByName: s.uploadedByName,
+        uploadedAt: s.uploadedAt
       })),
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit) || 1
-      }
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 }
     });
   } catch (error) {
     console.error('Get DICOM studies error:', error);
@@ -220,12 +178,12 @@ router.get('/', protect, checkFeatureAccess(), async (req, res) => {
 // Check if study exists by Study Instance UID
 router.get('/exists/:studyInstanceUid', protect, async (req, res) => {
   try {
-    const study = await DicomStudy.findOne({ studyInstanceUid: req.params.studyInstanceUid });
+    const study = dicomStudyRepo.findOne({ studyInstanceUid: req.params.studyInstanceUid });
     res.json({
       success: true,
       exists: !!study,
       study: study ? {
-        id: study._id,
+        id: study.id,
         studyInstanceUid: study.studyInstanceUid,
         orthancStudyId: study.orthancStudyId
       } : null
@@ -239,53 +197,25 @@ router.get('/exists/:studyInstanceUid', protect, async (req, res) => {
 // Delete DICOM study
 router.delete('/:orthancStudyId', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await getRequestUser(req);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
-    // Prevent doctors from deleting DICOM studies
+    const user = getRequestUser(req);
+    if (!user) return res.status(401).json({ error: 'User not found' });
     if (user.role === 'doctor') {
       return res.status(403).json({ error: 'Doctors are not allowed to delete DICOM studies' });
     }
-    
     const { orthancStudyId } = req.params;
-    
-    // Find the study in our database
-    const dicomStudy = await DicomStudy.findOne({ orthancStudyId });
-    
-    if (!dicomStudy) {
-      return res.status(404).json({ error: 'DICOM study not found in database' });
-    }
-    
-    // Owner and admin can delete any study; doctors cannot delete (handled above)
-    // No hospital check - admin can delete any study
-    
-    // Delete from Orthanc (uses IPv4 localhost via orthancClient)
+    const dicomStudy = dicomStudyRepo.findOne({ orthancStudyId });
+    if (!dicomStudy) return res.status(404).json({ error: 'DICOM study not found in database' });
     try {
       await orthancClient.delete(`/studies/${orthancStudyId}`);
     } catch (err) {
       console.error(`Error deleting study ${orthancStudyId} from Orthanc:`, err.message);
-      // Continue with database deletion even if Orthanc deletion fails
     }
-    
-    // Decrement patient DICOM study count
-    const patient = await Patient.findOne({ 
-      patientId: dicomStudy.patientId, 
-      hospital: dicomStudy.hospital || null 
-    });
+    const patient = patientRepo.findOne({ patientId: dicomStudy.patientId, hospital: dicomStudy.hospital });
     if (patient) {
-      patient.dicomStudyCount = Math.max(0, patient.dicomStudyCount - 1);
-      await patient.save();
+      patientRepo.update(patient.id, { dicomStudyCount: Math.max(0, (patient.dicomStudyCount || 0) - 1) });
     }
-    
-    // Delete from database
-    await DicomStudy.findByIdAndDelete(dicomStudy._id);
-    
-    res.json({
-      success: true,
-      message: 'DICOM study deleted successfully'
-    });
+    dicomStudyRepo.deleteById(dicomStudy.id);
+    res.json({ success: true, message: 'DICOM study deleted successfully' });
   } catch (error) {
     console.error('Delete DICOM study error:', error);
     res.status(500).json({ error: 'Server error' });

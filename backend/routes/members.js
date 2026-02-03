@@ -1,9 +1,8 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const router = express.Router();
-const Hospital = require('../models/Hospital');
-const HospitalMember = require('../models/HospitalMember');
-const User = require('../models/User');
+const hospitalRepo = require('../db/hospitalRepo');
+const hospitalMemberRepo = require('../db/hospitalMemberRepo');
+const userRepo = require('../db/userRepo');
 const { protect } = require('../middleware/auth');
 const { requireRole, requireHospitalAdmin } = require('../middleware/roleAuth');
 
@@ -11,75 +10,48 @@ const { requireRole, requireHospitalAdmin } = require('../middleware/roleAuth');
 router.get('/', protect, requireRole('admin'), requireHospitalAdmin(), async (req, res) => {
   try {
     const { status, search, page = 1, limit = 20 } = req.query;
-    
-    const query = { hospital: req.hospital._id };
-    
+    const hospitalId = req.hospital.id || req.hospital._id;
+    const query = { hospital: hospitalId };
     if (status && ['pending', 'pending_invitation', 'accepted', 'kicked', 'blocked'].includes(status)) {
       query.status = status;
     }
-    
-    // Build the aggregation pipeline
-    const pipeline = [
-      { $match: query },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'user',
-          foreignField: '_id',
-          as: 'userInfo'
-        }
-      },
-      { $unwind: '$userInfo' }
-    ];
-    
-    // Add search filter if provided
-    if (search) {
-      pipeline.push({
-        $match: {
-          $or: [
-            { 'userInfo.username': { $regex: search, $options: 'i' } },
-            { 'userInfo.name': { $regex: search, $options: 'i' } },
-            { 'userInfo.email': { $regex: search, $options: 'i' } }
-          ]
-        }
-      });
-    }
-    
-    // Get total count
-    const countPipeline = [...pipeline, { $count: 'total' }];
-    const countResult = await HospitalMember.aggregate(countPipeline);
-    const total = countResult[0]?.total || 0;
-    
-    // Add pagination and sorting
-    pipeline.push(
-      { $sort: { createdAt: -1 } },
-      { $skip: (parseInt(page) - 1) * parseInt(limit) },
-      { $limit: parseInt(limit) }
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
+    const skip = (parseInt(page) - 1) * limitNum;
+    const searchTerm = (search || '').trim().toLowerCase();
+    const { rows: members, total: totalFromDb } = hospitalMemberRepo.find(
+      query,
+      { limit: searchTerm ? 10000 : limitNum, skip: searchTerm ? 0 : skip }
     );
-    
-    const members = await HospitalMember.aggregate(pipeline);
-    
-    res.json({
-      success: true,
-      members: members.map(m => ({
-        id: m._id,
-        user: {
-          id: m.userInfo._id,
-          username: m.userInfo.username,
-          name: m.userInfo.name,
-          email: m.userInfo.email
-        },
+    let withUser = members.map((m) => {
+      const u = userRepo.findById(m.user);
+      return {
+        id: m.id,
+        user: u ? { id: u.id, username: u.username, name: u.name, email: u.email } : null,
         status: m.status,
         invitedBy: m.invitedBy,
         joinedAt: m.joinedAt,
         statusChangedAt: m.statusChangedAt,
         createdAt: m.createdAt
-      })),
+      };
+    });
+    if (searchTerm) {
+      withUser = withUser.filter((m) => {
+        if (!m.user) return false;
+        return (m.user.username && m.user.username.toLowerCase().includes(searchTerm)) ||
+          (m.user.name && m.user.name.toLowerCase().includes(searchTerm)) ||
+          (m.user.email && m.user.email.toLowerCase().includes(searchTerm));
+      });
+    }
+    const total = searchTerm ? withUser.length : totalFromDb;
+    const paginated = searchTerm ? withUser.slice(skip, skip + limitNum) : withUser;
+    res.json({
+      success: true,
+      members: paginated,
       pagination: {
         page: parseInt(page),
-        limit: parseInt(limit),
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / limitNum) || 1
       }
     });
   } catch (error) {
@@ -92,53 +64,16 @@ router.get('/', protect, requireRole('admin'), requireHospitalAdmin(), async (re
 router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), async (req, res) => {
   try {
     const { username } = req.body;
-    
-    if (!username) {
-      return res.status(400).json({ error: 'Username is required' });
-    }
-    
-    // Ensure hospital exists
-    if (!req.hospital || !req.hospital._id) {
+    if (!username) return res.status(400).json({ error: 'Username is required' });
+    if (!req.hospital || (req.hospital.id == null && req.hospital._id == null)) {
       return res.status(404).json({ error: 'No hospital found. Please create a hospital first.' });
     }
-    
-    // Find user by username
-    const user = await User.findOne({ username: username.toLowerCase() });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    // Check if user is a doctor
-    if (user.role !== 'doctor') {
-      return res.status(400).json({ error: 'Only doctors can be invited to a hospital' });
-    }
-    
-    // Check if user is blocked by owner
-    if (user.blocked && user.blockedBy === 'owner') {
-      return res.status(400).json({ error: 'This user account is suspended' });
-    }
-    
-    // Validate ObjectId format and convert to ObjectId
-    if (!mongoose.Types.ObjectId.isValid(req.hospital._id)) {
-      return res.status(400).json({ error: 'Invalid hospital ID format' });
-    }
-    
-    if (!mongoose.Types.ObjectId.isValid(user._id)) {
-      return res.status(400).json({ error: 'Invalid user ID format' });
-    }
-    
-    // Convert to ObjectId to ensure proper type
-    const hospitalId = new mongoose.Types.ObjectId(req.hospital._id);
-    const userId = new mongoose.Types.ObjectId(user._id);
-    const invitedById = new mongoose.Types.ObjectId(req.user._id);
-    
-    // Check if membership already exists
-    const existingMembership = await HospitalMember.findOne({ 
-      hospital: hospitalId,
-      user: userId
-    });
-    
+    const hospitalId = req.hospital.id || req.hospital._id;
+    const user = userRepo.findOne({ username: username.toLowerCase() });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role !== 'doctor') return res.status(400).json({ error: 'Only doctors can be invited to a hospital' });
+    if (user.blocked && user.blockedBy === 'owner') return res.status(400).json({ error: 'This user account is suspended' });
+    const existingMembership = hospitalMemberRepo.findOne({ hospital: hospitalId, user: user.id });
     if (existingMembership) {
       if (existingMembership.status === 'accepted') {
         return res.status(400).json({ error: 'This doctor is already a member of your hospital' });
@@ -152,89 +87,31 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
       if (existingMembership.status === 'blocked') {
         return res.status(400).json({ error: 'This doctor is blocked from your hospital' });
       }
-      
-      // If kicked or cancelled, allow re-invite
-      existingMembership.status = 'pending_invitation';
-      existingMembership.invitedBy = invitedById;
-      existingMembership.statusChangedAt = Date.now();
-      await existingMembership.save();
-      
-      return res.json({
-        success: true,
-        message: 'Doctor re-invited successfully'
+      hospitalMemberRepo.update(existingMembership.id, {
+        status: 'pending_invitation',
+        invitedBy: req.user.id || req.user._id,
+        statusChangedAt: Date.now()
       });
+      return res.json({ success: true, message: 'Doctor re-invited successfully' });
     }
-    
-    // Check if user is already a member of another hospital
-    const otherMembership = await HospitalMember.findOne({ 
-      user: userId,
-      status: 'accepted'
-    });
-    
+    const otherMembership = hospitalMemberRepo.findOne({ user: user.id, status: 'accepted' });
     if (otherMembership) {
       return res.status(400).json({ error: 'This doctor is already a member of another hospital' });
     }
-    
-    // Create membership with pending_invitation status (doctor must accept)
-    const membership = await HospitalMember.create({
+    const membership = hospitalMemberRepo.create({
       hospital: hospitalId,
-      user: userId,
+      user: user.id,
       status: 'pending_invitation',
-      invitedBy: invitedById
+      invitedBy: req.user.id || req.user._id
     });
-    
     res.status(201).json({
       success: true,
       message: 'Invitation sent successfully',
-      membership: {
-        id: membership._id,
-        status: membership.status
-      }
+      membership: { id: membership.id, status: membership.status }
     });
   } catch (error) {
     console.error('Invite member error:', error);
-    console.error('Error details:', {
-      code: error.code,
-      keyPattern: error.keyPattern,
-      keyValue: error.keyValue,
-      message: error.message
-    });
-    
-    // Handle duplicate key error
-    if (error.code === 11000) {
-      // Check if it's a null duplicate key error (corrupted data or index mismatch)
-      if (error.keyValue && (error.keyValue.hospital === null || error.keyValue.user === null || 
-          error.keyValue.hospitalId === null || error.keyValue.userId === null)) {
-        console.error('Database index mismatch detected. Index uses hospitalId/userId but schema uses hospital/user.');
-        return res.status(500).json({ 
-          error: 'Database configuration error. Please contact administrator to fix the database index.' 
-        });
-      }
-      
-      // Check if the error is due to index field name mismatch
-      if (error.keyPattern && (error.keyPattern.hospitalId || error.keyPattern.userId)) {
-        console.error('Index field name mismatch: database has hospitalId/userId index but schema uses hospital/user');
-        return res.status(500).json({ 
-          error: 'Database index mismatch. Please contact administrator to recreate the index.' 
-        });
-      }
-      
-      // Regular duplicate key error
-      return res.status(400).json({ error: 'This membership already exists' });
-    }
-    
-    // Handle validation errors
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({ 
-        error: Object.values(error.errors).map(e => e.message).join(', ') 
-      });
-    }
-    
-    // Handle custom errors
-    if (error.message) {
-      return res.status(400).json({ error: error.message });
-    }
-    
+    if (error.code === 'SQLITE_CONSTRAINT') return res.status(400).json({ error: 'This membership already exists' });
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -242,38 +119,25 @@ router.post('/invite', protect, requireRole('admin'), requireHospitalAdmin(), as
 // Accept pending member (Admin only) - Only for doctor-requested memberships
 router.put('/:id/accept', protect, requireRole('admin'), requireHospitalAdmin(), async (req, res) => {
   try {
-    const membership = await HospitalMember.findOne({ 
-      _id: req.params.id,
-      hospital: req.hospital._id
-    }).populate('user', 'username name email');
-    
-    if (!membership) {
-      return res.status(404).json({ error: 'Membership not found' });
-    }
-    
-    // Admin can only accept doctor-requested memberships (invitedBy is null)
-    // Admin-invited memberships (pending_invitation) must be accepted by the doctor
-    if (membership.status !== 'pending' || membership.invitedBy !== null) {
-      return res.status(400).json({ 
-        error: 'Only doctor-requested memberships can be accepted by admin. Invited doctors must accept the invitation themselves.' 
+    const hospitalId = req.hospital.id || req.hospital._id;
+    const membership = hospitalMemberRepo.findById(req.params.id);
+    if (!membership || membership.hospital !== hospitalId) return res.status(404).json({ error: 'Membership not found' });
+    if (membership.status !== 'pending' || membership.invitedBy != null) {
+      return res.status(400).json({
+        error: 'Only doctor-requested memberships can be accepted by admin. Invited doctors must accept the invitation themselves.'
       });
     }
-    
-    membership.status = 'accepted';
-    await membership.save();
-    
+    hospitalMemberRepo.update(membership.id, { status: 'accepted', statusChangedAt: Date.now() });
+    const updated = hospitalMemberRepo.findById(membership.id);
+    const u = userRepo.findById(updated.user);
     res.json({
       success: true,
       message: 'Member accepted successfully',
       membership: {
-        id: membership._id,
-        user: {
-          id: membership.user._id,
-          username: membership.user.username,
-          name: membership.user.name
-        },
-        status: membership.status,
-        joinedAt: membership.joinedAt
+        id: updated.id,
+        user: u ? { id: u.id, username: u.username, name: u.name } : null,
+        status: updated.status,
+        joinedAt: updated.joinedAt
       }
     });
   } catch (error) {
@@ -285,26 +149,12 @@ router.put('/:id/accept', protect, requireRole('admin'), requireHospitalAdmin(),
 // Kick member (Admin only)
 router.put('/:id/kick', protect, requireRole('admin'), requireHospitalAdmin(), async (req, res) => {
   try {
-    const membership = await HospitalMember.findOne({ 
-      _id: req.params.id,
-      hospital: req.hospital._id
-    });
-    
-    if (!membership) {
-      return res.status(404).json({ error: 'Membership not found' });
-    }
-    
-    if (membership.status === 'kicked') {
-      return res.status(400).json({ error: 'Member is already kicked' });
-    }
-    
-    membership.status = 'kicked';
-    await membership.save();
-    
-    res.json({
-      success: true,
-      message: 'Member kicked successfully'
-    });
+    const hospitalId = req.hospital.id || req.hospital._id;
+    const membership = hospitalMemberRepo.findById(req.params.id);
+    if (!membership || membership.hospital !== hospitalId) return res.status(404).json({ error: 'Membership not found' });
+    if (membership.status === 'kicked') return res.status(400).json({ error: 'Member is already kicked' });
+    hospitalMemberRepo.update(membership.id, { status: 'kicked', statusChangedAt: Date.now() });
+    res.json({ success: true, message: 'Member kicked successfully' });
   } catch (error) {
     console.error('Kick member error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -314,34 +164,13 @@ router.put('/:id/kick', protect, requireRole('admin'), requireHospitalAdmin(), a
 // Block member (Admin only)
 router.put('/:id/block', protect, requireRole('admin'), requireHospitalAdmin(), async (req, res) => {
   try {
-    const membership = await HospitalMember.findOne({ 
-      _id: req.params.id,
-      hospital: req.hospital._id
-    });
-    
-    if (!membership) {
-      return res.status(404).json({ error: 'Membership not found' });
-    }
-    
-    if (membership.status === 'blocked') {
-      return res.status(400).json({ error: 'Member is already blocked' });
-    }
-    
-    membership.status = 'blocked';
-    await membership.save();
-    
-    // Also update user's blocked status for hospital-level blocking
-    await User.findByIdAndUpdate(membership.user, {
-      $set: {
-        blocked: true,
-        blockedBy: 'admin'
-      }
-    });
-    
-    res.json({
-      success: true,
-      message: 'Member blocked successfully'
-    });
+    const hospitalId = req.hospital.id || req.hospital._id;
+    const membership = hospitalMemberRepo.findById(req.params.id);
+    if (!membership || membership.hospital !== hospitalId) return res.status(404).json({ error: 'Membership not found' });
+    if (membership.status === 'blocked') return res.status(400).json({ error: 'Member is already blocked' });
+    hospitalMemberRepo.update(membership.id, { status: 'blocked', statusChangedAt: Date.now() });
+    userRepo.update(membership.user, { blocked: true, blockedBy: 'admin' });
+    res.json({ success: true, message: 'Member blocked successfully' });
   } catch (error) {
     console.error('Block member error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -351,34 +180,16 @@ router.put('/:id/block', protect, requireRole('admin'), requireHospitalAdmin(), 
 // Unblock member (Admin only)
 router.put('/:id/unblock', protect, requireRole('admin'), requireHospitalAdmin(), async (req, res) => {
   try {
-    const membership = await HospitalMember.findOne({ 
-      _id: req.params.id,
-      hospital: req.hospital._id
-    });
-    
-    if (!membership) {
-      return res.status(404).json({ error: 'Membership not found' });
-    }
-    
-    if (membership.status !== 'blocked') {
-      return res.status(400).json({ error: 'Member is not blocked' });
-    }
-    
-    membership.status = 'kicked'; // Move to kicked status after unblock
-    await membership.save();
-    
-    // Remove admin-level block from user
-    const user = await User.findById(membership.user);
+    const hospitalId = req.hospital.id || req.hospital._id;
+    const membership = hospitalMemberRepo.findById(req.params.id);
+    if (!membership || membership.hospital !== hospitalId) return res.status(404).json({ error: 'Membership not found' });
+    if (membership.status !== 'blocked') return res.status(400).json({ error: 'Member is not blocked' });
+    hospitalMemberRepo.update(membership.id, { status: 'kicked', statusChangedAt: Date.now() });
+    const user = userRepo.findById(membership.user);
     if (user && user.blockedBy === 'admin') {
-      user.blocked = false;
-      user.blockedBy = null;
-      await user.save();
+      userRepo.update(user.id, { blocked: false, blockedBy: null });
     }
-    
-    res.json({
-      success: true,
-      message: 'Member unblocked successfully'
-    });
+    res.json({ success: true, message: 'Member unblocked successfully' });
   } catch (error) {
     console.error('Unblock member error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -390,68 +201,24 @@ router.post('/join', protect, requireRole('doctor'), async (req, res) => {
   try {
     const { hospitalId } = req.body;
     
-    if (!hospitalId) {
-      return res.status(400).json({ error: 'Hospital ID is required' });
-    }
-    
-    // Find hospital
-    const hospital = await Hospital.findOne({ hospitalId });
-    
-    if (!hospital) {
-      return res.status(404).json({ error: 'Hospital not found' });
-    }
-    
-    // Check if already a member of any hospital
-    const existingAcceptedMembership = await HospitalMember.findOne({ 
-      user: req.user._id,
-      status: 'accepted'
-    });
-    
-    if (existingAcceptedMembership) {
-      return res.status(400).json({ error: 'You are already a member of a hospital' });
-    }
-    
-    // Check if membership already exists for this hospital
-    const existingMembership = await HospitalMember.findOne({ 
-      hospital: hospital._id,
-      user: req.user._id
-    });
-    
+    if (!hospitalId) return res.status(400).json({ error: 'Hospital ID is required' });
+    const hospital = hospitalRepo.findOne({ hospitalId });
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    const userId = req.user.id || req.user._id;
+    const existingAcceptedMembership = hospitalMemberRepo.findOne({ user: userId, status: 'accepted' });
+    if (existingAcceptedMembership) return res.status(400).json({ error: 'You are already a member of a hospital' });
+    const existingMembership = hospitalMemberRepo.findOne({ hospital: hospital.id, user: userId });
     if (existingMembership) {
-      if (existingMembership.status === 'pending') {
-        return res.status(400).json({ error: 'You already have a pending request for this hospital' });
-      }
-      if (existingMembership.status === 'blocked') {
-        return res.status(400).json({ error: 'You are blocked from this hospital' });
-      }
-      
-      // If kicked, allow re-request
-      existingMembership.status = 'pending';
-      existingMembership.invitedBy = null; // User requested, not invited
-      await existingMembership.save();
-      
-      return res.json({
-        success: true,
-        message: 'Join request sent successfully'
-      });
+      if (existingMembership.status === 'pending') return res.status(400).json({ error: 'You already have a pending request for this hospital' });
+      if (existingMembership.status === 'blocked') return res.status(400).json({ error: 'You are blocked from this hospital' });
+      hospitalMemberRepo.update(existingMembership.id, { status: 'pending', invitedBy: null, statusChangedAt: Date.now() });
+      return res.json({ success: true, message: 'Join request sent successfully' });
     }
-    
-    // Create membership request
-    const membership = await HospitalMember.create({
-      hospital: hospital._id,
-      user: req.user._id,
-      status: 'pending',
-      invitedBy: null // User requested, not invited
-    });
-    
+    const membership = hospitalMemberRepo.create({ hospital: hospital.id, user: userId, status: 'pending', invitedBy: null });
     res.status(201).json({
       success: true,
       message: 'Join request sent successfully. Waiting for admin approval.',
-      membership: {
-        id: membership._id,
-        hospitalName: hospital.name,
-        status: membership.status
-      }
+      membership: { id: membership.id, hospitalName: hospital.name, status: membership.status }
     });
   } catch (error) {
     console.error('Join hospital error:', error);
@@ -462,33 +229,21 @@ router.post('/join', protect, requireRole('doctor'), async (req, res) => {
 // Get own membership status (Doctor only)
 router.get('/my-membership', protect, async (req, res) => {
   try {
-    const membership = await HospitalMember.findOne({ 
-      user: req.user._id
-    }).populate('hospital', 'hospitalId name address')
-      .populate('invitedBy', 'name username');
-    
-    if (!membership) {
-      return res.json({
-        success: true,
-        membership: null
-      });
-    }
-    
+    const userId = req.user.id || req.user._id;
+    const membership = hospitalMemberRepo.findOne({ user: userId }, { withHospital: true });
+    if (!membership) return res.json({ success: true, membership: null });
+    const invitedByUser = membership.invitedBy ? userRepo.findById(membership.invitedBy) : null;
     res.json({
       success: true,
       membership: {
-        id: membership._id,
-        hospital: {
+        id: membership.id,
+        hospital: membership.hospital ? {
           hospitalId: membership.hospital.hospitalId,
           name: membership.hospital.name,
           address: membership.hospital.address
-        },
-        status: membership.status,
-        invitedBy: membership.invitedBy ? {
-          id: membership.invitedBy._id,
-          name: membership.invitedBy.name,
-          username: membership.invitedBy.username
         } : null,
+        status: membership.status,
+        invitedBy: invitedByUser ? { id: invitedByUser.id, name: invitedByUser.name, username: invitedByUser.username } : null,
         joinedAt: membership.joinedAt,
         createdAt: membership.createdAt
       }
@@ -502,47 +257,27 @@ router.get('/my-membership', protect, async (req, res) => {
 // Accept invitation (Doctor only) - For admin-invited memberships
 router.put('/accept-invitation', protect, requireRole('doctor'), async (req, res) => {
   try {
-    // Ensure doctor's email is verified
-    const user = await User.findById(req.user._id);
+    const user = userRepo.findById(req.user.id || req.user._id);
     if (!user || !user.emailVerified) {
       return res.status(403).json({ error: 'Please verify your email address before accepting hospital invitations.' });
     }
-
-    const membership = await HospitalMember.findOne({ 
-      user: req.user._id,
-      status: 'pending_invitation'
-    }).populate('hospital', 'hospitalId name address');
-    
-    if (!membership) {
-      return res.status(404).json({ error: 'No pending invitation found' });
-    }
-    
-    // Check if already a member of another hospital
-    const otherMembership = await HospitalMember.findOne({ 
-      user: req.user._id,
-      status: 'accepted',
-      _id: { $ne: membership._id }
-    });
-    
-    if (otherMembership) {
+    const membership = hospitalMemberRepo.findOne({ user: user.id, status: 'pending_invitation' }, { withHospital: true });
+    if (!membership) return res.status(404).json({ error: 'No pending invitation found' });
+    const otherMembership = hospitalMemberRepo.findOne({ user: user.id, status: 'accepted' });
+    if (otherMembership && otherMembership.id !== membership.id) {
       return res.status(400).json({ error: 'You are already a member of another hospital' });
     }
-    
-    membership.status = 'accepted';
-    await membership.save();
-    
+    hospitalMemberRepo.update(membership.id, { status: 'accepted', statusChangedAt: Date.now() });
+    const updated = hospitalMemberRepo.findById(membership.id);
+    const hosp = membership.hospital;
     res.json({
       success: true,
       message: 'Invitation accepted successfully',
       membership: {
-        id: membership._id,
-        hospital: {
-          hospitalId: membership.hospital.hospitalId,
-          name: membership.hospital.name,
-          address: membership.hospital.address
-        },
-        status: membership.status,
-        joinedAt: membership.joinedAt
+        id: updated.id,
+        hospital: hosp ? { hospitalId: hosp.hospitalId, name: hosp.name, address: hosp.address } : null,
+        status: updated.status,
+        joinedAt: updated.joinedAt
       }
     });
   } catch (error) {
@@ -554,28 +289,14 @@ router.put('/accept-invitation', protect, requireRole('doctor'), async (req, res
 // Reject/Cancel invitation (Doctor only)
 router.put('/reject-invitation', protect, requireRole('doctor'), async (req, res) => {
   try {
-    // Ensure doctor's email is verified
-    const user = await User.findById(req.user._id);
+    const user = userRepo.findById(req.user.id || req.user._id);
     if (!user || !user.emailVerified) {
       return res.status(403).json({ error: 'Please verify your email address before rejecting hospital invitations.' });
     }
-
-    const membership = await HospitalMember.findOne({ 
-      user: req.user._id,
-      status: 'pending_invitation'
-    });
-    
-    if (!membership) {
-      return res.status(404).json({ error: 'No pending invitation found' });
-    }
-    
-    // Delete the membership record
-    await HospitalMember.findByIdAndDelete(membership._id);
-    
-    res.json({
-      success: true,
-      message: 'Invitation rejected successfully'
-    });
+    const membership = hospitalMemberRepo.findOne({ user: user.id, status: 'pending_invitation' });
+    if (!membership) return res.status(404).json({ error: 'No pending invitation found' });
+    hospitalMemberRepo.deleteById(membership.id);
+    res.json({ success: true, message: 'Invitation rejected successfully' });
   } catch (error) {
     console.error('Reject invitation error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -585,28 +306,17 @@ router.put('/reject-invitation', protect, requireRole('doctor'), async (req, res
 // Leave hospital (Doctor only)
 router.delete('/leave', protect, requireRole('doctor'), async (req, res) => {
   try {
-    const membership = await HospitalMember.findOne({ 
-      user: req.user._id,
-      status: { $in: ['pending', 'accepted'] }
-    });
-    
-    if (!membership) {
-      return res.status(404).json({ error: 'You are not a member of any hospital' });
-    }
-    
-    // If it's a pending_invitation, use reject endpoint instead
+    const userId = req.user.id || req.user._id;
+    const membership = hospitalMemberRepo.findOne({ user: userId });
+    if (!membership) return res.status(404).json({ error: 'You are not a member of any hospital' });
     if (membership.status === 'pending_invitation') {
-      return res.status(400).json({ 
-        error: 'Please use the reject invitation option to cancel pending invitations' 
-      });
+      return res.status(400).json({ error: 'Please use the reject invitation option to cancel pending invitations' });
     }
-    
-    await HospitalMember.findByIdAndDelete(membership._id);
-    
-    res.json({
-      success: true,
-      message: 'You have left the hospital'
-    });
+    if (membership.status !== 'pending' && membership.status !== 'accepted') {
+      return res.status(400).json({ error: 'You cannot leave in your current status' });
+    }
+    hospitalMemberRepo.deleteById(membership.id);
+    res.json({ success: true, message: 'You have left the hospital' });
   } catch (error) {
     console.error('Leave hospital error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -617,27 +327,11 @@ router.delete('/leave', protect, requireRole('doctor'), async (req, res) => {
 router.get('/search-users', protect, requireRole('admin'), async (req, res) => {
   try {
     const { username } = req.query;
-    
-    if (!username || username.length < 2) {
-      return res.json({ success: true, users: [] });
-    }
-    
-    const users = await User.find({
-      username: { $regex: username, $options: 'i' },
-      role: 'doctor',
-      blocked: { $ne: true }
-    })
-    .select('username name email')
-    .limit(10);
-    
+    if (!username || username.length < 2) return res.json({ success: true, users: [] });
+    const users = userRepo.find({ role: 'doctor', blocked: false, search: username }, { limit: 10 });
     res.json({
       success: true,
-      users: users.map(u => ({
-        id: u._id,
-        username: u.username,
-        name: u.name,
-        email: u.email
-      }))
+      users: users.map(u => ({ id: u.id, username: u.username, name: u.name, email: u.email }))
     });
   } catch (error) {
     console.error('Search users error:', error);

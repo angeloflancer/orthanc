@@ -1,24 +1,21 @@
-const Hospital = require('../models/Hospital');
-const HospitalMember = require('../models/HospitalMember');
+const hospitalRepo = require('../db/hospitalRepo');
+const hospitalMemberRepo = require('../db/hospitalMemberRepo');
 
 /**
  * Get the hospital associated with a user
  * @param {Object} user - The user object
- * @returns {Promise<Object|null>} Hospital object or null if user has no hospital
+ * @returns {Object|null} Hospital object or null if user has no hospital
  */
-async function getUserHospital(user) {
+function getUserHospital(user) {
   if (!user) return null;
-  
+  const userId = user.id || user._id;
   if (user.role === 'admin') {
-    return await Hospital.findOne({ admin: user._id });
-  } else if (user.role === 'doctor') {
-    const membership = await HospitalMember.findOne({ 
-      user: user._id, 
-      status: 'accepted' 
-    }).populate('hospital');
+    return hospitalRepo.findOne({ admin: userId });
+  }
+  if (user.role === 'doctor') {
+    const membership = hospitalMemberRepo.findOne({ user: userId, status: 'accepted' }, { withHospital: true });
     return membership ? membership.hospital : null;
   }
-  
   return null;
 }
 

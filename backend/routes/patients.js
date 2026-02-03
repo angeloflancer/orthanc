@@ -1,113 +1,54 @@
 const express = require('express');
 const router = express.Router();
-const Patient = require('../models/Patient');
-const DicomStudy = require('../models/DicomStudy');
-const WordFile = require('../models/WordFile');
-const User = require('../models/User');
-const Hospital = require('../models/Hospital');
-const HospitalMember = require('../models/HospitalMember');
+const patientRepo = require('../db/patientRepo');
+const dicomStudyRepo = require('../db/dicomStudyRepo');
+const wordFileRepo = require('../db/wordFileRepo');
+const userRepo = require('../db/userRepo');
 const { protect } = require('../middleware/auth');
 const { checkFeatureAccess } = require('../middleware/accessControl');
 
-/** Get request user: for owner use req.user (not in DB); for others load from DB. */
-async function getRequestUser(req) {
+function getRequestUser(req) {
   if (req.user.role === 'owner') return req.user;
-  return User.findById(req.user._id).select('-password');
-}
-
-
-// Helper function to get user's hospital ID for filtering
-// Returns null for owner (all access), hospital._id for admin/doctor, or null if no hospital
-async function getUserHospitalId(user) {
+  const user = userRepo.findById(req.user.id || req.user._id);
   if (!user) return null;
-  
-  if (user.role === 'owner') {
-    // Owner can access all data - return null to indicate no filtering
-    return null;
-  }
-  
-  if (user.role === 'admin') {
-    const hospital = await Hospital.findOne({ admin: user._id });
-    return hospital ? hospital._id : null;
-  }
-  
-  if (user.role === 'doctor') {
-    const membership = await HospitalMember.findOne({ 
-      user: user._id,
-      status: 'accepted'
-    });
-    return membership ? membership.hospital : null;
-  }
-  
-  return null;
+  const { password, ...safe } = user;
+  safe.id = user.id;
+  safe._id = user.id;
+  return safe;
 }
 
 // Get all patients (paginated)
 router.get('/', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await getRequestUser(req);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
+    const user = getRequestUser(req);
+    if (!user) return res.status(401).json({ error: 'User not found' });
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const skip = (page - 1) * limit;
-
-    // Owner, admin, and doctor can see all patients - no role filtering
     const patientQuery = {};
-
-    // Optional search/filter
-    if (req.query.patientId && req.query.patientId.trim()) {
-      patientQuery.patientId = { $regex: req.query.patientId.trim(), $options: 'i' };
-    }
-    if (req.query.patientName && req.query.patientName.trim()) {
-      patientQuery.patientName = { $regex: req.query.patientName.trim(), $options: 'i' };
-    }
-    if (req.query.patientSex && req.query.patientSex.trim()) {
-      patientQuery.patientSex = req.query.patientSex.trim();
-    }
-    if (req.query.birthDateFrom || req.query.birthDateTo) {
-      patientQuery.patientBirthDate = {};
-      if (req.query.birthDateFrom) patientQuery.patientBirthDate.$gte = req.query.birthDateFrom;
-      if (req.query.birthDateTo) patientQuery.patientBirthDate.$lte = req.query.birthDateTo;
-    }
-
-    const total = await Patient.countDocuments(patientQuery);
-
-    const patients = await Patient.find(patientQuery)
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    const patientsWithCounts = patients.map((patient) => ({
-      ...patient,
-      dicomStudyCount: patient.dicomStudyCount || 0,
-      wordFileCount: patient.wordFileCount || 0
-    }));
-
+    if (req.query.patientId && req.query.patientId.trim()) patientQuery.patientId = req.query.patientId.trim();
+    if (req.query.patientName && req.query.patientName.trim()) patientQuery.patientName = req.query.patientName.trim();
+    if (req.query.patientSex && req.query.patientSex.trim()) patientQuery.patientSex = req.query.patientSex.trim();
+    if (req.query.birthDateFrom) patientQuery.patientBirthDateFrom = req.query.birthDateFrom;
+    if (req.query.birthDateTo) patientQuery.patientBirthDateTo = req.query.birthDateTo;
+    const total = patientRepo.countDocuments(patientQuery);
+    const patients = patientRepo.find(patientQuery, { limit, skip });
     res.json({
       success: true,
-      patients: patientsWithCounts.map(patient => ({
-        id: patient._id,
-        patientId: patient.patientId,
-        patientName: patient.patientName,
-        patientBirthDate: patient.patientBirthDate,
-        patientSex: patient.patientSex,
-        otherPatientIds: patient.otherPatientIds,
-        dicomStudyCount: patient.dicomStudyCount || 0,
-        wordFileCount: patient.wordFileCount || 0,
+      patients: patients.map(p => ({
+        id: p.id,
+        patientId: p.patientId,
+        patientName: p.patientName,
+        patientBirthDate: p.patientBirthDate,
+        patientSex: p.patientSex,
+        otherPatientIds: p.otherPatientIds,
+        dicomStudyCount: p.dicomStudyCount || 0,
+        wordFileCount: p.wordFileCount || 0,
         lastDocumentUpload: null,
-        createdAt: patient.createdAt,
-        updatedAt: patient.updatedAt
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt
       })),
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit) || 1
-      }
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 }
     });
   } catch (error) {
     console.error('Get patients error:', error);
@@ -118,78 +59,34 @@ router.get('/', protect, checkFeatureAccess(), async (req, res) => {
 // Get patient by patientId (DICOM Patient ID) - must come before /:id
 router.get('/by-patient-id/:patientId', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await getRequestUser(req);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-    
-    // Find patient by patientId only (one patient ID = one patient record)
-    const patient = await Patient.findOne({ patientId: req.params.patientId });
-    
-    if (!patient) {
-      return res.status(404).json({ error: 'Patient not found' });
-    }
-    
-    // Apply access control based on hospital
+    const user = getRequestUser(req);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    const patient = patientRepo.findOne({ patientId: req.params.patientId });
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+    const hospital = req.hospital;
+    const userId = req.user.id || req.user._id;
     if (user.role !== 'owner') {
-      const hospital = req.hospital;
-      if (!hospital) {
-        return res.status(404).json({ error: 'Patient not found' });
-      }
-      
-      // Check if patient has studies/files from this hospital
-      const hasStudy = await DicomStudy.exists({
-        patientId: req.params.patientId,
-        hospital: hospital._id
-      });
-      const hasWordFile = await WordFile.exists({
-        patientId: req.params.patientId,
-        hospital: hospital._id
-      });
-      
-      // For doctors, also check if they uploaded the studies/files
+      if (!hospital) return res.status(404).json({ error: 'Patient not found' });
+      const hasStudy = dicomStudyRepo.countDocuments({ patientId: req.params.patientId, hospital: hospital.id }) > 0;
+      const hasWordFile = wordFileRepo.countDocuments({ patientId: req.params.patientId, hospital: hospital.id }) > 0;
       if (user.role === 'doctor') {
-        const hasOwnStudy = await DicomStudy.exists({
-          patientId: req.params.patientId,
-          hospital: hospital._id,
-          uploadedBy: req.user._id
-        });
-        const hasOwnWordFile = await WordFile.exists({
-          patientId: req.params.patientId,
-          hospital: hospital._id,
-          uploadedBy: req.user._id
-        });
-        
-        if (!hasOwnStudy && !hasOwnWordFile) {
-          return res.status(404).json({ error: 'Patient not found' });
-        }
+        const hasOwnStudy = dicomStudyRepo.countDocuments({ patientId: req.params.patientId, hospital: hospital.id, uploadedBy: userId }) > 0;
+        const hasOwnWordFile = wordFileRepo.countDocuments({ patientId: req.params.patientId, hospital: hospital.id, uploadedBy: userId }) > 0;
+        if (!hasOwnStudy && !hasOwnWordFile) return res.status(404).json({ error: 'Patient not found' });
       } else if (!hasStudy && !hasWordFile) {
-        // Admin can see patient if hospital has any studies/files for this patient
         return res.status(404).json({ error: 'Patient not found' });
       }
     }
-    
-    // Calculate counts based on role
     let dicomCount = patient.dicomStudyCount || 0;
     let wordFileCount = patient.wordFileCount || 0;
-    
     if (user.role === 'doctor') {
-      dicomCount = await DicomStudy.countDocuments({
-        patientId: patient.patientId,
-        hospital: patient.hospital,
-        uploadedBy: req.user._id
-      });
-      wordFileCount = await WordFile.countDocuments({
-        patientId: patient.patientId,
-        hospital: patient.hospital,
-        uploadedBy: req.user._id
-      });
+      dicomCount = dicomStudyRepo.countDocuments({ patientId: patient.patientId, hospital: patient.hospital, uploadedBy: userId });
+      wordFileCount = wordFileRepo.countDocuments({ patientId: patient.patientId, hospital: patient.hospital, uploadedBy: userId });
     }
-    
     res.json({
       success: true,
       patient: {
-        id: patient._id,
+        id: patient.id,
         patientId: patient.patientId,
         patientName: patient.patientName,
         patientBirthDate: patient.patientBirthDate,
@@ -211,46 +108,31 @@ router.get('/by-patient-id/:patientId', protect, checkFeatureAccess(), async (re
 // Get DICOM studies for a patient
 router.get('/:patientId/dicom-studies', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await getRequestUser(req);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
+    const user = getRequestUser(req);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    const query = { patientId: req.params.patientId };
+    if (user.role !== 'owner' && req.hospital) {
+      query.hospital = req.hospital.id;
+      if (user.role === 'doctor') query.uploadedBy = req.user.id || req.user._id;
     }
-    
-    // Build query based on patient ID and hospital
-    let query = { patientId: req.params.patientId };
-    if (user.role !== 'owner') {
-      const hospital = req.hospital;
-      if (!hospital) {
-        return res.json({ success: true, studies: [] });
-      }
-      query.hospital = hospital._id;
-      
-      // Doctors can only see their own data
-      if (user.role === 'doctor') {
-        query.uploadedBy = req.user._id;
-      }
-    }
-    
-    const studies = await DicomStudy.find(query)
-      .sort({ uploadedAt: -1 })
-      .lean();
-    
+    if (user.role !== 'owner' && !req.hospital) return res.json({ success: true, studies: [] });
+    const studies = dicomStudyRepo.find(query, { limit: 500 });
     res.json({
       success: true,
-      studies: studies.map(study => ({
-        id: study._id,
-        studyInstanceUid: study.studyInstanceUid,
-        orthancStudyId: study.orthancStudyId,
-        patientId: study.patientId,
-        patientName: study.patientName,
-        studyDate: study.studyDate,
-        studyDescription: study.studyDescription,
-        accessionNumber: study.accessionNumber,
-        modalitiesInStudy: study.modalitiesInStudy,
-        seriesCount: study.seriesCount,
-        instancesCount: study.instancesCount,
-        uploadedByName: study.uploadedByName,
-        uploadedAt: study.uploadedAt
+      studies: studies.map(s => ({
+        id: s.id,
+        studyInstanceUid: s.studyInstanceUid,
+        orthancStudyId: s.orthancStudyId,
+        patientId: s.patientId,
+        patientName: s.patientName,
+        studyDate: s.studyDate,
+        studyDescription: s.studyDescription,
+        accessionNumber: s.accessionNumber,
+        modalitiesInStudy: s.modalitiesInStudy,
+        seriesCount: s.seriesCount,
+        instancesCount: s.instancesCount,
+        uploadedByName: s.uploadedByName,
+        uploadedAt: s.uploadedAt
       }))
     });
   } catch (error) {
@@ -306,82 +188,37 @@ router.get('/:patientId/word-files', protect, checkFeatureAccess(), async (req, 
   }
 });
 
-// Get single patient by MongoDB ID - must be last to avoid route conflicts
+// Get single patient by ID - must be last to avoid route conflicts
 router.get('/:id', protect, checkFeatureAccess(), async (req, res) => {
   try {
-    const user = await getRequestUser(req);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-    
-    // Build query - check hospital access
-    // Find patient by MongoDB ID
-    const patient = await Patient.findById(req.params.id);
-    
-    if (!patient) {
-      return res.status(404).json({ error: 'Patient not found' });
-    }
-    
-    // Apply access control based on hospital
+    const user = getRequestUser(req);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    const patient = patientRepo.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+    const hospital = req.hospital;
+    const userId = req.user.id || req.user._id;
     if (user.role !== 'owner') {
-      const hospital = req.hospital;
-      if (!hospital) {
-        return res.status(404).json({ error: 'Patient not found' });
-      }
-      
-      // Check if patient has studies/files from this hospital
-      const hasStudy = await DicomStudy.exists({
-        patientId: patient.patientId,
-        hospital: hospital._id
-      });
-      const hasWordFile = await WordFile.exists({
-        patientId: patient.patientId,
-        hospital: hospital._id
-      });
-      
-      // For doctors, also check if they uploaded the studies/files
+      if (!hospital) return res.status(404).json({ error: 'Patient not found' });
+      const hasStudy = dicomStudyRepo.countDocuments({ patientId: patient.patientId, hospital: hospital.id }) > 0;
+      const hasWordFile = wordFileRepo.countDocuments({ patientId: patient.patientId, hospital: hospital.id }) > 0;
       if (user.role === 'doctor') {
-        const hasOwnStudy = await DicomStudy.exists({
-          patientId: patient.patientId,
-          hospital: hospital._id,
-          uploadedBy: req.user._id
-        });
-        const hasOwnWordFile = await WordFile.exists({
-          patientId: patient.patientId,
-          hospital: hospital._id,
-          uploadedBy: req.user._id
-        });
-        
-        if (!hasOwnStudy && !hasOwnWordFile) {
-          return res.status(404).json({ error: 'Patient not found' });
-        }
+        const hasOwnStudy = dicomStudyRepo.countDocuments({ patientId: patient.patientId, hospital: hospital.id, uploadedBy: userId }) > 0;
+        const hasOwnWordFile = wordFileRepo.countDocuments({ patientId: patient.patientId, hospital: hospital.id, uploadedBy: userId }) > 0;
+        if (!hasOwnStudy && !hasOwnWordFile) return res.status(404).json({ error: 'Patient not found' });
       } else if (!hasStudy && !hasWordFile) {
-        // Admin can see patient if hospital has any studies/files for this patient
         return res.status(404).json({ error: 'Patient not found' });
       }
     }
-    
-    // Calculate counts based on role
     let dicomCount = patient.dicomStudyCount || 0;
     let wordFileCount = patient.wordFileCount || 0;
-    
     if (user.role === 'doctor') {
-      dicomCount = await DicomStudy.countDocuments({
-        patientId: patient.patientId,
-        hospital: patient.hospital,
-        uploadedBy: req.user._id
-      });
-      wordFileCount = await WordFile.countDocuments({
-        patientId: patient.patientId,
-        hospital: patient.hospital,
-        uploadedBy: req.user._id
-      });
+      dicomCount = dicomStudyRepo.countDocuments({ patientId: patient.patientId, hospital: patient.hospital, uploadedBy: userId });
+      wordFileCount = wordFileRepo.countDocuments({ patientId: patient.patientId, hospital: patient.hospital, uploadedBy: userId });
     }
-    
     res.json({
       success: true,
       patient: {
-        id: patient._id,
+        id: patient.id,
         patientId: patient.patientId,
         patientName: patient.patientName,
         patientBirthDate: patient.patientBirthDate,

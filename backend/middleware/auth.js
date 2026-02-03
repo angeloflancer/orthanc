@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const userRepo = require('../db/userRepo');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -32,12 +32,15 @@ exports.protect = async (req, res, next) => {
         return next();
       }
 
-      // Normal user: load from DB
-      req.user = await User.findById(decoded.id).select('-password');
-
-      if (!req.user) {
+      // Normal user: load from DB (exclude password)
+      const user = userRepo.findById(decoded.id);
+      if (!user) {
         return res.status(401).json({ error: 'User not found' });
       }
+      const { password, ...safe } = user;
+      req.user = safe;
+      req.user.id = user.id;
+      req.user._id = user.id;
 
       if (req.user.blocked && req.user.blockedBy === 'owner') {
         return res.status(403).json({

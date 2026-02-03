@@ -35,16 +35,20 @@ The executable **embeds**:
 - **`.env`** – config is read from inside the exe (snapshot); no external `.env` file is required
 - **`frontend-dist`** – the built frontend is served from inside the exe on port 5829
 
+**Database:** The app uses SQLite + SQLCipher. The database file is **not** embedded; it is created on disk at the path in `DB_PATH` (from embedded `.env`). Ensure the exe has write access to the directory of `DB_PATH`. Set `DB_KEY` in `.env` before building so the embedded config contains your encryption key.
+
+**Native module (better-sqlite3-sqlcipher):** pkg bundles the `.node` native binding when building on the same OS/architecture. For the built exe to run, either (1) build on the target OS (e.g. Windows for `node18-win-x64`) so the binding is included, or (2) copy the `node_modules/better-sqlite3-sqlcipher` output next to the exe if pkg does not pack it. In practice, building with `npm run build:exe` on Windows produces an exe that runs with the embedded binding. If you see a load error for the native module, run the exe from a folder that contains the binding (e.g. from `backend/` after build) or document that the binding must be present.
+
 ## Running the executable
 
 1. **Copy** only `orthanc-backend.exe` to your deployment folder (or run it from anywhere).
 2. **Run** the exe (e.g. double‑click or `.\orthanc-backend.exe` from a terminal).
 
-No Node.js, `.env` file, or `frontend-dist` folder need to be present. The app uses the embedded config and frontend.
+No Node.js, `.env` file, or `frontend-dist` folder need to be present. The app uses the embedded config and frontend. The SQLite database file is created at `DB_PATH` (relative to the exe’s working directory) if it does not exist.
 
 ## What gets protected
 
-- **Application source** (routes, models, middleware, etc.) is bundled into the executable.
+- **Application source** (routes, db repos, middleware, etc.) is bundled into the executable.
 - **`.env`** is embedded and not written to disk at runtime.
 - **Frontend** (`frontend-dist`) is embedded and served from inside the exe. Keep the built exe secure; it contains the config and frontend from build time.
 

@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const User = require('../models/User');
-const Hospital = require('../models/Hospital');
-const HospitalMember = require('../models/HospitalMember');
+const bcrypt = require('bcryptjs');
+const userRepo = require('../db/userRepo');
+const hospitalRepo = require('../db/hospitalRepo');
+const hospitalMemberRepo = require('../db/hospitalMemberRepo');
+const hospitalSubscriptionRepo = require('../db/hospitalSubscriptionRepo');
 const { generateToken, generateOwnerToken, protect } = require('../middleware/auth');
 const { sendVerificationEmail, sendOtpEmail } = require('../utils/emailService');
 
@@ -53,7 +55,7 @@ router.get('/check-username/:username', async (req, res) => {
       });
     }
     
-    const existingUser = await User.findOne({ username: username.toLowerCase() });
+    const existingUser = userRepo.findOne({ username: username.toLowerCase() });
     res.json({ available: !existingUser });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -80,41 +82,32 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Username must be between 3 and 20 characters' });
     }
     
-    // Check if username exists
-    const usernameExists = await User.findOne({ username: username.toLowerCase() });
+    const usernameExists = userRepo.findOne({ username: username.toLowerCase() });
     if (usernameExists) {
       return res.status(400).json({ error: 'Username already taken' });
     }
-    
-    // Check if email exists
-    const emailExists = await User.findOne({ email });
+    const emailExists = userRepo.findOne({ email });
     if (emailExists) {
       return res.status(400).json({ error: 'Email already registered' });
     }
-    
-    // Generate email verification token
     const emailVerificationToken = crypto.randomBytes(32).toString('hex');
-    const emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-    
-    // Create user with default role 'doctor'
-    const user = await User.create({ 
+    const emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = userRepo.create({
       username: username.toLowerCase(),
-      email, 
-      password, 
+      email,
+      password: hashedPassword,
       name,
       role: 'doctor',
       emailVerificationToken,
       emailVerificationTokenExpiry
     });
-    
-    // Send verification email
     await sendVerificationEmail(user.email, user.name, emailVerificationToken);
-    
     res.status(201).json({
       success: true,
-      token: process.env.REQUIRE_VERIFY_EMAIL === "false" ? generateToken(user._id) : null,
+      token: process.env.REQUIRE_VERIFY_EMAIL === "false" ? generateToken(user.id) : null,
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         name: user.name,
@@ -124,13 +117,8 @@ router.post('/register', async (req, res) => {
       message: 'Registration successful. Please check your email to verify your account.'
     });
   } catch (error) {
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({ error: Object.values(error.errors)[0].message });
-    }
-    if (error.code === 11000) {
-      // Duplicate key error
-      const field = Object.keys(error.keyPattern)[0];
-      return res.status(400).json({ error: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists` });
+    if (error.code === 'SQLITE_CONSTRAINT') {
+      return res.status(400).json({ error: 'Username or email already exists' });
     }
     res.status(500).json({ error: 'Server error' });
   }
@@ -173,12 +161,11 @@ router.post('/login', async (req, res) => {
       ? { email: identifier.toLowerCase() }
       : { username: identifier.toLowerCase() };
 
-    const user = await User.findOne(query).select('+password');
+    const user = userRepo.findOne(query);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -205,18 +192,15 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    const token = generateToken(user._id);
-
+    const token = generateToken(user.id);
     let hospital = null;
     if (user.role === 'admin') {
-      hospital = await Hospital.findOne({ admin: user._id });
+      hospital = hospitalRepo.findOne({ admin: user.id });
     }
-
     let hospitalMembership = null;
     if (user.role === 'doctor') {
-      const membership = await HospitalMember.findOne({ user: user._id })
-        .populate('hospital', 'hospitalId name');
-      if (membership) {
+      const membership = hospitalMemberRepo.findOne({ user: user.id }, { withHospital: true });
+      if (membership && membership.hospital) {
         hospitalMembership = {
           hospitalId: membership.hospital.hospitalId,
           hospitalName: membership.hospital.name,
@@ -224,22 +208,17 @@ router.post('/login', async (req, res) => {
         };
       }
     }
-
     res.json({
       success: true,
       token,
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         name: user.name,
         role: user.role,
         emailVerified: user.emailVerified,
-        hospital: hospital ? {
-          id: hospital._id,
-          hospitalId: hospital.hospitalId,
-          name: hospital.name
-        } : null,
+        hospital: hospital ? { id: hospital.id, hospitalId: hospital.hospitalId, name: hospital.name } : null,
         hospitalMembership
       },
       requireEmailVerify
@@ -321,23 +300,19 @@ router.get('/me', protect, async (req, res) => {
       });
     }
 
-    const HospitalSubscription = require('../models/HospitalSubscription');
-
+    const userId = req.user.id || req.user._id;
     let hospital = null;
     let subscription = null;
     if (req.user.role === 'admin') {
-      hospital = await Hospital.findOne({ admin: req.user._id });
+      hospital = hospitalRepo.findOne({ admin: userId });
       if (hospital) {
-        subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+        subscription = hospitalSubscriptionRepo.findOne({ hospital: hospital.id });
       }
     }
-
     let hospitalMembership = null;
     let doctorSubscription = null;
     if (req.user.role === 'doctor') {
-      const membership = await HospitalMember.findOne({
-        user: req.user._id
-      }).populate('hospital', 'hospitalId name');
+      const membership = hospitalMemberRepo.findOne({ user: userId }, { withHospital: true });
       if (membership) {
         hospitalMembership = {
           hospitalId: membership.hospital.hospitalId,
@@ -345,50 +320,40 @@ router.get('/me', protect, async (req, res) => {
           status: membership.status
         };
         if (membership.status === 'accepted' && membership.hospital) {
-          doctorSubscription = await HospitalSubscription.findOne({
-            hospital: membership.hospital._id
-          });
+          doctorSubscription = hospitalSubscriptionRepo.findOne({ hospital: membership.hospital.id });
         }
       }
     }
-
     let subscriptionInfo = null;
     if (subscription) {
       subscriptionInfo = {
         planType: subscription.planType,
         expiresAt: subscription.expiresAt,
-        isActive: subscription.isActive,
-        daysUntilExpiration: subscription.getDaysUntilExpiration(),
-        shouldShowWarning: subscription.shouldShowWarning()
+        isActive: hospitalSubscriptionRepo.isActive(subscription),
+        daysUntilExpiration: hospitalSubscriptionRepo.getDaysUntilExpiration(subscription),
+        shouldShowWarning: hospitalSubscriptionRepo.shouldShowWarning(subscription)
       };
     }
-
     let doctorSubscriptionInfo = null;
     if (doctorSubscription) {
       doctorSubscriptionInfo = {
         planType: doctorSubscription.planType,
         expiresAt: doctorSubscription.expiresAt,
-        isActive: doctorSubscription.isActive,
-        daysUntilExpiration: doctorSubscription.getDaysUntilExpiration(),
-        shouldShowWarning: doctorSubscription.shouldShowWarning()
+        isActive: hospitalSubscriptionRepo.isActive(doctorSubscription),
+        daysUntilExpiration: hospitalSubscriptionRepo.getDaysUntilExpiration(doctorSubscription),
+        shouldShowWarning: hospitalSubscriptionRepo.shouldShowWarning(doctorSubscription)
       };
     }
-
     res.json({
       success: true,
       user: {
-        id: req.user._id,
+        id: req.user.id,
         username: req.user.username,
         email: req.user.email,
         name: req.user.name,
         role: req.user.role,
         emailVerified: req.user.emailVerified,
-        hospital: hospital ? {
-          id: hospital._id,
-          hospitalId: hospital.hospitalId,
-          name: hospital.name,
-          address: hospital.address
-        } : null,
+        hospital: hospital ? { id: hospital.id, hospitalId: hospital.hospitalId, name: hospital.name, address: hospital.address } : null,
         subscription: subscriptionInfo,
         hospitalMembership,
         doctorSubscription: doctorSubscriptionInfo
@@ -404,27 +369,16 @@ router.get('/me', protect, async (req, res) => {
 router.get('/verify-email/:token', async (req, res) => {
   try {
     const { token } = req.params;
-    
-    // Find user with this token and check if it's not expired
-    const user = await User.findOne({
-      emailVerificationToken: token,
-      emailVerificationTokenExpiry: { $gt: Date.now() }
-    }).select('+emailVerificationToken +emailVerificationTokenExpiry');
-    
+    const user = userRepo.findOneByVerificationToken(token);
     if (!user) {
       return res.status(400).json({ error: 'Invalid or expired verification token' });
     }
-    
-    // Update user
-    user.emailVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationTokenExpiry = undefined;
-    await user.save();
-    
-    res.json({
-      success: true,
-      message: 'Email verified successfully'
+    userRepo.update(user.id, {
+      emailVerified: true,
+      emailVerificationToken: null,
+      emailVerificationTokenExpiry: null
     });
+    res.json({ success: true, message: 'Email verified successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -433,27 +387,15 @@ router.get('/verify-email/:token', async (req, res) => {
 // Resend verification email (authenticated)
 router.post('/resend-verification', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('+emailVerificationToken +emailVerificationTokenExpiry');
-    
-    if (user.emailVerified) {
+    const user = userRepo.findById(req.user.id || req.user._id);
+    if (!user || user.emailVerified) {
       return res.status(400).json({ error: 'Email already verified' });
     }
-    
-    // Generate new verification token
     const emailVerificationToken = crypto.randomBytes(32).toString('hex');
-    const emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-    
-    user.emailVerificationToken = emailVerificationToken;
-    user.emailVerificationTokenExpiry = emailVerificationTokenExpiry;
-    await user.save();
-    
-    // Send verification email
+    const emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
+    userRepo.update(user.id, { emailVerificationToken, emailVerificationTokenExpiry });
     await sendVerificationEmail(user.email, user.name, emailVerificationToken);
-    
-    res.json({
-      success: true,
-      message: 'Verification email sent. Please check your email.'
-    });
+    res.json({ success: true, message: 'Verification email sent. Please check your email.' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -479,31 +421,20 @@ router.post('/resend-verification-public', async (req, res) => {
       ? { email: identifier.toLowerCase() }
       : { username: identifier.toLowerCase() };
     
-    // Verify credentials
-    const user = await User.findOne(query).select('+password +emailVerificationToken +emailVerificationTokenExpiry');
+    const user = userRepo.findOne(query);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
-    // Check password
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
     if (user.emailVerified) {
       return res.status(400).json({ error: 'Email already verified' });
     }
-    
-    // Generate new verification token
     const emailVerificationToken = crypto.randomBytes(32).toString('hex');
-    const emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-    
-    user.emailVerificationToken = emailVerificationToken;
-    user.emailVerificationTokenExpiry = emailVerificationTokenExpiry;
-    await user.save();
-    
-    // Send verification email
+    const emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
+    userRepo.update(user.id, { emailVerificationToken, emailVerificationTokenExpiry });
     await sendVerificationEmail(user.email, user.name, emailVerificationToken);
     
     res.json({
@@ -519,84 +450,51 @@ router.post('/resend-verification-public', async (req, res) => {
 router.put('/profile', protect, async (req, res) => {
   try {
     const { name, email, username } = req.body;
-    const user = await User.findById(req.user._id).select('+emailVerificationToken +emailVerificationTokenExpiry');
-
+    const user = userRepo.findById(req.user.id || req.user._id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    user.name = name || user.name;
-    
-    let usernameChanged = false;
+    const updates = { name: name || user.name };
     let emailChanged = false;
-
-    // Handle username change
     if (username && username.toLowerCase() !== user.username) {
-      // Validate username format
       const usernameRegex = /^[a-zA-Z0-9_]+$/;
       if (!usernameRegex.test(username)) {
         return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
       }
-      
       if (username.length < 3 || username.length > 20) {
         return res.status(400).json({ error: 'Username must be between 3 and 20 characters' });
       }
-      
-      // Check if new username is already taken
-      const usernameExists = await User.findOne({ username: username.toLowerCase() });
-      if (usernameExists && usernameExists._id.toString() !== user._id.toString()) {
+      const usernameExists = userRepo.findOne({ username: username.toLowerCase() });
+      if (usernameExists && usernameExists.id !== user.id) {
         return res.status(400).json({ error: 'Username already taken' });
       }
-      
-      user.username = username.toLowerCase();
-      usernameChanged = true;
+      updates.username = username.toLowerCase();
     }
-
-    // Handle email change
     if (email && email !== user.email) {
-      // Check if new email is already taken
-      const emailExists = await User.findOne({ email });
-      if (emailExists && emailExists._id.toString() !== user._id.toString()) {
+      const emailExists = userRepo.findOne({ email });
+      if (emailExists && emailExists.id !== user.id) {
         return res.status(400).json({ error: 'Email already in use' });
       }
-
-      user.email = email;
-      user.emailVerified = false; // Reset verification status
-      user.emailVerificationToken = crypto.randomBytes(32).toString('hex');
-      user.emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+      updates.email = email;
+      updates.emailVerified = false;
+      updates.emailVerificationToken = crypto.randomBytes(32).toString('hex');
+      updates.emailVerificationTokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
       emailChanged = true;
     }
-
-    await user.save();
-    
+    userRepo.update(user.id, updates);
+    const updated = userRepo.findById(user.id);
     if (emailChanged) {
-      await sendVerificationEmail(user.email, user.name, user.emailVerificationToken);
+      await sendVerificationEmail(updated.email, updated.name, updated.emailVerificationToken);
     }
-
-    let message = 'Profile updated successfully';
-    if (emailChanged) {
-      message = 'Profile updated. New email requires verification.';
-    }
-
-    return res.json({ 
-      success: true, 
-      message, 
-      user: { 
-        id: user._id,
-        username: user.username,
-        name: user.name, 
-        email: user.email,
-        role: user.role,
-        emailVerified: user.emailVerified 
-      } 
+    const message = emailChanged ? 'Profile updated. New email requires verification.' : 'Profile updated successfully';
+    return res.json({
+      success: true,
+      message,
+      user: { id: updated.id, username: updated.username, name: updated.name, email: updated.email, role: updated.role, emailVerified: updated.emailVerified }
     });
   } catch (error) {
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({ error: Object.values(error.errors)[0].message });
-    }
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      return res.status(400).json({ error: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists` });
+    if (error.code === 'SQLITE_CONSTRAINT') {
+      return res.status(400).json({ error: 'Username or email already in use' });
     }
     res.status(500).json({ error: 'Server error' });
   }
@@ -606,35 +504,23 @@ router.put('/profile', protect, async (req, res) => {
 router.put('/change-password', protect, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: 'Please provide current password and new password' });
     }
-    
     if (newPassword.length < 6) {
       return res.status(400).json({ error: 'New password must be at least 6 characters long' });
     }
-    
-    const user = await User.findById(req.user._id).select('+password');
-    
+    const user = userRepo.findById(req.user.id || req.user._id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
-    // Verify current password
-    const isMatch = await user.comparePassword(currentPassword);
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
-    
-    // Update password
-    user.password = newPassword;
-    await user.save();
-    
-    res.json({
-      success: true,
-      message: 'Password changed successfully'
-    });
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    userRepo.update(user.id, { password: hashedPassword });
+    res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }

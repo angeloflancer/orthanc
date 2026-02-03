@@ -1,91 +1,46 @@
-# Deployment on rental computer (MongoDB protection)
+# Deployment on rental computer (SQLite + SQLCipher)
 
-When you install the app on a computer you rent out to someone, protect the database by enabling MongoDB authentication and using an **app-only user**. The tenant receives only the app and a connection string for that user; they never get the MongoDB admin account, so they cannot create/drop users, drop the database, or change MongoDB configuration.
+When you install the app on a computer you rent out to someone, the database is a single encrypted SQLite file. You control access by keeping the encryption key (`DB_KEY`) and database path (`DB_PATH`) in `.env`; the tenant receives the app and a configured `.env` that does not expose your backup or key management.
 
 ## One-time setup (do this before handing over to tenant)
 
-### 1. Install MongoDB
+### 1. Set .env on the rental machine
 
-Install MongoDB on the rental computer using the [official installer](https://www.mongodb.com/try/download/community) or your package manager (e.g. `brew install mongodb-community` on macOS, or Windows/MSI installer).
-
-### 2. Start MongoDB without auth
-
-Start MongoDB with default settings (no authentication yet):
-
-- **Windows:** Start the MongoDB service, or run `mongod` from the installation bin folder.
-- **macOS (Homebrew):** `brew services start mongodb-community`
-- **Linux:** `sudo systemctl start mongod` or run `mongod`
-
-### 3. Create users (mongosh or mongo)
-
-Connect with `mongosh` (or legacy `mongo`) and run the following. Replace `<your-strong-admin-password>` and `<strong-app-password>` with strong passwords. **Store the admin credentials securely; never give them to the tenant.**
-
-```javascript
-// 1) Create admin user (for you only - store credentials securely, never give to tenant)
-use admin
-db.createUser({
-  user: "admin",
-  pwd: "<your-strong-admin-password>",
-  roles: [ "userAdminAnyDatabase", "readWriteAnyDatabase", "dbAdminAnyDatabase" ]
-})
-
-// 2) Create app-only user (this is what goes in MONGODB_URI)
-use orthanc
-db.createUser({
-  user: "orthancapp",
-  pwd: "<strong-app-password>",
-  roles: [ { role: "readWrite", db: "orthanc" } ]
-})
-```
-
-### 4. Restart MongoDB with auth enabled
-
-Stop MongoDB, then start it with authentication:
-
-- **Windows:** Add `--auth` when starting `mongod`, or set `security.authorization: enabled` in `mongod.cfg` and restart the service.
-- **macOS/Linux:** Run `mongod --auth`, or add to config file:
-  ```yaml
-  security:
-    authorization: enabled
-  ```
-  Then restart MongoDB (e.g. `brew services restart mongodb-community` or `sudo systemctl restart mongod`).
-
-### 5. Set .env on the rental machine
-
-Create or edit `backend/.env` so that **only** the app user is used. Use the same app password you set in step 3:
+Create or edit `backend/.env` with at least:
 
 ```env
-MONGODB_URI=mongodb://orthancapp:<strong-app-password>@localhost:27017/orthanc?authSource=orthanc
+DB_PATH=./data/orthanc.db
+DB_KEY=your-secure-encryption-key
+PORT=5830
+JWT_SECRET=your-secret-key-change-in-production
+FRONTEND_URL=http://localhost:5829
+TARGET_SERVICE=http://localhost:8042
+# Owner and email settings as needed (see .env.example)
 ```
 
-- `authSource=orthanc` is required because the app user is defined in the `orthanc` database.
+- **`DB_PATH`** – Path to the SQLite file (e.g. `./data/orthanc.db`). The directory is created automatically if it does not exist. Use a path the app can read/write.
+- **`DB_KEY`** – Passphrase for SQLCipher. **Must be set.** Wrong key makes the database unreadable. Store a backup of this key securely; without it, the DB cannot be decrypted.
 - Ensure `.env` is in `.gitignore` (it already is) so credentials are not committed.
 
-### 6. (Optional) Run migrations
+### 2. Start the app and hand over
 
-If you have existing data or need to run the hospital migration script:
+Start your Node backend (and frontend if not using the single exe). Hand the computer over to the tenant. **Do not give them:**
 
-```bash
-cd backend
-node scripts/migrateDataToHospital.js
-```
+- Your backup of the database file or `DB_KEY`
+- Any copy of `.env` that you use for your own backups
 
-This uses `MONGODB_URI` from `.env` (the app user); the app user has sufficient rights for the migration.
+The tenant has the app and a `.env` that points to a local DB and key. They can use the application normally; the database is encrypted at rest.
 
-### 7. Start the app and hand over
+## Backup and key management
 
-Start your Node backend and frontend as usual. Hand the computer over to the tenant. **Do not give them:**
-
-- The MongoDB admin username or password
-- Any connection string that uses the admin user
-
-The tenant only has the app and the `.env` with the app-user connection string. They can use the application normally but cannot log in to MongoDB as admin or change schema/users.
+- **Back up** the file at `DB_PATH` and store **`DB_KEY`** securely. Restore by placing the file and using the same `DB_KEY` in `.env`.
+- Do not embed `DB_KEY` in source code or ship it in the frontend. Keep it only in `.env` (or in the embedded config when using the single exe build).
 
 ## Summary
 
-| User        | Purpose                          | Who has it   |
-|------------|-----------------------------------|--------------|
-| `admin`    | Full MongoDB management           | You only     |
-| `orthancapp` | App connection (readWrite on orthanc) | In .env on rental PC |
+| Item     | Purpose                          |
+|----------|-----------------------------------|
+| `DB_PATH`| Path to the SQLite database file  |
+| `DB_KEY` | Encryption passphrase (SQLCipher)|
 
-The app user has only `readWrite` on the `orthanc` database, so even if the tenant opens MongoDB shell with the app credentials, they cannot create users, drop the database, or alter other databases.
+The app creates the database and tables on first run if the file does not exist. Schema is applied automatically.

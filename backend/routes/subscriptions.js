@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const Hospital = require('../models/Hospital');
-const HospitalSubscription = require('../models/HospitalSubscription');
+const hospitalRepo = require('../db/hospitalRepo');
+const hospitalMemberRepo = require('../db/hospitalMemberRepo');
+const hospitalSubscriptionRepo = require('../db/hospitalSubscriptionRepo');
 const { protect } = require('../middleware/auth');
 const { requireOwner } = require('../middleware/roleAuth');
 
@@ -12,51 +13,27 @@ const { requireOwner } = require('../middleware/roleAuth');
  */
 router.get('/check-expiration', protect, async (req, res) => {
   try {
+    const userId = req.user.id || req.user._id;
     let hospital = null;
-    
-    // Get hospital based on user role
     if (req.user.role === 'admin') {
-      hospital = await Hospital.findOne({ admin: req.user._id });
+      hospital = hospitalRepo.findOne({ admin: userId });
     } else if (req.user.role === 'doctor') {
-      const HospitalMember = require('../models/HospitalMember');
-      const membership = await HospitalMember.findOne({
-        user: req.user._id,
-        status: 'accepted'
-      }).populate('hospital');
-      if (membership) {
-        hospital = membership.hospital;
-      }
+      const membership = hospitalMemberRepo.findOne({ user: userId, status: 'accepted' }, { withHospital: true });
+      if (membership) hospital = membership.hospital;
     }
-    
-    if (!hospital) {
-      return res.json({
-        success: true,
-        hasWarning: false,
-        message: 'No hospital found'
-      });
-    }
-    
-    const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
-    
-    if (!subscription) {
-      return res.json({
-        success: true,
-        hasWarning: false,
-        message: 'No subscription found'
-      });
-    }
-    
-    const shouldShowWarning = subscription.shouldShowWarning();
-    const daysUntilExpiration = subscription.getDaysUntilExpiration();
-    
+    if (!hospital) return res.json({ success: true, hasWarning: false, message: 'No hospital found' });
+    const subscription = hospitalSubscriptionRepo.findOne({ hospital: hospital.id });
+    if (!subscription) return res.json({ success: true, hasWarning: false, message: 'No subscription found' });
+    const shouldShowWarning = hospitalSubscriptionRepo.shouldShowWarning(subscription);
+    const daysUntilExpiration = hospitalSubscriptionRepo.getDaysUntilExpiration(subscription);
     res.json({
       success: true,
       hasWarning: shouldShowWarning,
       daysUntilExpiration,
       planType: subscription.planType,
       expiresAt: subscription.expiresAt,
-      isActive: subscription.isActive,
-      message: shouldShowWarning 
+      isActive: hospitalSubscriptionRepo.isActive(subscription),
+      message: shouldShowWarning
         ? `There are ${daysUntilExpiration} days left until the deadline. Please contact the administrator to extend the deadline.`
         : null
     });
@@ -73,54 +50,32 @@ router.get('/check-expiration', protect, async (req, res) => {
 router.post('/:hospitalId', protect, requireOwner(), async (req, res) => {
   try {
     const { planType } = req.body;
-    
     if (!planType || !['monthly', 'yearly', 'forever'].includes(planType)) {
-      return res.status(400).json({ 
-        error: 'Invalid plan type. Must be monthly, yearly, or forever.' 
-      });
+      return res.status(400).json({ error: 'Invalid plan type. Must be monthly, yearly, or forever.' });
     }
-    
-    const hospital = await Hospital.findById(req.params.hospitalId);
-    if (!hospital) {
-      return res.status(404).json({ error: 'Hospital not found' });
-    }
-    
-    // Calculate expiration date
+    const hospitalId = req.params.hospitalId;
+    const hospital = /^\d+$/.test(hospitalId) ? hospitalRepo.findById(Number(hospitalId)) : hospitalRepo.findOne({ hospitalId });
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
     let expiresAt = null;
-    if (planType === 'monthly') {
-      expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-    } else if (planType === 'yearly') {
-      expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 365);
-    }
-    // forever plans have expiresAt = null
-    
-    // Find existing subscription or create new one
-    let subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
-    
+    if (planType === 'monthly') expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
+    else if (planType === 'yearly') expiresAt = Date.now() + 365 * 24 * 60 * 60 * 1000;
+    let subscription = hospitalSubscriptionRepo.findOne({ hospital: hospital.id });
     if (subscription) {
-      subscription.planType = planType;
-      subscription.expiresAt = expiresAt;
-      await subscription.save();
+      hospitalSubscriptionRepo.update(subscription.hospital, { planType, expiresAt });
     } else {
-      subscription = await HospitalSubscription.create({
-        hospital: hospital._id,
-        planType,
-        expiresAt
-      });
+      hospitalSubscriptionRepo.create({ hospital: hospital.id, planType, expiresAt });
     }
-    
+    subscription = hospitalSubscriptionRepo.findOne({ hospital: hospital.id });
     res.json({
       success: true,
       message: 'Subscription created/updated successfully',
       subscription: {
-        id: subscription._id,
+        id: subscription.id,
         planType: subscription.planType,
         expiresAt: subscription.expiresAt,
-        isActive: subscription.isActive,
-        daysUntilExpiration: subscription.getDaysUntilExpiration(),
-        shouldShowWarning: subscription.shouldShowWarning()
+        isActive: hospitalSubscriptionRepo.isActive(subscription),
+        daysUntilExpiration: hospitalSubscriptionRepo.getDaysUntilExpiration(subscription),
+        shouldShowWarning: hospitalSubscriptionRepo.shouldShowWarning(subscription)
       }
     });
   } catch (error) {
@@ -135,52 +90,29 @@ router.post('/:hospitalId', protect, requireOwner(), async (req, res) => {
  */
 router.get('/:hospitalId', protect, async (req, res) => {
   try {
-    const hospital = await Hospital.findById(req.params.hospitalId);
-    if (!hospital) {
-      return res.status(404).json({ error: 'Hospital not found' });
-    }
-    
-    // Check if user has permission to view this subscription
-    // Owner can view any, admin can view their own, doctor can view their hospital's
-    if (req.user.role === 'owner') {
-      // Owner can view any
-    } else if (req.user.role === 'admin') {
-      if (!hospital.admin.equals(req.user._id)) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
+    const id = req.params.hospitalId;
+    const hospital = /^\d+$/.test(id) ? hospitalRepo.findById(Number(id)) : hospitalRepo.findOne({ hospitalId: id });
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    const userId = req.user.id || req.user._id;
+    if (req.user.role === 'admin') {
+      if (hospital.admin !== userId) return res.status(403).json({ error: 'Access denied' });
     } else if (req.user.role === 'doctor') {
-      const HospitalMember = require('../models/HospitalMember');
-      const membership = await HospitalMember.findOne({
-        user: req.user._id,
-        hospital: hospital._id,
-        status: 'accepted'
-      });
-      if (!membership) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    } else {
+      const membership = hospitalMemberRepo.findOne({ user: userId, hospital: hospital.id, status: 'accepted' });
+      if (!membership) return res.status(403).json({ error: 'Access denied' });
+    } else if (req.user.role !== 'owner') {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
-    const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
-    
-    if (!subscription) {
-      return res.json({
-        success: true,
-        subscription: null,
-        message: 'No subscription found for this hospital'
-      });
-    }
-    
+    const subscription = hospitalSubscriptionRepo.findOne({ hospital: hospital.id });
+    if (!subscription) return res.json({ success: true, subscription: null, message: 'No subscription found for this hospital' });
     res.json({
       success: true,
       subscription: {
-        id: subscription._id,
+        id: subscription.id,
         planType: subscription.planType,
         expiresAt: subscription.expiresAt,
-        isActive: subscription.isActive,
-        daysUntilExpiration: subscription.getDaysUntilExpiration(),
-        shouldShowWarning: subscription.shouldShowWarning(),
+        isActive: hospitalSubscriptionRepo.isActive(subscription),
+        daysUntilExpiration: hospitalSubscriptionRepo.getDaysUntilExpiration(subscription),
+        shouldShowWarning: hospitalSubscriptionRepo.shouldShowWarning(subscription),
         createdAt: subscription.createdAt,
         updatedAt: subscription.updatedAt
       }
