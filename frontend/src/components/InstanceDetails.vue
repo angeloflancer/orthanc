@@ -88,86 +88,134 @@ export default {
 </template>
 
 <style scoped>
-/* Match StudyDetails styles exactly */
+/* ===========================================
+   INSTANCE DETAILS - Modern Heavy Style
+   =========================================== */
 .instance-details-container {
-    background-color: var(--instance-details-bg-color);
-    font-family: verdana !important;
+    background: #f0f9ff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Verdana, sans-serif !important;
     font-size: 13px !important;
+    padding: 16px;
 }
 
 .details-content {
-    padding: 20px;
+    background: #ffffff;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
 }
 
 .info-section {
-    margin-bottom: 20px;
+    margin-bottom: 24px;
+    background: #f8fafc;
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid #f3f4f6;
 }
 
 .info-section h6 {
-    margin-bottom: 15px;
-    color: var(--bs-body-color);
+    margin-bottom: 16px;
+    color: #374151;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 12px;
     display: flex;
     align-items: center;
-    font-family: verdana !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Verdana, sans-serif !important;
+}
+
+.info-section h6 i {
+    color: #4a90e2;
+    margin-right: 10px;
 }
 
 .tags-tree-wrapper {
-    font-family: verdana !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Verdana, sans-serif !important;
     font-size: 13px !important;
+    max-height: 400px;
+    overflow-y: auto;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
 }
 
+/* Actions Section */
 .actions-section {
     display: flex;
     align-items: center;
-    padding: 15px 0;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 20px 0 0 0;
+    border-top: 2px solid #e5e7eb;
+    margin-top: 8px;
 }
 
 .actions-label {
     font-weight: 600;
     margin-right: 20px;
-    color: var(--bs-body-color);
-    font-size: 14px;
-    font-family: verdana !important;
+    color: #374151;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Verdana, sans-serif !important;
 }
 
 .action-buttons {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
+/* Responsive */
+@media (max-width: 768px) {
+    .details-content {
+        padding: 16px;
+    }
+    
+    .info-section {
+        padding: 16px;
+    }
+    
+    .actions-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .tags-tree-wrapper {
+        max-height: 300px;
+    }
+}
 </style>
 <style>
 /* Global styles for ResourceButtonGroup inside InstanceDetails */
 .instance-details-container .instance-button-group i {
-    font-size: 1rem;
+    font-size: 15px;
 }
 
 .instance-details-container .instance-button-group .btn {
-    padding: 6px 12px;
-    font-size: 0.875rem;
+    padding: 8px 14px;
+    font-size: 13px;
 }
 
 .instance-details-container .instance-button-group .btn-group .btn {
-    padding: 6px 12px;
-    font-size: 0.875rem;
+    padding: 8px 14px;
+    font-size: 13px;
 }
 
 /* Update TagsTree styles to match parent table */
 .instance-details-container .details-label {
     font-weight: 500;
-    color: var(--bs-secondary-color);
-    font-family: verdana !important;
+    color: #6b7280;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Verdana, sans-serif !important;
     font-size: 13px !important;
 }
 
 .instance-details-container .details {
-    color: var(--bs-body-color);
+    color: #1f2937;
     font-weight: 400;
-    font-family: verdana !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Verdana, sans-serif !important;
     font-size: 13px !important;
 }
 </style>

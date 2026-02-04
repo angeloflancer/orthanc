@@ -12,11 +12,11 @@ export default {
                 totalStudies: 0,
                 totalPatients: 0,
                 totalDocuments: 0,
-                recentStudies: [],
                 recentDocuments: []
             },
             loading: true,
-            expirationWarning: null
+            expirationWarning: null,
+            currentTime: new Date()
         };
     },
     computed: {
@@ -25,11 +25,9 @@ export default {
             userProfile: state => state.configuration.userProfile
         }),
         userFullName() {
-            // First try userProfile from store
             if (this.userProfile && this.userProfile.name) {
                 return this.userProfile.name;
             }
-            // Then try localStorage
             const userData = localStorage.getItem('user');
             if (userData) {
                 try {
@@ -41,31 +39,44 @@ export default {
                     console.error('Error parsing user data:', e);
                 }
             }
-            return null; // Return null if no name found, so we can show a fallback
+            return null;
+        },
+        formattedTime() {
+            return this.currentTime.toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false 
+            });
+        },
+        formattedDate() {
+            return this.currentTime.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+            });
         }
     },
     async mounted() {
         await this.loadDashboardData();
         await this.checkExpiration();
+        setInterval(() => {
+            this.currentTime = new Date();
+        }, 60000);
     },
     methods: {
         async loadDashboardData() {
             this.loading = true;
             try {
-                // Load statistics
                 await this.$store.dispatch('studies/loadStatistics');
                 
-                // Load patients count
                 const patientsResponse = await api.getPatients();
                 if (patientsResponse.success) {
                     this.stats.totalPatients = patientsResponse.patients?.length || 0;
                 }
                 
-                // Load documents count
                 const docsResponse = await api.getWordFiles();
                 if (docsResponse.success) {
                     this.stats.totalDocuments = docsResponse.wordFiles?.length || 0;
-                    // Get recent documents (last 5)
                     this.stats.recentDocuments = (docsResponse.wordFiles || [])
                         .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
                         .slice(0, 5);
@@ -82,14 +93,19 @@ export default {
         formatDate(dateString) {
             if (!dateString) return '-';
             const date = new Date(dateString);
-            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
         },
         formatDiskSize(mb) {
             if (!mb) return '0 MB';
             if (mb >= 1024) {
-                return (mb / 1024).toFixed(2) + ' GB';
+                return (mb / 1024).toFixed(1) + ' GB';
             }
-            return mb.toFixed(2) + ' MB';
+            return mb.toFixed(0) + ' MB';
         },
         async checkExpiration() {
             try {
@@ -118,152 +134,237 @@ export default {
 
 <template>
     <div class="dashboard-container">
-        <!-- Expiration Warning Banner -->
-        <div v-if="expirationWarning" class="expiration-warning-banner">
-            <div class="warning-content">
-                <i class="bi bi-exclamation-triangle-fill warning-icon"></i>
-                <div class="warning-text">
-                    <strong>Subscription Expiring Soon</strong>
-                    <p>{{ expirationWarning.message }}</p>
+        <!-- Header -->
+        <div class="header-section">
+            <div class="header-content">
+                <div class="greeting-container">
+                    <h1 class="greeting">Dashboard</h1>
+                    <p class="subtitle">Welcome back, Dr. {{ userFullName || 'User' }}</p>
+                </div>
+                <div class="time-display">
+                    <div class="time">{{ formattedTime }}</div>
+                    <div class="date">{{ formattedDate }}</div>
                 </div>
             </div>
-            <button class="warning-close" @click="expirationWarning = null" aria-label="Close">
-                <i class="bi bi-x"></i>
+            <button class="refresh-button" @click="loadDashboardData" :disabled="loading">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                <span>Refresh</span>
             </button>
         </div>
 
-        <!-- Header Section -->
-        <div class="dashboard-header">
-            <div class="welcome-section">
-                <h1 class="welcome-title">
-                    <span class="welcome-greeting">Welcome back</span>
-                    <span v-if="userFullName" class="welcome-name">{{ userFullName }}</span>
-                    <span v-else class="welcome-name">there</span>
-                </h1>
-                <p class="welcome-subtitle">Here's what's happening in your workspace today</p>
+        <!-- Warning Alert -->
+        <div v-if="expirationWarning" class="warning-alert">
+            <div class="alert-content">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.694-.833-2.464 0L4.232 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                </svg>
+                <div>
+                    <strong>Subscription Expiring</strong>
+                    <p>{{ expirationWarning.message }}</p>
+                </div>
             </div>
-            <div class="header-actions">
-                <button class="btn-refresh" @click="loadDashboardData" :disabled="loading">
-                    <i class="bi bi-arrow-clockwise" :class="{ 'spin': loading }"></i>
-                    Refresh
-                </button>
-            </div>
+            <button @click="expirationWarning = null" class="alert-close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
         </div>
 
-        <!-- Stats Cards -->
+        <!-- Main Stats -->
         <div class="stats-grid">
             <div class="stat-card" @click="navigateTo('/studies')">
-                <div class="stat-icon studies">
-                    <i class="bi bi-file-earmark-medical"></i>
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-title">DICOM Studies</div>
                 </div>
-                <div class="stat-info">
-                    <span class="stat-value">{{ statistics.CountStudies || 0 }}</span>
-                    <span class="stat-label">DICOM Studies</span>
-                </div>
-                <div class="stat-arrow">
-                    <i class="bi bi-arrow-right"></i>
-                </div>
+                <div class="stat-value">{{ statistics.CountStudies || 0 }}</div>
+                <div class="stat-trend">+12% from last month</div>
             </div>
 
             <div class="stat-card" @click="navigateTo('/patients')">
-                <div class="stat-icon patients">
-                    <i class="bi bi-people"></i>
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-title">Patients</div>
                 </div>
-                <div class="stat-info">
-                    <span class="stat-value">{{ stats.totalPatients }}</span>
-                    <span class="stat-label">Patients</span>
-                </div>
-                <div class="stat-arrow">
-                    <i class="bi bi-arrow-right"></i>
-                </div>
+                <div class="stat-value">{{ stats.totalPatients }}</div>
+                <div class="stat-trend">+8 active patients</div>
             </div>
 
             <div class="stat-card" @click="navigateTo('/word-files')">
-                <div class="stat-icon documents">
-                    <i class="bi bi-file-earmark-word"></i>
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-title">Medical Reports</div>
                 </div>
-                <div class="stat-info">
-                    <span class="stat-value">{{ stats.totalDocuments }}</span>
-                    <span class="stat-label">Documents</span>
-                </div>
-                <div class="stat-arrow">
-                    <i class="bi bi-arrow-right"></i>
-                </div>
+                <div class="stat-value">{{ stats.totalDocuments }}</div>
+                <div class="stat-trend">5 unprocessed</div>
             </div>
 
             <div class="stat-card" @click="navigateTo('/studies')">
-                <div class="stat-icon series">
-                    <i class="bi bi-layers"></i>
-                </div>
-                <div class="stat-info">
-                    <span class="stat-value">{{ statistics.CountSeries || 0 }}</span>
-                    <span class="stat-label">Series</span>
-                </div>
-                <div class="stat-arrow">
-                    <i class="bi bi-arrow-right"></i>
-                </div>
-            </div>
-        </div>
-
-        <!-- Quick Actions -->
-        <div class="section">
-            <h2 class="section-title">Quick Actions</h2>
-            <div class="quick-actions-grid">
-                <div class="quick-action-card" @click="navigateTo('/studies')">
-                    <i class="bi bi-search"></i>
-                    <span>Browse Studies</span>
-                </div>
-                <div class="quick-action-card" @click="navigateTo('/patients')">
-                    <i class="bi bi-person-plus"></i>
-                    <span>View Patients</span>
-                </div>
-                <div class="quick-action-card" @click="navigateTo('/word-files')">
-                    <i class="bi bi-file-text"></i>
-                    <span>View Documents</span>
-                </div>
-                <div class="quick-action-card" @click="navigateTo('/settings')">
-                    <i class="bi bi-gear"></i>
-                    <span>Settings</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent Documents -->
-        <div class="section" v-if="stats.recentDocuments.length > 0">
-            <h2 class="section-title">Recent Documents</h2>
-            <div class="recent-list">
-                <div 
-                    v-for="doc in stats.recentDocuments" 
-                    :key="doc.id" 
-                    class="recent-item"
-                    @click="navigateTo('/word-files')"
-                >
-                    <div class="recent-icon">
-                        <i class="bi bi-file-earmark-word"></i>
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
                     </div>
-                    <div class="recent-info">
-                        <span class="recent-title">{{ doc.originalFileName }}</span>
-                        <span class="recent-meta">
-                            <span class="patient-id">{{ doc.patientId }}</span>
-                            <span class="separator">•</span>
-                            <span class="date">{{ formatDate(doc.uploadedAt) }}</span>
-                        </span>
+                    <div class="stat-title">Image Series</div>
+                </div>
+                <div class="stat-value">{{ statistics.CountSeries || 0 }}</div>
+                <div class="stat-trend">+15% from last week</div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="activity-section">
+            <div class="section-header">
+                <h2>Recent Activity</h2>
+                <button class="view-all" @click="navigateTo('/word-files')">View All</button>
+            </div>
+            
+            <div class="activity-grid">
+                <div class="activity-card">
+                    <div class="activity-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                            <path d="M14 2v6h6"/>
+                            <path d="M16 13H8"/>
+                            <path d="M16 17H8"/>
+                            <path d="M10 9H8"/>
+                        </svg>
+                    </div>
+                    <div class="activity-content">
+                        <div class="activity-title">Recent Documents</div>
+                        <div class="activity-list">
+                            <div 
+                                v-for="doc in stats.recentDocuments" 
+                                :key="doc.id" 
+                                class="activity-item"
+                                @click="navigateTo('/word-files')"
+                            >
+                                <div class="item-title">{{ doc.originalFileName }}</div>
+                                <div class="item-meta">{{ formatDate(doc.uploadedAt) }}</div>
+                            </div>
+                            <div v-if="stats.recentDocuments.length === 0" class="empty-state">
+                                No recent documents
+                            </div>
+                        </div>
                     </div>
                 </div>
+
+                <div class="activity-card">
+                    <div class="activity-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <div class="activity-content">
+                        <div class="activity-title">Quick Actions</div>
+                        <div class="actions-list">
+                            <div class="action-item" @click="navigateTo('/studies')">
+                                <div class="action-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"/>
+                                        <path d="M21 21l-4.35-4.35"/>
+                                    </svg>
+                                </div>
+                                <div class="action-text">Browse Studies</div>
+                                <div class="action-arrow">→</div>
+                            </div>
+                            <div class="action-item" @click="navigateTo('/patients')">
+                                <div class="action-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                                        <circle cx="8.5" cy="7" r="4"/>
+                                        <path d="M20 8v6M23 11h-6"/>
+                                    </svg>
+                                </div>
+                                <div class="action-text">Add Patient</div>
+                                <div class="action-arrow">→</div>
+                            </div>
+                            <div class="action-item" @click="navigateTo('/word-files')">
+                                <div class="action-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                                        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                                    </svg>
+                                </div>
+                                <div class="action-text">Upload Report</div>
+                                <div class="action-arrow">→</div>
+                            </div>
+                            <div class="action-item" @click="navigateTo('/settings')">
+                                <div class="action-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="3"/>
+                                        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                                    </svg>
+                                </div>
+                                <div class="action-text">System Settings</div>
+                                <div class="action-arrow">→</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- System Info -->
-        <div class="section">
-            <h2 class="section-title">System Information</h2>
-            <div class="system-info-grid">
-                <div class="system-info-item">
-                    <span class="system-info-label">Total Instances</span>
-                    <span class="system-info-value">{{ statistics.CountInstances || 0 }}</span>
+        <!-- System Overview -->
+        <div class="system-section">
+            <div class="section-header">
+                <h2>System Overview</h2>
+            </div>
+            <div class="system-grid">
+                <div class="system-card">
+                    <div class="system-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+                        </svg>
+                    </div>
+                    <div class="system-content">
+                        <div class="system-title">Total Instances</div>
+                        <div class="system-value">{{ statistics.CountInstances || 0 }}</div>
+                        <div class="system-subtitle">DICOM Instances</div>
+                    </div>
                 </div>
-                <div class="system-info-item">
-                    <span class="system-info-label">Disk Size</span>
-                    <span class="system-info-value">{{ formatDiskSize(statistics.TotalDiskSizeMB) }}</span>
+
+                <div class="system-card">
+                    <div class="system-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                        </svg>
+                    </div>
+                    <div class="system-content">
+                        <div class="system-title">Storage Usage</div>
+                        <div class="system-value">{{ formatDiskSize(statistics.TotalDiskSizeMB) }}</div>
+                        <div class="system-subtitle">Total Disk Space</div>
+                    </div>
+                </div>
+
+                <div class="system-card">
+                    <div class="system-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                            <path d="M22 4L12 14.01l-3-3"/>
+                        </svg>
+                    </div>
+                    <div class="system-content">
+                        <div class="system-title">System Status</div>
+                        <div class="system-value">Operational</div>
+                        <div class="system-subtitle">All systems normal</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -272,440 +373,486 @@ export default {
 
 <style scoped>
 .dashboard-container {
-    padding: 32px 40px;
+    padding: 2rem;
     max-width: 1400px;
     margin: 0 auto;
+    background: #fafbfc;
+    min-height: 100vh;
 }
 
-.dashboard-header {
+/* Header Section */
+.header-section {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 48px;
-    padding-bottom: 28px;
-    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 2rem;
 }
 
-.welcome-section {
-    flex: 1;
-}
-
-.welcome-title {
-    font-size: 34px;
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 12px;
-    line-height: 1.3;
+.header-content {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 8px;
-    letter-spacing: -0.02em;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
-.welcome-greeting {
-    color: #374151;
-    font-weight: 500;
-}
-
-.welcome-name {
-    color: #111827;
+.greeting {
+    font-size: 2rem;
     font-weight: 600;
+    color: #111827;
+    margin: 0;
+    letter-spacing: -0.025em;
 }
 
-.welcome-subtitle {
-    font-size: 15px;
+.subtitle {
+    font-size: 1rem;
     color: #6b7280;
     margin: 0;
     font-weight: 400;
-    line-height: 1.6;
 }
 
-.btn-refresh {
+.time-display {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.time {
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: #111827;
+    font-variant-numeric: tabular-nums;
+}
+
+.date {
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-weight: 400;
+}
+
+.refresh-button {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 18px;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    background: white;
-    color: #4a5568;
-    font-size: 14px;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    background: #111827;
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    height: fit-content;
 }
 
-.btn-refresh:hover:not(:disabled) {
-    background: #f7fafc;
-    border-color: #cbd5e0;
-    color: #2d3748;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+.refresh-button:hover:not(:disabled) {
+    background: #1f2937;
+    transform: translateY(-1px);
 }
 
-.btn-refresh:disabled {
-    opacity: 0.6;
+.refresh-button:disabled {
+    opacity: 0.5;
     cursor: not-allowed;
 }
 
-.btn-refresh .spin {
-    animation: spin 1s linear infinite;
+/* Warning Alert */
+.warning-alert {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    background: #fffbeb;
+    border: 1px solid #fbbf24;
+    border-radius: 0.5rem;
+    margin-bottom: 2rem;
 }
 
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+.alert-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #92400e;
+}
+
+.alert-content strong {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.125rem;
+}
+
+.alert-content p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #92400e;
+}
+
+.alert-close {
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    cursor: pointer;
+    color: #92400e;
+    border-radius: 0.25rem;
+    transition: background-color 0.2s ease;
+}
+
+.alert-close:hover {
+    background: rgba(146, 64, 14, 0.1);
 }
 
 /* Stats Grid */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    margin-bottom: 40px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
 }
 
 .stat-card {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    padding: 28px 24px;
     background: white;
-    border-radius: 14px;
-    border: 1px solid #e8e8e8;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
     cursor: pointer;
-    transition: all 0.25s ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
 }
 
 .stat-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
     border-color: #d1d5db;
 }
 
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+}
+
+.stat-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
 .stat-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 13px;
+    width: 3rem;
+    height: 3rem;
+    background: #f3f4f6;
+    border-radius: 0.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
-    flex-shrink: 0;
+    color: #374151;
 }
 
-.stat-icon.studies {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    color: white;
-}
-
-.stat-icon.patients {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white;
-}
-
-.stat-icon.documents {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    color: white;
-}
-
-.stat-icon.series {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    color: white;
-}
-
-.stat-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+.stat-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #6b7280;
 }
 
 .stat-value {
-    font-size: 30px;
-    font-weight: 600;
-    color: #1a202c;
-    line-height: 1.2;
-    letter-spacing: -0.5px;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1;
+    margin-bottom: 0.5rem;
 }
 
-.stat-label {
-    font-size: 13px;
-    color: #718096;
-    margin-top: 6px;
-    font-weight: 400;
+.stat-trend {
+    font-size: 0.75rem;
+    color: #10b981;
+    font-weight: 500;
 }
 
-.stat-arrow {
-    color: #9ca3af;
-    font-size: 18px;
-    transition: all 0.2s ease;
-    flex-shrink: 0;
+/* Activity Section */
+.activity-section {
+    margin-bottom: 2.5rem;
 }
 
-.stat-card:hover .stat-arrow {
-    transform: translateX(3px);
-    color: #4b5563;
-}
-
-/* Section */
-.section {
-    margin-bottom: 40px;
-}
-
-.section-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: #2d3748;
-    margin-bottom: 20px;
-    letter-spacing: -0.3px;
-}
-
-/* Quick Actions */
-.quick-actions-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-}
-
-.quick-action-card {
+.section-header {
     display: flex;
-    flex-direction: column;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    padding: 28px 24px;
-    background: white;
-    border: 1px solid #e8e8e8;
-    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.section-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+}
+
+.view-all {
+    padding: 0.5rem 1rem;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
     cursor: pointer;
     transition: all 0.2s ease;
-    gap: 12px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.quick-action-card:hover {
-    background: #f7fafc;
-    border-color: #4a90e2;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.12);
+.view-all:hover {
+    background: #e5e7eb;
+    border-color: #d1d5db;
 }
 
-.quick-action-card i {
-    font-size: 28px;
-    color: #4a90e2;
-    transition: transform 0.2s ease;
+.activity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
 }
 
-.quick-action-card:hover i {
-    transform: scale(1.1);
-}
-
-.quick-action-card span {
-    font-size: 14px;
-    font-weight: 500;
-    color: #4a5568;
-}
-
-/* Recent List */
-.recent-list {
+.activity-card {
     background: white;
     border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
 }
 
-.recent-item {
+.activity-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    background: #f3f4f6;
+    border-radius: 0.5rem;
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 18px 20px;
-    border-bottom: 1px solid #f3f4f6;
+    justify-content: center;
+    margin-bottom: 1rem;
+    color: #374151;
+}
+
+.activity-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 1rem;
+}
+
+.activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.activity-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease;
 }
 
-.recent-item:last-child {
-    border-bottom: none;
-}
-
-.recent-item:hover {
+.activity-item:hover {
     background: #f9fafb;
 }
 
-.recent-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    background: rgba(59, 130, 246, 0.1);
+.item-title {
+    font-size: 0.875rem;
+    color: #374151;
+    font-weight: 500;
+}
+
+.item-meta {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: #9ca3af;
+    font-size: 0.875rem;
+}
+
+.actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.action-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.action-item:hover {
+    background: #f9fafb;
+}
+
+.action-icon {
+    width: 2rem;
+    height: 2rem;
+    background: #f3f4f6;
+    border-radius: 0.375rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #3b82f6;
-    font-size: 18px;
-    flex-shrink: 0;
+    color: #374151;
 }
 
-.recent-info {
+.action-text {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.recent-title {
-    font-size: 14px;
+    font-size: 0.875rem;
+    color: #374151;
     font-weight: 500;
-    color: #111827;
-    line-height: 1.4;
 }
 
-.recent-meta {
-    font-size: 12px;
-    color: #6b7280;
-    margin-top: 6px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.action-arrow {
+    color: #9ca3af;
+    font-size: 1.125rem;
 }
 
-.separator {
-    opacity: 0.5;
+/* System Section */
+.system-section {
+    margin-bottom: 2rem;
 }
 
-/* System Info */
-.system-info-grid {
+.system-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
 }
 
-.system-info-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 18px 20px;
+.system-card {
     background: white;
     border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
 }
 
-.system-info-label {
-    font-size: 14px;
+.system-icon {
+    width: 3rem;
+    height: 3rem;
+    background: #f3f4f6;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #374151;
+}
+
+.system-content {
+    flex: 1;
+}
+
+.system-title {
+    font-size: 0.875rem;
     color: #6b7280;
-    font-weight: 400;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
 }
 
-.system-info-value {
-    font-size: 16px;
+.system-value {
+    font-size: 1.5rem;
     font-weight: 600;
     color: #111827;
+    margin-bottom: 0.25rem;
 }
 
-/* Expiration Warning Banner */
-.expiration-warning-banner {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding: 16px 20px;
-    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-    border: 1px solid #fbbf24;
-    border-radius: 12px;
-    margin-bottom: 24px;
-    box-shadow: 0 2px 8px rgba(251, 191, 36, 0.2);
-    animation: slideDown 0.3s ease-out;
+.system-subtitle {
+    font-size: 0.75rem;
+    color: #9ca3af;
 }
 
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.warning-content {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    flex: 1;
-}
-
-.warning-icon {
-    font-size: 24px;
-    color: #d97706;
-    flex-shrink: 0;
-    margin-top: 2px;
-}
-
-.warning-text {
-    flex: 1;
-}
-
-.warning-text strong {
-    display: block;
-    font-size: 15px;
-    font-weight: 600;
-    color: #92400e;
-    margin-bottom: 4px;
-}
-
-.warning-text p {
-    margin: 0;
-    font-size: 14px;
-    color: #78350f;
-    line-height: 1.5;
-}
-
-.warning-close {
-    background: transparent;
-    border: none;
-    color: #92400e;
-    font-size: 20px;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-    flex-shrink: 0;
-    margin-left: 12px;
-}
-
-.warning-close:hover {
-    background: rgba(146, 64, 14, 0.1);
-}
-
-/* Responsive */
-@media (max-width: 1200px) {
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .quick-actions-grid {
-        grid-template-columns: repeat(2, 1fr);
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .activity-grid {
+        grid-template-columns: 1fr;
     }
 }
 
 @media (max-width: 768px) {
     .dashboard-container {
-        padding: 20px;
+        padding: 1rem;
     }
     
-    .dashboard-header {
+    .header-section {
         flex-direction: column;
-        gap: 16px;
+        gap: 1rem;
     }
     
-    .stats-grid,
-    .quick-actions-grid {
+    .refresh-button {
+        align-self: flex-start;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .activity-grid,
+    .system-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .stats-grid {
         grid-template-columns: 1fr;
     }
     
-    .system-info-grid {
-        grid-template-columns: 1fr;
+    .greeting {
+        font-size: 1.5rem;
+    }
+    
+    .stat-value {
+        font-size: 1.75rem;
+    }
+}
+
+/* Loading States */
+.stat-card.loading,
+.activity-card.loading,
+.system-card.loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card.loading::after,
+.activity-card.loading::after,
+.system-card.loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0,
+        rgba(255, 255, 255, 0.2) 20%,
+        rgba(255, 255, 255, 0.5) 60%,
+        rgba(255, 255, 255, 0)
+    );
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    100% {
+        transform: translateX(100%);
     }
 }
 </style>

@@ -259,38 +259,39 @@ export default {
 </script>
 
 <template>
-    <div class="table-container">
-        <table class="table table-sm study-table table-borderless">
+    <div class="patients-page">
+        <div class="table-wrapper">
+        <table class="table table-sm patient-table table-borderless">
             <thead class="sticky-top">
-                <tr class="study-column-titles">
-                    <th width="22%" class="study-table-title" scope="col">Patient Name</th>
-                    <th width="14%" class="study-table-title" scope="col">Patient ID</th>
-                    <th width="12%" class="study-table-title" scope="col">Birth Date</th>
-                    <th width="8%" class="study-table-title" scope="col">Sex</th>
-                    <th width="12%" class="study-table-title" scope="col">Last Reported</th>
-                    <th width="10%" class="study-table-title" scope="col">DICOM Studies</th>
-                    <th width="10%" class="study-table-title" scope="col">Documents</th>
+                <tr class="patient-column-titles">
+                    <th width="22%" class="patient-table-title" scope="col">Patient Name</th>
+                    <th width="14%" class="patient-table-title" scope="col">Patient ID</th>
+                    <th width="12%" class="patient-table-title" scope="col">Birth Date</th>
+                    <th width="8%" class="patient-table-title" scope="col">Sex</th>
+                    <th width="12%" class="patient-table-title" scope="col">Last Reported</th>
+                    <th width="10%" class="patient-table-title" scope="col">DICOM</th>
+                    <th width="10%" class="patient-table-title" scope="col">Documents</th>
                 </tr>
-                <tr class="study-table-filters">
+                <tr class="patient-table-filters">
                     <th scope="col">
-                        <div class="d-flex align-items-center">
-                            <button @click="clearFilters" type="button" class="clear-filter-btn me-1"
-                                data-bs-toggle="tooltip" title="Clear filter">
+                        <div class="filter-with-clear">
+                            <button @click="clearFilters" type="button" class="clear-filter-btn"
+                                data-bs-toggle="tooltip" title="Clear all filters">
                                 <i class="fa-regular fa-circle-xmark"></i>
                             </button>
-                            <input type="text" class="form-control study-list-filter" v-model="filterPatientName" placeholder="Search...">
+                            <input type="text" class="form-control patient-filter" v-model="filterPatientName" placeholder="Search name...">
                         </div>
                     </th>
                     <th>
-                        <input type="text" class="form-control study-list-filter" v-model="filterPatientId" placeholder="Search...">
+                        <input type="text" class="form-control patient-filter" v-model="filterPatientId" placeholder="Search ID...">
                     </th>
                     <th>
                         <Datepicker v-model="filterPatientBirthDate" :enable-time-picker="false" range
-                            text-input arrow-navigation hide-input-icon placeholder="Select date">
+                            text-input arrow-navigation hide-input-icon placeholder="Birth date">
                         </Datepicker>
                     </th>
                     <th>
-                        <select class="form-select study-list-filter" v-model="filterPatientSex">
+                        <select class="form-select patient-filter" v-model="filterPatientSex">
                             <option v-for="option in sexOptions" :key="option.value" :value="option.value">
                                 {{ option.label }}
                             </option>
@@ -298,17 +299,15 @@ export default {
                     </th>
                     <th>
                         <Datepicker v-model="filterLastReported" :enable-time-picker="false" range
-                            text-input arrow-navigation hide-input-icon placeholder="Select date">
+                            text-input arrow-navigation hide-input-icon placeholder="Last reported">
                         </Datepicker>
                     </th>
-                    <th class="text-left">
-                        <!-- Patient count badge -->
+                    <th class="text-center">
                         <div v-if="loading" class="patient-count-badge loading">
-                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                            Loading...
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
                         </div>
                         <div v-else class="patient-count-badge">
-                            {{ pagination.total }} patient(s)
+                            {{ pagination.total }}
                         </div>
                     </th>
                     <th></th>
@@ -316,11 +315,11 @@ export default {
             </thead>
             <tbody v-if="loading">
                 <tr>
-                    <td colspan="7" class="text-center" style="padding: 60px 20px;">
-                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                            <span class="visually-hidden">Loading...</span>
+                    <td colspan="7" class="text-center" style="padding: 80px 20px;">
+                        <div class="loading-spinner">
+                            <div class="spinner-border" role="status" style="width: 2.5rem; height: 2.5rem; color: #4a90e2;"></div>
                         </div>
-                        <p class="mt-3 text-muted">Loading patients...</p>
+                        <p class="loading-text">Loading patients...</p>
                     </td>
                 </tr>
             </tbody>
@@ -342,102 +341,123 @@ export default {
             </tbody>
             <tbody v-for="patient in filteredPatients" :key="patient.id">
                 <tr 
-                    class="data-row" 
-                    :class="{ 'data-row-expanded': isExpanded(patient.id) }"
+                    class="patient-row" 
+                    :class="{ 'patient-row-expanded': isExpanded(patient.id) }"
                     @click="toggleExpand(patient.id)"
-                    style="cursor: pointer;"
                 >
                     <td class="cut-text" data-bs-toggle="tooltip" :title="formatPatientName(patient.patientName)">
-                        <i class="bi bi-person-circle me-2 patient-icon"></i>
-                        {{ formatPatientName(patient.patientName) }}
+                        <div class="patient-name-cell">
+                            <div class="patient-avatar">
+                                <i class="bi bi-person-fill"></i>
+                            </div>
+                            <span class="patient-name">{{ formatPatientName(patient.patientName) }}</span>
+                        </div>
                     </td>
-                    <td class="cut-text" data-bs-toggle="tooltip" :title="patient.patientId">
+                    <td class="cut-text patient-id-cell" data-bs-toggle="tooltip" :title="patient.patientId">
                         {{ patient.patientId }}
                     </td>
                     <td class="cut-text">
                         {{ formatDate(patient.patientBirthDate) }}
                     </td>
                     <td class="cut-text">
-                        {{ patient.patientSex || '-' }}
+                        <span class="sex-badge" :class="patient.patientSex === 'M' ? 'male' : patient.patientSex === 'F' ? 'female' : 'other'">
+                            {{ patient.patientSex || '-' }}
+                        </span>
                     </td>
                     <td class="cut-text">
                         {{ formatDateTime(patient.lastDocumentUpload) }}
                     </td>
-                    <td class="text-left">
-                        <span class="count-value dicom">{{ patient.dicomStudyCount || 0 }}</span>
+                    <td class="text-center">
+                        <span class="count-badge dicom" :class="{ 'has-items': patient.dicomStudyCount > 0 }">
+                            {{ patient.dicomStudyCount || 0 }}
+                        </span>
                     </td>
-                    <td class="text-left">
-                        <span class="count-value document">{{ patient.wordFileCount || 0 }}</span>
+                    <td class="text-center">
+                        <span class="count-badge document" :class="{ 'has-items': patient.wordFileCount > 0 }">
+                            {{ patient.wordFileCount || 0 }}
+                        </span>
                     </td>
                 </tr>
-                <!-- Expanded row with details -->
+                <!-- Expanded details card -->
                 <tr v-if="isExpanded(patient.id)" class="details-row">
                     <td colspan="7">
-                        <div class="details-content">
-                            <div class="details-grid">
-                                <div class="info-section">
-                                    <h6><i class="bi bi-person-fill me-2"></i>Patient Information</h6>
-                                    <div class="info-row">
-                                        <span class="info-label">Patient ID:</span>
-                                        <span class="info-value">{{ patient.patientId }}</span>
+                        <div class="details-card">
+                            <div class="details-main">
+                                <div class="patient-info-card">
+                                    <div class="patient-avatar-large">
+                                        <i class="bi bi-person-fill"></i>
                                     </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Patient Name:</span>
-                                        <span class="info-value">{{ formatPatientName(patient.patientName) }}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Birth Date:</span>
-                                        <span class="info-value">{{ formatDate(patient.patientBirthDate) }}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Sex:</span>
-                                        <span class="info-value">{{ patient.patientSex || '-' }}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Other IDs:</span>
-                                        <span class="info-value">{{ patient.otherPatientIds || '-' }}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Last Document:</span>
-                                        <span class="info-value">{{ formatDateTime(patient.lastDocumentUpload) }}</span>
+                                    <div class="patient-meta">
+                                        <div class="patient-name-large">{{ formatPatientName(patient.patientName) }}</div>
+                                        <div class="patient-id-large">ID: {{ patient.patientId }}</div>
                                     </div>
                                 </div>
-                                <div class="actions-section">
-                                    <h6><i class="bi bi-folder2-open me-2"></i>Patient Actions</h6>
-                                    <div class="action-buttons">
-                                        <button 
-                                            class="btn btn-outline-primary action-btn"
-                                            @click.stop="viewDicomFiles(patient)"
-                                            :disabled="patient.dicomStudyCount === 0"
-                                        >
-                                            <i class="bi bi-file-earmark-medical me-2"></i>
-                                            View DICOM Studies ({{ patient.dicomStudyCount || 0 }})
-                                        </button>
-                                        <button 
-                                            class="btn btn-outline-secondary action-btn"
-                                            @click.stop="viewWordFiles(patient)"
-                                            :disabled="patient.wordFileCount === 0"
-                                        >
-                                            <i class="bi bi-file-earmark-word me-2"></i>
-                                            View Documents ({{ patient.wordFileCount || 0 }})
-                                        </button>
-                                        <button 
-                                            class="btn btn-outline-success action-btn"
-                                            @click.stop="uploadNewDocument(patient)"
-                                            :disabled="uploadingDocumentPatientId === patient.id"
-                                        >
-                                            <span v-if="uploadingDocumentPatientId === patient.id" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                            <i v-else class="bi bi-file-earmark-plus me-2"></i>
-                                            Upload New Document
-                                        </button>
+                                <div class="info-columns">
+                                    <div class="info-column">
+                                        <div class="info-column-title">Demographics</div>
+                                        <div class="info-item">
+                                            <span class="info-key">Birth Date</span>
+                                            <span class="info-val">{{ formatDate(patient.patientBirthDate) }}</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-key">Sex</span>
+                                            <span class="info-val">{{ patient.patientSex || '-' }}</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-key">Other IDs</span>
+                                            <span class="info-val">{{ patient.otherPatientIds || '-' }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="info-column">
+                                        <div class="info-column-title">Records</div>
+                                        <div class="info-item">
+                                            <span class="info-key">DICOM</span>
+                                            <span class="info-val">{{ patient.dicomStudyCount || 0 }} studies</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-key">Documents</span>
+                                            <span class="info-val">{{ patient.wordFileCount || 0 }} files</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-key">Last Upload</span>
+                                            <span class="info-val">{{ formatDateTime(patient.lastDocumentUpload) }}</span>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
+                            <div class="actions-bar">
+                                <button 
+                                    class="action-btn action-dicom"
+                                    @click.stop="viewDicomFiles(patient)"
+                                    :disabled="patient.dicomStudyCount === 0"
+                                >
+                                    <i class="bi bi-file-earmark-medical"></i>
+                                    DICOM Studies
+                                </button>
+                                <button 
+                                    class="action-btn action-docs"
+                                    @click.stop="viewWordFiles(patient)"
+                                    :disabled="patient.wordFileCount === 0"
+                                >
+                                    <i class="bi bi-file-earmark-word"></i>
+                                    Documents
+                                </button>
+                                <button 
+                                    class="action-btn action-upload"
+                                    @click.stop="uploadNewDocument(patient)"
+                                    :disabled="uploadingDocumentPatientId === patient.id"
+                                >
+                                    <span v-if="uploadingDocumentPatientId === patient.id" class="spinner-border spinner-border-sm" role="status"></span>
+                                    <i v-else class="bi bi-upload"></i>
+                                    Upload Document
+                                </button>
                             </div>
                         </div>
                     </td>
                 </tr>
             </tbody>
         </table>
+        </div>
         <input
             ref="patientDocumentUploadInput"
             type="file"
@@ -449,17 +469,17 @@ export default {
         <!-- Pagination -->
         <div v-if="!loading && pagination.pages > 1" class="pagination-section">
             <button
-                class="btn btn-sm btn-outline-secondary"
+                class="pagination-btn"
                 :disabled="pagination.page <= 1"
                 @click="goToPage(pagination.page - 1)"
             >
                 <i class="bi bi-chevron-left"></i>
             </button>
             <span class="page-info">
-                Page {{ pagination.page }} of {{ pagination.pages }}
+                Page <strong>{{ pagination.page }}</strong> of <strong>{{ pagination.pages }}</strong>
             </span>
             <button
-                class="btn btn-sm btn-outline-secondary"
+                class="pagination-btn"
                 :disabled="pagination.page >= pagination.pages"
                 @click="goToPage(pagination.page + 1)"
             >
@@ -471,144 +491,146 @@ export default {
 </template>
 
 <style scoped>
-.table-container {
-    position: relative;
+/* Page Container */
+.patients-page {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 16px;
+    background: #f8fafc;
+    min-height: calc(100vh - 60px);
 }
 
-.study-table {
-    table-layout: fixed;
+.table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
-.study-table> :nth-child(odd) >tr >td{
-    background-color: var(--study-odd-bg-color);
+/* Table Base */
+.patient-table {
+    table-layout: auto;
+    min-width: 900px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    background: #ffffff;
 }
 
-.study-table> :nth-child(even) >tr >td{
-    background-color: var(--study-even-bg-color);
-}
-
-.study-table>tbody>tr:first-child:hover > * {
-    background-color: var(--study-hover-color);
-}
-
-.study-table tr:hover {
-    background-color: var(--study-hover-color);
-}
-
-.study-table> :last-child {
-    border-bottom-width: thin;
-}
-
-.study-column-titles {
-    background-color: var(--study-table-header-bg-color) !important;
-    font-size: 13px;
+/* Header Titles */
+.patient-column-titles {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    font-size: 12px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    border-bottom: 1px solid #e2e8f0 !important;
 }
 
-.study-table-title {
+.patient-table-title {
     text-align: left;
-    padding-left: 10px;
-    padding-right: 4px;
-    padding-top: 14px;
-    padding-bottom: 14px;
+    padding: 14px 12px;
     vertical-align: middle !important;
-    line-height: 1.5;
-    position: sticky;
-    font-size: 13px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
     font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
 }
 
-.study-table-filters {
-    background-color: var(--study-table-filter-bg-color);
+/* Filter Row */
+.patient-table-filters {
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
 }
 
-.study-table-filters > th {
-    background-color: var(--study-table-filter-bg-color);
-    padding: 4px;
-}
-
-.study-table td {
-    text-align: left;
-    padding-left: 10px;
-    font-size: 13px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+.patient-table-filters > th {
+    background: #ffffff;
+    padding: 8px 12px;
     vertical-align: middle;
 }
 
-/* Patient icon */
-.patient-icon {
-    color: #6c757d;
-    font-size: 14px;
+.filter-with-clear {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-/* Count values styling */
-.count-value {
-    font-weight: 500;
-    font-size: 13px;
-}
-
-.count-value.dicom {
-    color: #0d6efd;
-}
-
-.count-value.document {
-    color: #6c757d;
-}
-
-/* Clear filter button - fixed size */
+/* Clear filter button */
 .clear-filter-btn {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
     padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--bs-border-color);
+    border: 1px solid #e5e7eb;
     border-radius: 6px;
-    background-color: var(--bs-body-bg);
-    color: var(--bs-body-color);
+    background: #f9fafb;
+    color: #6b7280;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.15s ease;
 }
 
 .clear-filter-btn:hover {
-    background-color: var(--bs-light);
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #dc2626;
 }
 
 .clear-filter-btn i {
-    font-size: 14px;
+    font-size: 12px;
 }
 
-input.form-control.study-list-filter,
-select.form-select.study-list-filter {
-    margin-top: var(--filter-margin, 5px);
-    margin-bottom: var(--filter-margin, 5px);
-    padding-top: var(--filter-padding, 2px);
-    padding-bottom: var(--filter-padding, 2px);
-    padding-left: 8px;
-    padding-right: 8px;
-    border-bottom-width: thin;
+/* Filter inputs */
+input.form-control.patient-filter,
+select.form-select.patient-filter {
+    height: 32px;
+    padding: 4px 10px;
     font-size: 13px;
-    height: 36px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #f9fafb;
+    transition: all 0.15s ease;
+}
+
+input.form-control.patient-filter:focus,
+select.form-select.patient-filter:focus {
+    border-color: #4a90e2;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
 }
 
 /* Patient count badge */
 .patient-count-badge {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 24px;
+    padding: 0 8px;
     font-size: 12px;
-    font-weight: 500;
-    color: var(--bs-secondary-color);
+    font-weight: 600;
+    color: #4a90e2;
+    background: #e8f4fd;
+    border-radius: 12px;
 }
 
 .patient-count-badge.loading {
-    color: #6c757d;
+    color: #6b7280;
+    background: #f3f4f6;
 }
 
-.patient-count-badge.empty {
-    color: #856404;
+/* Table cells */
+.patient-table td {
+    text-align: left;
+    padding: 14px 12px;
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    vertical-align: middle;
+    color: #374151;
+    border-bottom: 1px solid #f3f4f6;
 }
 
 .cut-text {
@@ -617,7 +639,135 @@ select.form-select.study-list-filter {
     white-space: nowrap;
 }
 
-/* Empty state styles */
+/* Patient row styles */
+.patient-row {
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.patient-row:hover {
+    background: #f8fafc;
+}
+
+.patient-row:hover td {
+    background: #f8fafc;
+}
+
+.patient-row-expanded {
+    background: #e8f4fd !important;
+}
+
+.patient-row-expanded td {
+    background: #e8f4fd !important;
+    font-weight: 500;
+}
+
+/* Patient name cell */
+.patient-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.patient-avatar {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.patient-avatar i {
+    color: #ffffff;
+    font-size: 14px;
+}
+
+.patient-name {
+    font-weight: 500;
+    color: #1f2937;
+}
+
+.patient-id-cell {
+    color: #6b7280;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 12px;
+}
+
+/* Sex badge */
+.sex-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 6px;
+}
+
+.sex-badge.male {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.sex-badge.female {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+.sex-badge.other {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+/* Count badges */
+.count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 6px;
+}
+
+.count-badge.dicom {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.count-badge.dicom.has-items {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.count-badge.document {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.count-badge.document.has-items {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+/* Loading state */
+.loading-spinner {
+    margin-bottom: 16px;
+}
+
+.loading-text {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0;
+}
+
+/* Empty state */
 .empty-state-tbody tr.empty-state-row:hover,
 .empty-state-tbody tr.empty-state-row:hover > td {
     background-color: transparent !important;
@@ -626,113 +776,193 @@ select.form-select.study-list-filter {
 
 .empty-state {
     text-align: center;
-    padding: 60px 20px;
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 80px 20px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
     border-radius: 12px;
     margin: 20px;
 }
 
 .empty-state-icon {
-    font-size: 64px;
-    color: #adb5bd;
+    font-size: 56px;
+    color: #cbd5e1;
     margin-bottom: 20px;
 }
 
 .empty-state-title {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 600;
-    color: #495057;
-    margin-bottom: 10px;
+    color: #374151;
+    margin-bottom: 8px;
 }
 
 .empty-state-text {
     font-size: 14px;
-    color: #6c757d;
-    max-width: 400px;
+    color: #6b7280;
+    max-width: 360px;
     margin: 0 auto;
     line-height: 1.6;
 }
 
-/* Data row styles */
-.data-row {
-    border-top-width: 1px;
-    border-color: #ddd;
-    transition: background-color 0.2s;
-}
-
-.data-row-expanded {
-    background-color: var(--study-details-bg-color) !important;
-    font-weight: 600;
-}
-
-.data-row-expanded > td {
-    background-color: var(--study-details-bg-color) !important;
-}
-
-.details-row {
-    background-color: var(--study-details-bg-color) !important;
-}
-
+/* Details row */
 .details-row > td {
-    background-color: var(--study-details-bg-color) !important;
-    padding: 0 !important;
+    padding: 0 16px 16px 16px !important;
+    background: transparent !important;
 }
 
-.details-content {
-    padding: 20px;
-    background-color: var(--study-details-bg-color);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+/* Details card */
+.details-card {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
+    margin-top: 15px;
+    overflow: hidden;
 }
 
-.details-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 30px;
-}
-
-.info-section h6,
-.actions-section h6 {
-    margin-bottom: 15px;
-    color: var(--bs-body-color);
-    font-weight: 600;
-    font-size: 14px;
-}
-
-.info-row {
+.details-main {
     display: flex;
-    margin-bottom: 8px;
+    align-items: stretch;
+    gap: 0;
+    padding: 20px 24px;
+    flex-wrap: wrap;
+}
+
+.patient-info-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-right: 28px;
+    border-right: 1px solid #e5e7eb;
+    min-width: 220px;
+}
+
+.patient-avatar-large {
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.patient-avatar-large i {
+    font-size: 24px;
+    color: #ffffff;
+}
+
+.patient-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.patient-name-large {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1f2937;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+}
+
+.patient-id-large {
+    font-size: 12px;
+    color: #6b7280;
+    font-family: 'SF Mono', Monaco, monospace;
+}
+
+.info-columns {
+    display: flex;
+    gap: 40px;
+    padding-left: 28px;
+    flex: 1;
+    flex-wrap: wrap;
+}
+
+.info-column {
+    min-width: 140px;
+}
+
+.info-column-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #9ca3af;
+    margin-bottom: 10px;
+}
+
+.info-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
     font-size: 13px;
 }
 
-.info-label {
+.info-key {
+    color: #6b7280;
     font-weight: 500;
-    color: var(--bs-secondary-color);
-    min-width: 120px;
+    min-width: 70px;
 }
 
-.info-value {
-    color: var(--bs-body-color);
-    font-weight: 400;
+.info-val {
+    color: #1f2937;
+    font-weight: 500;
 }
 
-.action-buttons {
+/* Actions bar */
+.actions-bar {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    gap: 8px;
+    padding: 14px 24px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    flex-wrap: wrap;
 }
 
 .action-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: flex-start;
-    padding: 10px 20px;
-    border-radius: 8px;
-    transition: all 0.2s;
+    gap: 6px;
+    padding: 8px 16px;
     font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
 }
 
-.action-btn:hover:not(:disabled) {
-    transform: translateX(5px);
+.action-dicom {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.action-dicom:hover:not(:disabled) {
+    background: #bfdbfe;
+}
+
+.action-docs {
+    background: #e8f4fd;
+    color: #2563eb;
+}
+
+.action-docs:hover:not(:disabled) {
+    background: #d1e9fa;
+}
+
+.action-upload {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.action-upload:hover:not(:disabled) {
+    background: #bbf7d0;
 }
 
 .action-btn:disabled {
@@ -740,23 +970,71 @@ select.form-select.study-list-filter {
     cursor: not-allowed;
 }
 
+/* Pagination */
 .pagination-section {
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 12px;
-    padding: 16px 0;
+    padding: 20px 0;
     margin-top: 8px;
 }
 
-.page-info {
-    font-size: 0.875rem;
-    color: var(--bs-secondary-color);
+.pagination-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.15s ease;
 }
 
+.pagination-btn:hover:not(:disabled) {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-info {
+    font-size: 14px;
+    color: #6b7280;
+}
+
+.page-info strong {
+    color: #1f2937;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
-    .details-grid {
-        grid-template-columns: 1fr;
+    .details-main {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .patient-info-card {
+        border-right: none;
+        border-bottom: 1px solid #e5e7eb;
+        padding-right: 0;
+        padding-bottom: 16px;
+        min-width: auto;
+    }
+    
+    .info-columns {
+        padding-left: 0;
+        gap: 20px;
+    }
+    
+    .actions-bar {
+        justify-content: center;
     }
 }
 </style>

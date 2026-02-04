@@ -482,11 +482,12 @@ export default {
 </script>
 
 <template>
-    <div class="table-container">
+    <div class="documents-page">
+        <div class="table-wrapper">
         <table class="table table-sm study-table table-borderless">
             <thead class="sticky-top">
                 <tr class="study-column-titles">
-                    <th width="3%" scope="col"></th>
+                    <th scope="col" class="checkbox-cell"></th>
                     <th width="20%" class="study-table-title" scope="col">File Name</th>
                     <th width="10%" class="study-table-title" scope="col">Patient ID</th>
                     <th width="15%" class="study-table-title" scope="col">Patient Name</th>
@@ -496,7 +497,7 @@ export default {
                     <th width="7%" class="study-table-title" scope="col">Delete</th>
                 </tr>
                 <tr class="study-table-filters">
-                    <th scope="col">
+                    <th scope="col" class="checkbox-cell">
                         <button @click="clearFilters" type="button" class="clear-filter-btn"
                             data-bs-toggle="tooltip" title="Clear filter">
                             <i class="fa-regular fa-circle-xmark"></i>
@@ -525,38 +526,34 @@ export default {
                     <th></th>
                 </tr>
                 <tr class="study-table-actions">
-                    <th width="3%" scope="col">
-                        <div class="form-check" style="margin-left: 0.5rem">
+                    <th scope="col" class="checkbox-cell">
+                        <div class="checkbox-wrapper">
                             <input class="form-check-input" type="checkbox" v-model="allSelected"
                                 :indeterminate="isPartialSelected" @click="clickSelectAll">
-                            <span style="font-weight: 400; font-size: small;">{{ selectedWordFileIds.length }}</span>
+                            <span class="selection-count">{{ selectedWordFileIds.length }}</span>
                         </div>
                     </th>
                     <th width="97%" colspan="7" scope="col">
-                        <div class="container px-0">
-                            <div class="row g-1">
-                                <div class="col-6 study-list-bulk-buttons">
-                                    <button class="btn btn-sm btn-secondary m-1" @click="downloadSelectedWordFiles" 
-                                        :disabled="!hasSelection" title="Download">
-                                        <i class="bi bi-download"></i> Download
-                                    </button>
-                                    <button class="btn btn-sm btn-secondary m-1" @click="printSelectedWordFiles" 
-                                        :disabled="!hasSelection" title="Print">
-                                        <i class="bi bi-printer"></i> Print
-                                    </button>
-                                    <button class="btn btn-sm btn-danger m-1" @click="deleteSelectedWordFiles" 
-                                        :disabled="!hasSelection || isDoctor" title="Delete">
-                                        <i class="bi bi-trash"></i> Delete
-                                    </button>
-                                </div>
-                            </div>
+                        <div class="bulk-actions-wrap">
+                            <button class="btn btn-sm btn-secondary" @click="downloadSelectedWordFiles" 
+                                :disabled="!hasSelection" title="Download">
+                                <i class="bi bi-download"></i> Download
+                            </button>
+                            <button class="btn btn-sm btn-secondary" @click="printSelectedWordFiles" 
+                                :disabled="!hasSelection" title="Print">
+                                <i class="bi bi-printer"></i> Print
+                            </button>
+                            <button class="btn btn-sm btn-danger" @click="deleteSelectedWordFiles" 
+                                :disabled="!hasSelection || isDoctor" title="Delete">
+                                <i class="bi bi-trash"></i> Delete
+                            </button>
                         </div>
                     </th>
                 </tr>
             </thead>
             <tbody v-if="loading">
                 <tr>
-                    <td colspan="7" class="text-center" style="padding: 60px 20px;">
+                    <td colspan="8" class="text-center" style="padding: 60px 20px;">
                         <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
                             <span class="visually-hidden">Loading...</span>
                         </div>
@@ -566,7 +563,7 @@ export default {
             </tbody>
             <tbody v-else-if="isEmpty" class="empty-state-tbody">
                 <tr class="empty-state-row">
-                    <td colspan="7">
+                    <td colspan="8">
                         <div class="empty-state">
                             <div class="empty-state-icon">
                                 <i class="bi bi-file-earmark-x"></i>
@@ -589,15 +586,14 @@ export default {
                     }"
                     :id="`word-file-${wordFile.id}`"
                 >
-                    <td style="vertical-align: middle; padding-right: 8px;">
-                        <div class="form-check" style="display: flex; align-items: center; justify-content: center; height: 100%;">
+                    <td class="checkbox-cell">
+                        <div class="checkbox-wrapper">
                             <input 
                                 class="form-check-input" 
                                 type="checkbox" 
                                 :checked="selectedWordFileIds.includes(wordFile.id)" 
                                 @change="onWordFileSelected(wordFile.id, $event.target.checked)"
                                 @click.stop
-                                style="margin: 0;"
                             >
                         </div>
                     </td>
@@ -633,92 +629,68 @@ export default {
                 </tr>
                 <!-- Expanded row with details -->
                 <tr v-if="isExpanded(wordFile.id)" class="details-row">
-                    <td colspan="7">
-                        <div class="details-content">
-                            <div class="details-grid">
-                                <!-- Document Preview -->
-                                <div class="preview-section">
-                                    <div class="preview-placeholder">
-                                        <i class="bi bi-file-earmark-word"></i>
-                                        <span>{{ wordFile.originalFileName }}</span>
+                    <td colspan="8">
+                        <div class="details-card">
+                            <div class="details-main">
+                                <!-- File Info Card -->
+                                <div class="file-info-card">
+                                    <div class="file-icon-wrap">
+                                        <i class="bi bi-file-earmark-word-fill"></i>
+                                    </div>
+                                    <div class="file-meta">
+                                        <div class="file-name">{{ wordFile.originalFileName }}</div>
+                                        <div class="file-size">{{ formatFileSize(wordFile.fileSize) }}</div>
                                     </div>
                                 </div>
                                 
-                                <!-- Patient Info -->
-                                <div class="info-section">
-                                    <h6><i class="bi bi-person-fill me-2"></i>Patient Information</h6>
-                                    <div class="info-row">
-                                        <span class="info-label">Patient ID:</span>
-                                        <span class="info-value">{{ wordFile.patientId }}</span>
+                                <!-- Info Columns -->
+                                <div class="info-columns">
+                                    <div class="info-column">
+                                        <div class="info-column-title">Patient</div>
+                                        <div class="info-item">
+                                            <span class="info-key">ID</span>
+                                            <span class="info-val">{{ wordFile.patientId }}</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-key">Name</span>
+                                            <span class="info-val">{{ wordFile.patientName }}</span>
+                                        </div>
                                     </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Patient Name:</span>
-                                        <span class="info-value">{{ wordFile.patientName }}</span>
-                                    </div>
-                                </div>
-                                
-                                <!-- Upload Info -->
-                                <div class="info-section">
-                                    <h6><i class="bi bi-cloud-upload me-2"></i>Upload Information</h6>
-                                    <div class="info-row">
-                                        <span class="info-label">Uploaded User:</span>
-                                        <span class="info-value">{{ wordFile.uploadedByName }}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Uploaded Date:</span>
-                                        <span class="info-value">{{ formatDate(wordFile.uploadedAt) }}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">File Size:</span>
-                                        <span class="info-value">{{ formatFileSize(wordFile.fileSize) }}</span>
+                                    <div class="info-column">
+                                        <div class="info-column-title">Upload Details</div>
+                                        <div class="info-item">
+                                            <span class="info-key">By</span>
+                                            <span class="info-val">{{ wordFile.uploadedByName }}</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-key">Date</span>
+                                            <span class="info-val">{{ formatDate(wordFile.uploadedAt) }}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                             
-                            <!-- Actions -->
-                            <div class="actions-section">
-                                <span class="actions-label">Actions:</span>
-                                <div class="action-buttons">
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-sm btn-secondary action-btn"
-                                        @click="viewWordFile(wordFile.id)"
-                                        title="View"
-                                    >
-                                        <i class="bi bi-eye"></i>
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-sm btn-secondary action-btn"
-                                        @click="downloadWordFile(wordFile.id)"
-                                        title="Download"
-                                    >
-                                        <i class="bi bi-download"></i>
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-sm btn-secondary action-btn"
-                                        @click="printWordFile(wordFile.id)"
-                                        title="Print"
-                                    >
-                                        <i class="bi bi-printer"></i>
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-sm btn-danger action-btn"
-                                        @click="deleteWordFile(wordFile.id)"
-                                        :disabled="isDoctor"
-                                        title="Delete"
-                                    >
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </div>
+                            <!-- Actions Bar -->
+                            <div class="actions-bar">
+                                <button type="button" class="action-btn action-view" @click="viewWordFile(wordFile.id)">
+                                    <i class="bi bi-eye"></i> View
+                                </button>
+                                <button type="button" class="action-btn action-download" @click="downloadWordFile(wordFile.id)">
+                                    <i class="bi bi-download"></i> Download
+                                </button>
+                                <button type="button" class="action-btn action-print" @click="printWordFile(wordFile.id)">
+                                    <i class="bi bi-printer"></i> Print
+                                </button>
+                                <button type="button" class="action-btn action-delete" @click="deleteWordFile(wordFile.id)" :disabled="isDoctor">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
                             </div>
                         </div>
                     </td>
                 </tr>
             </tbody>
         </table>
+        </div>
         <!-- Pagination -->
         <div v-if="!loading && pagination.pages > 1" class="pagination-section">
             <button
@@ -797,120 +769,251 @@ export default {
 </template>
 
 <style scoped>
-.table-container {
-    position: relative;
+/* Responsive layout */
+.documents-page {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 16px;
+    background: #f8fafc;
+    min-height: calc(100vh - 60px);
+}
+
+.table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .study-table {
-    table-layout: fixed;
+    table-layout: auto;
+    min-width: 900px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.study-table> :nth-child(odd) >tr >td{
-    background-color: var(--study-odd-bg-color);
+/* Bulk actions responsive wrapping */
+.bulk-actions-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
 }
 
-.study-table> :nth-child(even) >tr >td{
-    background-color: var(--study-even-bg-color);
+.bulk-actions-wrap .btn {
+    flex-shrink: 0;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
 }
 
-.study-table>tbody>tr:first-child:hover > * {
-    background-color: var(--study-hover-color);
+.bulk-actions-wrap .btn-secondary {
+    background: #e5e7eb;
+    border: none;
+    color: #374151;
 }
 
-.study-table tr:hover {
-    background-color: var(--study-hover-color);
+.bulk-actions-wrap .btn-secondary:hover:not(:disabled) {
+    background: #d1d5db;
 }
 
-.study-table> :last-child {
+.bulk-actions-wrap .btn-danger {
+    background: #fee2e2;
+    border: none;
+    color: #dc2626;
+}
+
+.bulk-actions-wrap .btn-danger:hover:not(:disabled) {
+    background: #fecaca;
+}
+
+.bulk-actions-wrap .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Table row alternation */
+.study-table > tbody:not(.empty-state-tbody) > tr.data-row:nth-child(odd) > td {
+    background-color: #ffffff;
+}
+
+.study-table > tbody:not(.empty-state-tbody) > tr.data-row:nth-child(even) > td {
+    background-color: #f9fafb;
+}
+
+.study-table > tbody > tr.data-row:hover > td {
+    background-color: #f3f4f6;
+}
+
+.study-table > :last-child {
     border-bottom-width: thin;
 }
 
+/* Modern Table Header */
 .study-column-titles {
-    background-color: var(--study-table-header-bg-color) !important;
-    font-size: 13px;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    font-size: 12px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    border-bottom: 1px solid #e2e8f0 !important;
 }
 
 .study-table-title {
     text-align: left;
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 14px;
-    padding-bottom: 14px;
+    padding: 14px 12px;
     vertical-align: middle !important;
     line-height: 1.5;
     position: sticky;
-    font-size: 13px;
+    font-size: 12px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    line-height: 1.5;
     font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
+/* Filter Row */
 .study-table-filters {
-    background-color: var(--study-table-filter-bg-color);
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
 }
 
 .study-table-filters > th {
-    background-color: var(--study-table-filter-bg-color);
-    padding: 4px;
+    background: #ffffff;
+    padding: 8px 12px;
+    vertical-align: middle;
 }
 
+/* Actions Row */
 .study-table-actions {
-    background-color: var(--study-table-actions-bg-color) !important;
+    background: #f8fafc !important;
+    border-bottom: 1px solid #e5e7eb;
 }
 
 .study-table-actions > th {
-    background-color: var(--study-table-actions-bg-color) !important;
+    background: #f8fafc !important;
     vertical-align: middle;
+    padding: 10px 12px;
 }
 
 .study-table-actions > th > div {
-    background-color: var(--study-table-actions-bg-color) !important;
+    background: transparent !important;
     text-align: left;
 }
 
+/* Table Cells */
 .study-table td {
     text-align: left;
-    padding-left: 10px;
+    padding: 14px 12px;
     font-size: 13px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     vertical-align: middle;
+    color: #374151;
+    border-bottom: 1px solid #f3f4f6;
 }
 
-/* Clear filter button - fixed size */
+/* Checkbox cell - consistent alignment */
+.checkbox-cell {
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    padding: 8px 6px 8px 10px !important;
+    vertical-align: middle !important;
+}
+
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.checkbox-wrapper .form-check-input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.selection-count {
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+}
+
+/* Clear filter button - modern style */
 .clear-filter-btn {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
     padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--bs-border-color);
-    border-radius: 6px;
-    background-color: var(--bs-body-bg);
-    color: var(--bs-body-color);
+    border: 1px solid #e5e7eb;
+    border-radius: 5px;
+    background: #f9fafb;
+    color: #6b7280;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.15s ease;
 }
 
 .clear-filter-btn:hover {
-    background-color: var(--bs-light);
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #dc2626;
 }
 
 .clear-filter-btn i {
-    font-size: 14px;
+    font-size: 12px;
+}
+
+/* Row delete button */
+.data-row .btn-danger {
+    background: #fee2e2;
+    border: none;
+    color: #dc2626;
+    border-radius: 8px;
+    padding: 8px 12px;
+    transition: all 0.15s ease;
+}
+
+.data-row .btn-danger:hover:not(:disabled) {
+    background: #fecaca;
+}
+
+.data-row .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 input.form-control.study-list-filter {
-    margin-top: var(--filter-margin, 5px);
-    margin-bottom: var(--filter-margin, 5px);
-    padding-top: var(--filter-padding, 2px);
-    padding-bottom: var(--filter-padding, 2px);
-    padding-left: 8px;
-    padding-right: 8px;
-    border-bottom-width: thin;
+    margin: 0;
+    padding: 8px 12px;
     font-size: 13px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f9fafb;
+    transition: all 0.15s ease;
+}
+
+input.form-control.study-list-filter:focus {
+    background: #ffffff;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none;
+}
+
+input.form-control.study-list-filter::placeholder {
+    color: #9ca3af;
 }
 
 .study-list-bulk-buttons {
@@ -966,17 +1069,19 @@ input.form-control.study-list-filter {
 
 /* Data row styles */
 .data-row {
-    border-top-width: 1px;
-    border-color: #ddd;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
 }
 
 .data-row-expanded {
-    background-color: var(--study-details-bg-color) !important;
-    font-weight: 600;
+    background: #f0f9ff !important;
 }
 
 .data-row-expanded > td {
-    background-color: var(--study-details-bg-color) !important;
+    background: #f0f9ff !important;
+    font-weight: 500;
+    color: #0369a1;
+    border-bottom-color: transparent !important;
 }
 
 /* Highlighted document styles */
@@ -999,129 +1104,213 @@ input.form-control.study-list-filter {
     }
 }
 
+/* Modern Details Card */
 .details-row {
-    background-color: var(--study-details-bg-color) !important;
+    background: transparent !important;
 }
 
 .details-row > td {
-    background-color: var(--study-details-bg-color) !important;
-    padding: 0 !important;
+    background: transparent !important;
+    padding: 0 16px 16px 16px !important;
 }
 
-.details-content {
-    padding: 20px;
-    background-color: var(--study-details-bg-color);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+.details-card {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
+    margin-top: 15px;
+    overflow: hidden;
 }
 
-.details-grid {
-    display: grid;
-    grid-template-columns: 150px 1fr 1fr;
-    gap: 30px;
-    margin-bottom: 20px;
-}
-
-.preview-section {
+.details-main {
     display: flex;
-    justify-content: center;
-    align-items: center;
+    align-items: stretch;
+    gap: 0;
+    padding: 20px 24px;
+    flex-wrap: wrap;
 }
 
-.preview-placeholder {
-    width: 120px;
-    height: 150px;
-    border: 2px solid #ddd;
-    border-radius: 8px;
+/* File Info Card */
+.file-info-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-right: 28px;
+    border-right: 1px solid #e5e7eb;
+    min-width: 220px;
+}
+
+.file-icon-wrap {
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, #2b579a 0%, #1a3a6c 100%);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.file-icon-wrap i {
+    font-size: 26px;
+    color: #ffffff;
+}
+
+.file-meta {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background-color: #f8f9fa;
-    color: #6c757d;
+    gap: 4px;
+    min-width: 0;
 }
 
-.preview-placeholder i {
-    font-size: 48px;
-    margin-bottom: 10px;
-    color: #2b579a;
-}
-
-.preview-placeholder span {
-    font-size: 10px;
-    text-align: center;
-    padding: 0 5px;
-    word-break: break-all;
-    font-weight: 400;
-}
-
-.info-section h6 {
-    margin-bottom: 15px;
-    color: var(--bs-body-color);
-    font-weight: 600;
+.file-name {
     font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
 }
 
-.info-row {
+.file-size {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+/* Info Columns */
+.info-columns {
     display: flex;
-    margin-bottom: 8px;
+    gap: 40px;
+    padding-left: 28px;
+    flex: 1;
+    flex-wrap: wrap;
+}
+
+.info-column {
+    min-width: 180px;
+}
+
+.info-column-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #9ca3af;
+    margin-bottom: 10px;
+}
+
+.info-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
     font-size: 13px;
 }
 
-.info-label {
+.info-key {
+    color: #6b7280;
     font-weight: 500;
-    color: var(--bs-secondary-color);
-    min-width: 120px;
+    min-width: 45px;
 }
 
-.info-value {
-    color: var(--bs-body-color);
-    font-weight: 400;
+.info-val {
+    color: #1f2937;
+    font-weight: 500;
 }
 
-.actions-section {
+/* Actions Bar */
+.actions-bar {
     display: flex;
-    align-items: center;
-    padding-top: 15px;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.actions-label {
-    font-weight: 600;
-    margin-right: 20px;
-    color: var(--bs-body-color);
-    font-size: 14px;
-}
-
-.action-buttons {
-    display: flex;
-    gap: 10px;
+    gap: 8px;
+    padding: 14px 24px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    flex-wrap: wrap;
 }
 
 .action-btn {
-    width: 40px;
-    height: 40px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
     border-radius: 8px;
-    transition: all 0.2s;
-}
-
-.action-btn:hover {
-    transform: scale(1.1);
+    cursor: pointer;
+    transition: all 0.15s ease;
 }
 
 .action-btn i {
-    font-size: 16px;
+    font-size: 14px;
 }
 
+.action-view {
+    background: #e0e7ff;
+    color: #4338ca;
+}
+
+.action-view:hover {
+    background: #c7d2fe;
+}
+
+.action-download {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.action-download:hover {
+    background: #a7f3d0;
+}
+
+.action-print {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.action-print:hover {
+    background: #d1d5db;
+}
+
+.action-delete {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.action-delete:hover:not(:disabled) {
+    background: #fecaca;
+}
+
+.action-delete:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Responsive for details card */
 @media (max-width: 768px) {
-    .details-grid {
-        grid-template-columns: 1fr;
+    .details-main {
+        flex-direction: column;
+        gap: 16px;
     }
     
-    .preview-section {
-        display: none;
+    .file-info-card {
+        border-right: none;
+        border-bottom: 1px solid #e5e7eb;
+        padding-right: 0;
+        padding-bottom: 16px;
+        min-width: auto;
+    }
+    
+    .info-columns {
+        padding-left: 0;
+        gap: 20px;
+    }
+    
+    .actions-bar {
+        justify-content: center;
     }
 }
 
@@ -1262,13 +1451,21 @@ input.form-control.study-list-filter {
     justify-content: center;
     align-items: center;
     gap: 12px;
-    padding: 16px 0;
-    margin-top: 8px;
+    padding: 20px 0;
+    margin-top: 12px;
+}
+
+.pagination-section .btn {
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 500;
+    transition: all 0.15s ease;
 }
 
 .page-info {
-    font-size: 0.875rem;
-    color: var(--bs-secondary-color);
+    font-size: 13px;
+    font-weight: 500;
+    color: #6b7280;
 }
 </style>
 

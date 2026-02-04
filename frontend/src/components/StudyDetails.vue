@@ -292,66 +292,99 @@ export default {
 </template>
 
 <style scoped>
+/* ===========================================
+   DETAILS CONTAINER
+   =========================================== */
 .study-details-container {
-    background-color: var(--study-details-bg-color);
+    background: #f8fafc;
+    border-top: 1px solid #e5e7eb;
 }
 
 .details-content {
-    padding: 20px;
+    padding: 24px;
+    background: #ffffff;
+    margin: 16px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
 }
 
+/* ===========================================
+   INFO GRID
+   =========================================== */
 .details-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 30px;
-    margin-bottom: 20px;
+    gap: 32px;
+    margin-bottom: 24px;
+}
+
+.info-section {
+    background: #f9fafb;
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid #f3f4f6;
 }
 
 .info-section h6 {
-    margin-bottom: 15px;
-    color: var(--bs-body-color);
+    margin-bottom: 16px;
+    color: #374151;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
     display: flex;
     align-items: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.info-section h6 i {
+    color: #4a90e2;
 }
 
 .info-row {
     display: flex;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     font-size: 13px;
     min-height: 28px;
+    padding: 4px 0;
 }
 
 .info-label {
     font-weight: 500;
-    color: var(--bs-secondary-color);
+    color: #6b7280;
     min-width: 160px;
     flex-shrink: 0;
 }
 
 .info-value {
-    color: var(--bs-body-color);
-    font-weight: 400;
+    color: #1f2937;
+    font-weight: 500;
     word-break: break-word;
     flex: 1;
 }
 
 .info-value.uid-text {
-    font-family: monospace;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
     font-size: 11px;
     word-break: break-all;
+    color: #6b7280;
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
 }
 
+/* ===========================================
+   COPY BUTTON
+   =========================================== */
 .copy-btn {
     background: none;
     border: none;
     padding: 4px 8px;
     cursor: pointer;
-    color: var(--bs-secondary-color);
+    color: #9ca3af;
     opacity: 0.6;
-    transition: all 0.2s;
+    transition: all 0.15s ease;
     border-radius: 4px;
     margin-left: 8px;
     flex-shrink: 0;
@@ -359,44 +392,63 @@ export default {
 
 .copy-btn:hover {
     opacity: 1;
-    background: rgba(0, 0, 0, 0.05);
+    background: #e8f4fd;
     color: #4a90e2;
 }
 
 .copy-btn .bi-check {
-    color: #28a745;
+    color: #10b981;
 }
 
+/* ===========================================
+   PATIENT STUDIES INFO
+   =========================================== */
 .patient-studies-info {
-    margin-top: 12px;
-    padding: 8px 12px;
-    background: rgba(74, 144, 226, 0.1);
-    border-radius: 6px;
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: #e8f4fd;
+    border: 1px solid #93c5fd;
+    border-radius: 8px;
     font-size: 12px;
-    color: var(--bs-body-color);
+    color: #2563eb;
+}
+
+.patient-studies-info i {
+    color: #4a90e2;
 }
 
 .patient-studies-info a {
-    color: #4a90e2;
+    color: #357abd;
     text-decoration: none;
+    font-weight: 500;
 }
 
 .patient-studies-info a:hover {
     text-decoration: underline;
 }
 
+/* ===========================================
+   LABELS SECTION
+   =========================================== */
 .labels-section {
-    margin-bottom: 20px;
-    padding: 15px;
-    background: rgba(0, 0, 0, 0.02);
-    border-radius: 8px;
+    margin-bottom: 24px;
+    padding: 16px 20px;
+    background: #f9fafb;
+    border-radius: 10px;
+    border: 1px solid #f3f4f6;
 }
 
 .labels-section h6 {
-    margin-bottom: 10px;
-    color: var(--bs-body-color);
+    margin-bottom: 12px;
+    color: #374151;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.labels-section h6 i {
+    color: #4a90e2;
 }
 
 .labels-list {
@@ -409,32 +461,43 @@ export default {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 3px 10px;
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.1) 0%, rgba(74, 144, 226, 0.05) 100%);
-    border: 1px solid rgba(74, 144, 226, 0.2);
-    border-radius: 12px;
-    font-size: 11px;
-    color: #4a90e2;
+    padding: 5px 12px;
+    background: #e8f4fd;
+    border: 1px solid #93c5fd;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #2563eb;
     font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.study-label:hover {
+    background: #d1e9fa;
 }
 
 .study-label i {
-    font-size: 9px;
+    font-size: 10px;
     opacity: 0.7;
 }
 
+/* ===========================================
+   ACTIONS SECTION
+   =========================================== */
 .actions-section {
     display: flex;
     align-items: center;
-    padding: 15px 0;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 16px 0;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 8px;
 }
 
 .actions-label {
     font-weight: 600;
     margin-right: 20px;
-    color: var(--bs-body-color);
-    font-size: 14px;
+    color: #374151;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .action-buttons {
@@ -443,27 +506,51 @@ export default {
     flex-wrap: wrap;
 }
 
+/* ===========================================
+   AUDIT LOGS
+   =========================================== */
 .audit-logs-link {
-    padding-top: 10px;
+    padding-top: 12px;
 }
 
 .audit-logs-link a {
     color: #4a90e2;
     text-decoration: none;
     font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #e8f4fd;
+    border-radius: 6px;
+    transition: all 0.15s ease;
 }
 
 .audit-logs-link a:hover {
-    text-decoration: underline;
+    background: #d1e9fa;
+    text-decoration: none;
 }
 
+/* ===========================================
+   SERIES SECTION
+   =========================================== */
 .series-section {
-    padding: 0 20px 20px 20px;
+    padding: 0 16px 16px 16px;
 }
 
+/* ===========================================
+   RESPONSIVE
+   =========================================== */
 @media (max-width: 768px) {
     .details-grid {
         grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .details-content {
+        margin: 12px;
+        padding: 16px;
     }
 }
 </style>
@@ -475,12 +562,44 @@ export default {
 }
 
 .study-details-container .study-button-group .btn {
-    padding: 6px 12px;
-    font-size: 0.875rem;
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.15s ease;
 }
 
 .study-details-container .study-button-group .btn-group .btn {
-    padding: 6px 12px;
-    font-size: 0.875rem;
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: 0;
+}
+
+.study-details-container .study-button-group .btn-group .btn:first-child {
+    border-radius: 6px 0 0 6px;
+}
+
+.study-details-container .study-button-group .btn-group .btn:last-child {
+    border-radius: 0 6px 6px 0;
+}
+
+.study-details-container .study-button-group .btn-primary {
+    background: #4a90e2;
+    border-color: #4a90e2;
+}
+
+.study-details-container .study-button-group .btn-primary:hover {
+    background: #357abd;
+    border-color: #357abd;
+}
+
+.study-details-container .study-button-group .btn-outline-secondary {
+    border-color: #e5e7eb;
+    color: #374151;
+}
+
+.study-details-container .study-button-group .btn-outline-secondary:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
 }
 </style>

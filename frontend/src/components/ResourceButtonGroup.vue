@@ -1221,17 +1221,101 @@ export default {
 </template>
 
 <style>
-
-.custom-button:disabled {
-    pointer-events: none;
-    background-color: #6c757d;
-    opacity: 0.65;
-}
-
+/* ===========================================
+   MODERN ACTION BUTTONS - Heavy Style
+   =========================================== */
 .custom-button-group {
     position: relative;
     display: inline-flex;
     vertical-align: middle;
+    gap: 4px;
+}
+
+.custom-button-group .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    height: 38px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    border: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.custom-button-group .btn i {
+    font-size: 16px;
+}
+
+.custom-button-group .btn.btn-secondary {
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+
+.custom-button-group .btn.btn-secondary:hover {
+    background: #4a90e2;
+    color: #ffffff;
+    border-color: #4a90e2;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25);
+}
+
+.custom-button-group .btn.btn-secondary:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.custom-button-group .btn:disabled,
+.custom-button-group .btn.disabled {
+    pointer-events: none;
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+    opacity: 0.7;
+    box-shadow: none;
+    transform: none;
+}
+
+/* Small icon buttons */
+.custom-button-group .btn.btn-icon-small {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 6px;
+}
+
+.custom-button-group .btn.btn-icon-small i {
+    font-size: 14px;
+}
+
+/* Dropdown styling */
+.custom-button-group .dropdown-toggle::after {
+    margin-left: 6px;
+}
+
+.custom-button-group .dropdown-menu {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+    padding: 8px;
+    min-width: 180px;
+}
+
+.custom-button-group .dropdown-item {
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #374151;
+    transition: all 0.15s ease;
+}
+
+.custom-button-group .dropdown-item:hover {
+    background: #e8f4fd;
+    color: #2563eb;
 }
 
 .dropdown-submenu {
@@ -1242,9 +1326,55 @@ export default {
     top: 0;
     right: 100%;
     margin-top: -1px;
+    border-radius: 10px;
 }
 
 .fa-button {
     line-height: 1.5;
+}
+
+/* Token Link Button styling inside custom-button-group */
+.custom-button-group .token-link-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    height: 38px;
+    padding: 0 12px;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    font-weight: 500;
+    font-size: 14px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.custom-button-group .token-link-button:hover {
+    background: #4a90e2;
+    color: #ffffff;
+    border-color: #4a90e2;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25);
+    text-decoration: none;
+}
+
+.custom-button-group .token-link-button i {
+    font-size: 16px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .custom-button-group .btn {
+        min-width: 34px;
+        height: 34px;
+        padding: 0 10px;
+    }
+    
+    .custom-button-group .btn i {
+        font-size: 14px;
+    }
 }
 </style>

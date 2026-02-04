@@ -28,30 +28,30 @@ document._allowedFilters = ["StudyDate", "StudyTime", "AccessionNumber", "Patien
 
 document._studyColumns = {
     "StudyDate": {
-        "width": "7%",
+        "width": "8%",
         "isOrderable": true
     },
     "AccessionNumber": {
-        "width": "11%",
+        "width": "10%",
         "placeholder": "1234",
         "isOrderable": true
     },
     "PatientID": {
-        "width": "11%",
+        "width": "10%",
         "placeholder": "1234",
         "isOrderable": true
     },
     "PatientName": {
-        "width": "15%",
+        "width": "14%",
         "placeholder": "John^Doe",
         "isOrderable": true
     },
     "PatientBirthDate": {
-        "width": "7%",
+        "width": "9%",
         "isOrderable": true
     },
     "StudyDescription": {
-        "width": "25%",
+        "width": "20%",
         "placeholder": "Chest",
         "isOrderable": true
     },
@@ -66,7 +66,7 @@ document._studyColumns = {
         "isOrderable": false
     },
     "modalities": {
-        "width": "6%",
+        "width": "5%",
         "isOrderable": false
     },
     "seriesCount": {
@@ -78,7 +78,7 @@ document._studyColumns = {
         "isOrderable": false
     },
     "seriesAndInstancesCount": {
-        "width": "7%",
+        "width": "6%",
         "isOrderable": false
     },
     "undefined": {
@@ -1093,19 +1093,20 @@ export default {
 
 
 <template>
-    <div>
+    <div class="study-list-page">
         <div v-if="isRemoteDicom || isRemoteDicomWeb" class="remote-browsing-warning">
             <div>
                 <p v-if="isRemoteDicom" v-html="$t('remote_dicom_browsing', { source: remoteSource})"></p>
                 <p v-if="isRemoteDicomWeb" v-html="$t('remote_dicom_web_browsing', { source: remoteSource})"></p>
             </div>
         </div>
+        <div class="study-list-table-wrapper">
         <table class="table table-sm study-table table-borderless">
             <thead class="sticky-top">
                 <tr class="study-column-titles">
-                    <th :width="widthColum1" max-width="40px" scope="col"></th>
-                    <th v-if="hasPrimaryViewerIcon" width="2%" max-width="30px" scope="col" ></th>
-                    <th v-if="hasPdfReportIcon" width="2%" max-width="30px" scope="col" ></th>
+                    <th scope="col" style="width: 40px; min-width: 40px; max-width: 40px; padding: 0; text-align: center;"></th>
+                    <th v-if="hasPrimaryViewerIcon" scope="col" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0; text-align: center;"></th>
+                    <th v-if="hasPdfReportIcon" scope="col" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0; text-align: center;"></th>
                     <th v-for="columnTag in uiOptions.StudyListColumns" :key="columnTag" data-bs-toggle="tooltip"
                         v-bind:title="columnTooltip(columnTag)" v-bind:width="columnWidth(columnTag)"
                         class="study-table-title">
@@ -1118,7 +1119,7 @@ export default {
                     </th>
                 </tr>
                 <tr class="study-table-filters" v-on:keyup.enter="search">
-                    <th scope="col" :colspan="colSpanClearFilter">
+                    <th scope="col" :colspan="colSpanClearFilter" style="width: 40px; min-width: 40px; padding: 0 4px; text-align: center; vertical-align: middle;">
                         <button @click="clearFilters" type="button" class="clear-filter-btn"
                             data-bs-toggle="tooltip" title="Clear filter">
                             <i class="fa-regular fa-circle-xmark"></i>
@@ -1173,18 +1174,21 @@ export default {
                 </tr>
 
                 <tr v-if="isMultiLabelsFilterVisible" class="study-table-actions">
-                    <th :colspan="colSpanBeforeMultiLabelsFilter" scope="col">
-                        <div class="w-100 d-flex justify-content-end">
-                            <label class="form-check-label text-end" for="multiLabelsFilter">{{ $t('labels.study_details_title') }}
+                    <th scope="col" style="width: 40px; min-width: 40px; max-width: 40px; padding: 0;"></th>
+                    <th v-if="hasPrimaryViewerIcon" scope="col" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0;"></th>
+                    <th v-if="hasPdfReportIcon" scope="col" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0;"></th>
+                    <th :colspan="colSpanMultiLabelsFilter - (hasPrimaryViewerIcon ? 1 : 0) - (hasPdfReportIcon ? 1 : 0)" scope="col">
+                        <div class="w-100 d-flex justify-content-end align-items-center">
+                            <label class="form-check-label text-end me-2" for="multiLabelsFilter">{{ $t('labels.study_details_title') }}
                             </label>
                         </div>
                     </th>
-                    <th :colspan="colSpanMultiLabelsFilter" scope="col">
+                    <th colspan="3" scope="col">
                         <LabelsEditor id="multiLabelsFilter" :labels="filterLabels" :key="multiLabelsComponentKey" :studyId="null" @labelsUpdated="onMultiLabelsFilterChanged"
                          :showTitle="false" :isFilter="true"></LabelsEditor>
                     </th>
-                    <th :colspan="colSpanAfterMultiLabelsFilter" scope="col">
-                        <div class="w-100 d-flex">
+                    <th :colspan="uiOptions.StudyListColumns ? uiOptions.StudyListColumns.length - 3 : 3" scope="col">
+                        <div class="w-100 d-flex align-items-center">
                             <input class="form-check-input ms-2 me-1" type="radio" name="multiLabelsFilterAll" id="multiLabelsFilterAll"
                                 value="All" v-model="multiLabelsFilterLabelsConstraint">
                             <label class="form-check-label" for="multiLabelsFilterAll">{{ $t('labels.filter_labels_constraint_all') }}
@@ -1197,15 +1201,16 @@ export default {
                     </th>
                 </tr>
                 <tr class="study-table-actions">
-                    <th width="2%" :colspan="colSpanBeforeMultiLabelsFilter" scope="col">
-                        <div class="form-check" style="margin-left: 0.5rem">
-                            <input class="form-check-input" type="checkbox" v-model="allSelected"
-                                :indeterminate="isPartialSelected" @click="clickSelectAll"><span style="font-weight: 400; font-size: small;">{{ selectedStudiesCount }}</span>
-                        </div>
+                    <th scope="col" style="width: 40px; min-width: 40px; max-width: 40px; padding: 0; text-align: center; vertical-align: middle;">
+                        <input class="form-check-input" type="checkbox" v-model="allSelected"
+                            :indeterminate="isPartialSelected" @click="clickSelectAll"
+                            style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
                     </th>
-                    <th width="98%" :colspan="colSpanMultiLabelsFilter + colSpanAfterMultiLabelsFilter" scope="col">
-                        <div class="container px-0">
-                            <div class="row g-1">
+                    <th v-if="hasPrimaryViewerIcon" scope="col" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0;"></th>
+                    <th v-if="hasPdfReportIcon" scope="col" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0;"></th>
+                    <th :colspan="uiOptions.StudyListColumns ? uiOptions.StudyListColumns.length : 8" scope="col">
+                        <div class="study-list-actions-wrap container px-0">
+                            <div class="row g-1 flex-nowrap flex-md-wrap">
                                 <div class="col-6 study-list-bulk-buttons">
                                     <ResourceButtonGroup :resourceLevel="'bulk'" smallIcons="true">
                                     </ResourceButtonGroup>
@@ -1275,6 +1280,7 @@ export default {
                 @deletedStudy="onDeletedStudy">
             </StudyItem>
         </table>
+        </div>
         <Toasts/>
     </div>
 </template>
@@ -1285,339 +1291,391 @@ export default {
     --filter-padding: 2px;
 }
 
-input.form-control.study-list-filter {
-  margin-top: var(--filter-margin);
-  margin-bottom: var(--filter-margin);
-  padding-top: var(--filter-padding);
-  padding-bottom: var(--filter-padding);
-  padding-left: 8px;
-  padding-right: 8px;
-  border-bottom-width: thin;
-  font-size: 13px;
-  height: 36px;
+/* ===========================================
+   PAGE CONTAINER - Modern Layout
+   =========================================== */
+.study-list-page {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    padding: 16px;
+    background: #f8fafc;
+    min-height: calc(100vh - 60px);
 }
 
-.filter-button {
-  border-bottom-width: thin !important;
-  border-color: var(--bs-border-color);
+.study-list-table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 8px;
 }
 
-/* Clear filter button - fixed size to prevent shrinking */
-.clear-filter-btn {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--bs-border-color);
-  border-radius: 6px;
-  background-color: var(--bs-body-bg);
-  color: var(--bs-body-color);
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-top: var(--filter-margin);
-  margin-bottom: var(--filter-margin);
+/* ===========================================
+   TABLE BASE - Modern Card Style
+   =========================================== */
+.study-table {
+    table-layout: auto;
+    min-width: 1100px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    background: #ffffff;
 }
 
-.clear-filter-btn:hover {
-  background-color: var(--bs-light);
-}
-
-.clear-filter-btn i {
-  font-size: 14px;
-}
-
-.search-button {
-  padding-left: 0px !important;
-}
-
-.is-not-searching {
-  background-color: var(--table-filters-is-not-searching-color) !important;
-  border-color: var(--table-filters-is-not-searching-color) !important;
-}
-
-.is-searching {
-  background-color: var(--table-filters-is-searching-color) !important;
-  border-color: var(--table-filters-is-searching-color) !important;
-}
-
-button.form-control.study-list-filter {
-  margin-top: var(--filter-margin);
-  margin-bottom: var(--filter-margin);
-  padding-top: var(--filter-padding);
-  padding-bottom: var(--filter-padding);
-  height: 38px !important;
-  line-height: 1.5;
-  box-sizing: border-box;
-}
-
-
+/* ===========================================
+   HEADER TITLES - Modern Typography
+   =========================================== */
 .study-column-titles {
-  background-color: var(--study-table-header-bg-color) !important;
-  font-size: 13px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #f8fafc !important;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    border-bottom: 2px solid #e2e8f0 !important;
 }
-
 
 .study-table-title {
-  text-align: left;
-  padding-left: 4px;
-  padding-right: 4px;
-  padding-top: 14px;
-  padding-bottom: 14px;
-  vertical-align: middle !important;
-  line-height: 1.5;
-  position: sticky;
-  font-size: 13px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-weight: 400;
+    text-align: left;
+    padding: 14px 10px;
+    vertical-align: middle !important;
+    line-height: 1.5;
+    position: sticky;
+    font-size: 11px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
 }
 
 .study-column-titles th {
-  vertical-align: middle !important;
+    vertical-align: middle !important;
 }
 
-/* .study-table> :not(:first-child) {
-  border-top: 0px !important;
-} */
-
-.study-table {
-  table-layout: fixed;
-}
-
-.study-table> :nth-child(odd) >tr >td{
-  background-color: var(--study-odd-bg-color);
-}
-
-.study-table> :nth-child(even) >tr >td{
-  background-color: var(--study-even-bg-color);
-}
-
-/* only on the first child of each tbody to prevent hover over the labels row */
-.study-table>tbody>tr:first-child:hover > * {
-  background-color: var(--study-hover-color);
-}
-
-.study-table > tbody > tr.study-row-expanded:hover > *{
-  background-color: var(--study-details-bg-color);
-}
-.study-table > tbody > tr.study-details-expanded:hover > *{
-  background-color: var(--study-details-bg-color);
-}
-
-.study-table> :last-child {
-  border-bottom-width: thin;
-}
-
-.study-table tr:hover {
-  background-color: var(--study-hover-color);
-}
-
-
+/* ===========================================
+   FILTER ROW - Clean Input Style
+   =========================================== */
 .study-table-filters {
-  background-color: var(--study-table-filter-bg-color);
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    position: relative;
+    z-index: 1;
 }
 
 .study-table-filters > th {
-  background-color: var(--study-table-filter-bg-color);
+    background: #ffffff;
+    text-align: left;
+    padding: 8px 6px !important;
+    vertical-align: middle;
+    position: relative;
+    z-index: auto;
+    overflow: visible !important;
 }
 
-.study-table-filters > th >  button{
-  background-color: var(--bs-table-bg);
+.study-table-filters > th > div {
+    position: relative;
+    z-index: auto;
+    overflow: visible !important;
 }
 
-.study-table-filters > th {
-  text-align: left;
-  padding-left: 6px !important;
-  padding-top: 0px;
-  padding-bottom: 0px;
-  margin-bottom: 5px;
-  vertical-align: middle;    
+.study-table-filters > th > button {
+    background-color: var(--bs-table-bg);
 }
 
-/* Date picker styling to match other inputs */
+input.form-control.study-list-filter {
+    height: 34px;
+    padding: 6px 10px;
+    font-size: 13px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #f9fafb;
+    transition: all 0.15s ease;
+    margin: 0;
+}
+
+input.form-control.study-list-filter:focus {
+    border-color: #4a90e2;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+}
+
+/* Clear filter button */
+.clear-filter-btn {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #f9fafb;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin: 0;
+}
+
+.clear-filter-btn:hover {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #dc2626;
+}
+
+.clear-filter-btn i {
+    font-size: 13px;
+}
+
+/* Filter button (modality dropdown) */
+.filter-button {
+    border: 1px solid #e5e7eb !important;
+    border-radius: 6px !important;
+    background: #f9fafb !important;
+    height: 34px;
+    padding: 0 12px;
+    font-size: 13px;
+    transition: all 0.15s ease;
+}
+
+.filter-button:hover {
+    background: #f3f4f6 !important;
+    border-color: #d1d5db !important;
+}
+
+button.form-control.study-list-filter {
+    margin: 0;
+    height: 34px !important;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+/* Date picker styling */
 .study-table-filters .dp__input_wrap {
-  height: 38px;
-  display: flex;
-  align-items: center;
+    height: 34px;
+    display: flex;
+    align-items: center;
 }
 
 .study-table-filters .dp__input {
-  height: 38px !important;
-  min-height: 38px !important;
-  max-height: 38px !important;
-  padding: 10px 14px !important;
-  border-radius: 10px;
-  border: 1px solid #e5e7eb;
-  font-size: 0.875rem;
-  transition: all 0.2s ease;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  line-height: 1.5;
-  box-sizing: border-box;
+    height: 34px !important;
+    min-height: 34px !important;
+    max-height: 34px !important;
+    padding: 6px 10px !important;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    background: #f9fafb;
+    box-shadow: none;
+    line-height: 1.5;
+    box-sizing: border-box;
 }
 
 .study-table-filters .dp__input:focus {
-  border-color: #4a90e2;
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06);
-  outline: none;
-  background: white;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+    outline: none;
+    background: white;
 }
 
-/* Date picker calendar z-index - must be very high to ensure visibility */
-.dp__menu {
-  z-index: 999999 !important;
-  position: absolute !important;
-  top: 100% !important;
-  left: 0 !important;
-  margin-top: 4px !important;
-}
-
-.dp__calendar_wrap {
-  z-index: 999999 !important;
-  position: relative !important;
-}
-
-.dp__calendar {
-  z-index: 999999 !important;
-}
-
-.dp__overlay {
-  z-index: 999998 !important;
-}
-
-.dp__menu_transitioned {
-  z-index: 999999 !important;
-  position: absolute !important;
-  top: 100% !important;
-  left: 0 !important;
-  margin-top: 4px !important;
-}
-
-.dp__outer_menu_wrap {
-  z-index: 999999 !important;
-  position: absolute !important;
-  top: 100% !important;
-  left: 0 !important;
-  margin-top: 4px !important;
-}
-
-/* Ensure datepicker container is positioned relative for absolute positioning */
 .study-table-filters th > div:has(.dp__input_wrap) {
-  position: relative !important;
+    position: relative !important;
+    height: 34px;
+    display: flex;
+    align-items: center;
 }
 
 .study-table-filters .dp__input_wrap {
-  position: relative !important;
+    position: relative !important;
 }
 
-/* Ensure no parent elements block the calendar */
-.study-table-filters {
-  position: relative;
-  z-index: 1;
+/* Date picker calendar z-index */
+.dp__menu {
+    z-index: 999999 !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    margin-top: 4px !important;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
 }
 
-.study-table-filters th {
-  position: relative;
-  z-index: auto;
-  overflow: visible !important;
-}
+.dp__calendar_wrap { z-index: 999999 !important; position: relative !important; }
+.dp__calendar { z-index: 999999 !important; }
+.dp__overlay { z-index: 999998 !important; }
+.dp__menu_transitioned { z-index: 999999 !important; position: absolute !important; top: 100% !important; left: 0 !important; margin-top: 4px !important; }
+.dp__outer_menu_wrap { z-index: 999999 !important; position: absolute !important; top: 100% !important; left: 0 !important; margin-top: 4px !important; }
 
-.study-table-filters th > div {
-  position: relative;
-  z-index: auto;
-  overflow: visible !important;
-}
-
-/* Ensure date picker container doesn't affect height */
-.study-table-filters th > div:has(.dp__input_wrap) {
-  height: 38px;
-  display: flex;
-  align-items: center;
-}
-
-.study-table td {
-  text-align: left;
-  padding-left: 10px;
-}
-
-.study-list-alert {
-  margin-top: var(--filter-margin);
-  margin-bottom: var(--filter-margin);
-  padding-top: var(--filter-padding);
-}
-
-.modern-badge {
-  background: rgba(74, 144, 226, 0.1) !important;
-  border: 1px solid rgba(74, 144, 226, 0.2) !important;
-  border-radius: 8px !important;
-  color: #357abd !important;
-  padding: 10px 16px !important;
-  font-size: 0.875rem !important;
-  font-weight: 500 !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
-  backdrop-filter: blur(8px) !important;
-}
-
-.modern-badge .alert-icon {
-  margin-right: 8px;
-  color: #4a90e2;
-  padding-bottom: var(--filter-padding);
-}
-
-.study-list-bulk-buttons {
-  margin-top: var(--filter-margin);
-}
-
-.is-invalid-filter {
-  /* background-color: #f7dddf !important; */
-  border-color: red !important;
-  box-shadow: 0 0 0 .25rem rgba(255, 0, 0, .25) !important;
-}
-
-.alert-icon {
-  margin-right: 0.7rem;
-}
-
+/* ===========================================
+   ACTIONS ROW - Modern Toolbar
+   =========================================== */
 .study-table-actions > th {
-  background-color: var(--study-table-actions-bg-color) !important;
-  vertical-align: middle;
+    background: #f9fafb !important;
+    vertical-align: middle;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 12px !important;
 }
 
 .study-table-actions > th > div {
-  background-color: var(--study-table-actions-bg-color) !important;
-  text-align: left;
+    background: transparent !important;
+    text-align: left;
 }
 
-.study-details-table {
-  margin-top: var(--details-top-margin);
-  margin-left: 5%;
-  width: 95% !important;
-  font-size: 0.9rem;
+.study-list-actions-wrap .row {
+    flex-wrap: wrap;
+    align-items: center;
 }
 
-.study-details-table>:not(caption) >* >* {
-  background-color: var(--study-details-bg-color) !important;
+.study-list-actions-wrap .row.flex-nowrap.flex-md-wrap {
+    flex-wrap: wrap;
 }
 
-.study-details-table >* >* {
-  background-color: var(--study-details-bg-color) !important;
+@media (min-width: 768px) {
+    .study-list-actions-wrap .row.flex-nowrap.flex-md-wrap {
+        flex-wrap: nowrap;
+    }
 }
 
-.study-details-table td {
-  vertical-align: top;
+.study-list-actions-wrap .study-list-bulk-buttons {
+    min-width: 0;
 }
 
-.remote-browsing-warning {
-    background-color: var(--study-list-remote-bg-color);
-    text-align: center;
+.study-list-actions-wrap .col-6,
+.study-list-actions-wrap .col-4,
+.study-list-actions-wrap .col-2 {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.study-list-bulk-buttons {
+    margin-top: 0;
+}
+
+/* Search button */
+.search-button {
+    padding: 0 16px !important;
+    height: 34px;
+    border-radius: 6px !important;
     font-weight: 500;
-    height: 2rem;
-    line-height: 2rem;
+    transition: all 0.15s ease;
 }
 
+.is-not-searching {
+    background: #4a90e2 !important;
+    border-color: #4a90e2 !important;
+    color: white !important;
+}
+
+.is-not-searching:hover {
+    background: #357abd !important;
+    border-color: #357abd !important;
+}
+
+.is-searching {
+    background: #f59e0b !important;
+    border-color: #f59e0b !important;
+    color: white !important;
+}
+
+/* Alerts */
+.study-list-alert {
+    margin: 0;
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: 6px;
+}
+
+.modern-badge {
+    background: #e8f4fd !important;
+    border: 1px solid #93c5fd !important;
+    border-radius: 6px !important;
+    color: #2563eb !important;
+    padding: 8px 14px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+}
+
+.modern-badge .alert-icon {
+    margin-right: 8px;
+    color: #4a90e2;
+}
+
+.alert-icon {
+    margin-right: 8px;
+}
+
+/* ===========================================
+   TABLE BODY - Row Styling
+   =========================================== */
+.study-table td {
+    text-align: left;
+    padding: 12px 10px;
+    font-size: 13px;
+    color: #374151;
+    border-bottom: 1px solid #f3f4f6;
+    vertical-align: middle;
+}
+
+.study-table> :nth-child(odd) >tr >td {
+    background-color: #ffffff;
+}
+
+.study-table> :nth-child(even) >tr >td {
+    background-color: #fafbfc;
+}
+
+.study-table>tbody>tr:first-child:hover > * {
+    background-color: #f1f5f9;
+}
+
+.study-table tr:hover {
+    background-color: #f1f5f9;
+}
+
+.study-table > tbody > tr.study-row-expanded:hover > * {
+    background-color: var(--study-details-bg-color);
+}
+
+.study-table > tbody > tr.study-details-expanded:hover > * {
+    background-color: var(--study-details-bg-color);
+}
+
+.study-table> :last-child {
+    border-bottom-width: 0;
+}
+
+/* ===========================================
+   COLUMN WIDTHS - Checkbox & Icon Columns
+   =========================================== */
+/* Checkbox column - consistent 40px */
+.study-table th:first-child,
+.study-table td:first-child {
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    padding: 0 !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    box-sizing: border-box;
+}
+
+/* Icon columns - consistent 36px */
+.study-table .td-viewer-icon,
+.study-table .td-pdf-icon {
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    padding: 0 !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+
+/* ===========================================
+   TITLE & ORDERING
+   =========================================== */
 .title-container {
     position: relative;
     width: 100%;
@@ -1629,33 +1687,77 @@ button.form-control.study-list-filter {
 .title-text {
     position: relative;
     padding-left: 2px;
-    padding-right: 2px;
+    padding-right: 16px;
     width: 100%;
-    border-left: 1px;
-    border-right: 0px;
-    border-top: 0px;
-    border-bottom: 0px;
-    border-style: solid;
-    border-color: var(--study-table-actions-bg-color);
     text-overflow: ellipsis;
     overflow: hidden;
     line-height: 1.5;
+    border: none;
 }
 
 .is-orderable {
     cursor: pointer;
     user-select: none;
+    transition: color 0.15s ease;
+}
+
+.is-orderable:hover {
+    color: #357abd;
 }
 
 .title-arrow {
     position: absolute;
-    font-size: medium;
+    font-size: 11px;
     bottom: 0;
     right: 0;
-    padding-right: 5px;
+    padding-right: 2px;
+    color: #4a90e2;
 }
 
-/* Empty state styles */
+/* ===========================================
+   STUDY DETAILS
+   =========================================== */
+.study-details-table {
+    margin-top: var(--details-top-margin);
+    margin-left: 5%;
+    width: 95% !important;
+    font-size: 13px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.study-details-table>:not(caption) >* >* {
+    background-color: var(--study-details-bg-color) !important;
+}
+
+.study-details-table >* >* {
+    background-color: var(--study-details-bg-color) !important;
+}
+
+.study-details-table td {
+    vertical-align: top;
+    padding: 10px 12px;
+}
+
+/* ===========================================
+   REMOTE BROWSING WARNING
+   =========================================== */
+.remote-browsing-warning {
+    background: #fef3c7;
+    text-align: center;
+    font-weight: 500;
+    height: 2.5rem;
+    line-height: 2.5rem;
+    color: #92400e;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    border: 1px solid #fde68a;
+}
+
+/* ===========================================
+   EMPTY STATE
+   =========================================== */
 .empty-state-tbody tr.empty-state-row:hover,
 .empty-state-tbody tr.empty-state-row:hover > td {
     background-color: transparent !important;
@@ -1664,30 +1766,68 @@ button.form-control.study-list-filter {
 
 .empty-state {
     text-align: center;
-    padding: 60px 20px;
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 80px 20px;
+    background: #f8fafc;
     border-radius: 12px;
     margin: 20px;
+    border: 1px solid #e5e7eb;
 }
 
 .empty-state-icon {
-    font-size: 64px;
-    color: #adb5bd;
+    font-size: 56px;
+    color: #cbd5e1;
     margin-bottom: 20px;
 }
 
 .empty-state-title {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 600;
-    color: #495057;
-    margin-bottom: 10px;
+    color: #374151;
+    margin-bottom: 8px;
 }
 
 .empty-state-text {
     font-size: 14px;
-    color: #6c757d;
-    max-width: 400px;
+    color: #6b7280;
+    max-width: 360px;
     margin: 0 auto;
     line-height: 1.6;
+}
+
+/* ===========================================
+   VALIDATION & INVALID FILTER
+   =========================================== */
+.is-invalid-filter {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+/* ===========================================
+   CHECKBOX STYLING
+   =========================================== */
+.study-table-actions .form-check-input {
+    width: 16px;
+    height: 16px;
+    margin-top: 0;
+    cursor: pointer;
+}
+
+.study-table-actions .form-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding-left: 0.5rem;
+}
+
+.study-table-actions .form-check span {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.form-check-input:checked {
+    background-color: #4a90e2;
+    border-color: #4a90e2;
 }
 </style>

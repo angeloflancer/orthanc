@@ -208,12 +208,11 @@ export default {
 <template>
     <tbody>
         <tr v-if="loaded" class="study-row" :class="{ 'study-row-collapsed': !expanded, 'study-row-expanded': expanded, 'study-row-show-labels': showLabels }">
-            <td style="vertical-align: middle; padding-right: 8px;">
-                <div class="form-check" style="display: flex; align-items: center; justify-content: center; height: 100%;">
-                    <input class="form-check-input" type="checkbox" v-model="selected" @click="clickedSelect" style="margin: 0;">
-                </div>
+            <td style="width: 40px; min-width: 40px; max-width: 40px; padding: 0; text-align: center; vertical-align: middle;">
+                <input class="form-check-input" type="checkbox" v-model="selected" @click="clickedSelect" 
+                    style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
             </td>
-            <td v-if="hasPrimaryViewerIcon" class="td-viewer-icon" style="padding-left: 8px;">
+            <td v-if="hasPrimaryViewerIcon" class="td-viewer-icon" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0; text-align: center; vertical-align: middle;">
                 <TokenLinkButton v-if="primaryViewerUrl"
                     level="study" :linkUrl="primaryViewerUrl"
                     :resourcesOrthancId="[study.ID]" linkType="icon"
@@ -221,8 +220,8 @@ export default {
                     :tokenType="primaryViewerTokenType" :opensInNewTab="true">
                 </TokenLinkButton>
             </td>
-            <td v-if="hasPrimaryViewerIconPlaceholder"></td>
-            <td v-if="hasPdfReportIcon" class="td-pdf-icon">
+            <td v-if="hasPrimaryViewerIconPlaceholder" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0;"></td>
+            <td v-if="hasPdfReportIcon" class="td-pdf-icon" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0; text-align: center; vertical-align: middle;">
                 <TokenLinkButton v-for="pdfReport in pdfReports" :key="pdfReport.id"
                     level="study" :linkUrl="pdfReport.url"
                     :resourcesOrthancId="[study.ID]" linkType="icon"
@@ -231,7 +230,7 @@ export default {
                     :title="pdfReport.title">
                 </TokenLinkButton>
             </td>
-            <td v-if="hasPdfReportIconPlaceholder"></td>
+            <td v-if="hasPdfReportIconPlaceholder" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0;"></td>
 
             <td v-for="columnTag in uiOptions.StudyListColumns" :key="columnTag" class="cut-text"
                 :class="{ 'text-center': columnTag in ['modalities', 'seriesCount', 'instancesCount', 'seriesAndInstancesCount'] }" data-bs-toggle="collapse"
@@ -279,9 +278,9 @@ export default {
             </td>
         </tr>
         <tr v-if="showLabels" class="labels-display-row">
-            <td></td>
-            <td v-if="hasPrimaryViewerColumn"></td>
-            <td v-if="hasPdfReportIconColumn"></td>
+            <td style="width: 40px; min-width: 40px; max-width: 40px; padding: 0;"></td>
+            <td v-if="hasPrimaryViewerColumn" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0;"></td>
+            <td v-if="hasPdfReportIconColumn" style="width: 36px; min-width: 36px; max-width: 36px; padding: 0;"></td>
             <td :colspan="uiOptions.StudyListColumns.length" class="label-row">
                 <span v-for="label in study.Labels" :key="label" class="study-label">
                     <i class="fa fa-tag"></i>{{ label }}
@@ -300,26 +299,37 @@ export default {
 </template>
 
 <style scoped>
+/* ===========================================
+   STUDY ROW - Modern Row Style
+   =========================================== */
 .study-row {
     font-size: 13px;
     cursor: pointer;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #f3f4f6;
+    transition: all 0.15s ease;
+}
+
+.study-row:hover > td {
+    background-color: #f8fafc !important;
 }
 
 .study-row-collapsed {
-    border-top-width: 1px;
-    border-color: #ddd;
+    border-top-width: 0;
 }
 
 .study-row-expanded {
-    background-color: var(--study-details-bg-color);
-    font-weight: 600;
-    border-top: 1px solid rgba(229, 231, 235, 0.5) !important;
+    background: #e8f4fd;
+    font-weight: 500;
+    border-top: none !important;
     border-bottom: none !important;
 }
 
 .study-row-expanded > td {
-    background-color: var(--study-details-bg-color) !important;
+    background: #e8f4fd !important;
+}
+
+.study-row-expanded:hover > td {
+    background: #dbeef9 !important;
 }
 
 .study-row-show-labels {
@@ -334,6 +344,9 @@ export default {
     background-color: var(--study-details-bg-color);
 }
 
+/* ===========================================
+   STUDY DETAILS ROW
+   =========================================== */
 .study-details-row {
     background-color: var(--study-details-bg-color);
 }
@@ -341,7 +354,7 @@ export default {
 .study-details-expanded {
     background-color: var(--study-details-bg-color);
     border-top: 0px !important;
-    border-bottom: 1px solid rgba(229, 231, 235, 0.5) !important;
+    border-bottom: 1px solid #e5e7eb !important;
 }
 
 .study-details-expanded > td {
@@ -349,7 +362,9 @@ export default {
     padding: 0 !important;
 }
 
-/* Label styling */
+/* ===========================================
+   LABEL STYLING
+   =========================================== */
 .labels-display-row:hover > td {
     background-color: transparent !important;
 }
@@ -358,14 +373,20 @@ export default {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 3px 10px;
+    padding: 4px 10px;
     margin-right: 6px;
-    background: linear-gradient(135deg, rgba(74, 144, 226, 0.1) 0%, rgba(74, 144, 226, 0.05) 100%);
-    border: 1px solid rgba(74, 144, 226, 0.2);
-    border-radius: 12px;
+    margin-bottom: 2px;
+    background: #e8f4fd;
+    border: 1px solid #93c5fd;
+    border-radius: 6px;
     font-size: 11px;
-    color: #4a90e2;
+    color: #2563eb;
     font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.study-label:hover {
+    background: #d1e9fa;
 }
 
 .study-label i {
@@ -375,16 +396,19 @@ export default {
 
 .label-row {
     border-top: none !important;
-    padding-top: 2px !important;
-    padding-bottom: 6px !important;
+    padding-top: 4px !important;
+    padding-bottom: 8px !important;
 }
 
 .labels-display-row {
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #f3f4f6;
 }
 
+/* ===========================================
+   ICON COLUMNS
+   =========================================== */
 .td-viewer-icon {
-    padding: 0; /* to maximize click space for the icon */
+    padding: 4px !important;
     text-align: center;
     vertical-align: middle;
 }
@@ -396,20 +420,76 @@ export default {
     justify-content: center;
     height: 100%;
     width: 100%;
+    padding: 4px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.td-viewer-icon .token-link-button:hover,
+.td-viewer-icon a:hover {
+    background: #e8f4fd;
 }
 
 .td-viewer-icon .icon i,
 .td-viewer-icon i {
-    color: #4a90e2 !important; /* Primary color */
+    color: #4a90e2 !important;
+    font-size: 16px;
 }
 
 .td-pdf-icon {
-    padding: 0; /* to maximize click space for the icon */
+    padding: 4px !important;
+    text-align: center;
+    vertical-align: middle;
 }
 
+.td-pdf-icon .token-link-button,
+.td-pdf-icon a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.td-pdf-icon .token-link-button:hover,
+.td-pdf-icon a:hover {
+    background: #fef2f2;
+}
+
+.td-pdf-icon i {
+    color: #dc2626 !important;
+    font-size: 16px;
+}
+
+/* ===========================================
+   TEXT UTILITIES
+   =========================================== */
 .cut-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: #374151;
+}
+
+/* ===========================================
+   CHECKBOX STYLING
+   =========================================== */
+.form-check-input {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.form-check-input:checked {
+    background-color: #4a90e2;
+    border-color: #4a90e2;
+}
+
+.form-check-input:hover {
+    border-color: #4a90e2;
 }
 </style>
