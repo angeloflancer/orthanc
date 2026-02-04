@@ -940,7 +940,7 @@ export default {
 .checkbox-wrapper .form-check-input {
     width: 16px;
     height: 16px;
-    margin: 0;
+    margin: 4px;
     cursor: pointer;
     flex-shrink: 0;
 }
@@ -953,9 +953,9 @@ export default {
 
 /* Clear filter button - modern style */
 .clear-filter-btn {
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
     padding: 0;
     display: flex;
     align-items: center;
@@ -973,10 +973,6 @@ export default {
     background: #fee2e2;
     border-color: #fecaca;
     color: #dc2626;
-}
-
-.clear-filter-btn i {
-    font-size: 12px;
 }
 
 /* Row delete button */

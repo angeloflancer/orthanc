@@ -1,156 +1,125 @@
 <template>
   <div class="member-management">
-    <div class="container-fluid py-4">
-      <div class="header-section">
-        <h2 class="mb-0">Hospital Members</h2>
-        <button class="btn btn-primary" @click="showInviteModal = true">
-          <i class="bi bi-person-plus me-2"></i>Invite Doctor
-        </button>
+    <div class="mm-container">
+      <div class="mm-header">
+        <h2 class="mm-title">Hospital Members</h2>
+        <div class="mm-header-actions">
+          <div v-if="hasHospital" class="mm-search-wrap">
+            <i class="bi bi-search mm-search-icon"></i>
+            <input
+              type="text"
+              class="mm-search-input"
+              placeholder="Search by username, name, or email..."
+              v-model="searchQuery"
+              @input="debouncedSearch"
+            />
+          </div>
+          <button type="button" class="mm-btn mm-btn-primary" @click="showInviteModal = true">
+            <i class="bi bi-person-plus"></i> Invite Doctor
+          </button>
+        </div>
       </div>
 
       <!-- No Hospital Warning -->
-      <div v-if="!hasHospital && !loading" class="alert alert-warning">
-        <i class="bi bi-exclamation-triangle me-2"></i>
+      <div v-if="!hasHospital && !loading" class="mm-alert mm-alert-warning">
+        <i class="bi bi-exclamation-triangle"></i>
         You need to create a hospital first before managing members.
-        <router-link to="/hospital-settings" class="alert-link ms-2">Create Hospital</router-link>
+        <router-link to="/hospital-settings" class="mm-alert-link">Create Hospital</router-link>
       </div>
 
-      <!-- Filters -->
-      <div v-if="hasHospital" class="filters-section mb-4">
-        <div class="search-box">
-          <i class="bi bi-search"></i>
-          <input 
-            type="text" 
-            class="form-control" 
-            placeholder="Search by username, name, or email..."
-            v-model="searchQuery"
-            @input="debouncedSearch"
-          />
-        </div>
-        <div class="filter-buttons">
-          <button 
-            v-for="status in statuses" 
-            :key="status.value"
-            class="btn btn-filter"
-            :class="{ active: filterStatus === status.value }"
-            @click="filterStatus = status.value; loadMembers()"
-          >
-            {{ status.label }}
-            <span v-if="statusCounts[status.value]" class="count-badge">
-              {{ statusCounts[status.value] }}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Members Table -->
-      <div v-if="hasHospital" class="card shadow-sm">
-        <div class="table-responsive">
-          <table class="table table-hover mb-0">
-            <thead>
-              <tr>
-                <th style="text-align: left;">Username</th>
-                <th style="text-align: left;">Name</th>
-                <th style="text-align: left;">Email</th>
-                <th style="text-align: left;">Status</th>
-                <th style="text-align: left;">Joined</th>
-                <th style="text-align: left;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="loading">
-                <td colspan="6" class="text-center py-4">
-                  <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                  </div>
-                </td>
-              </tr>
-              <tr v-else-if="members.length === 0">
-                <td colspan="6" class="text-center py-4 text-muted">
-                  <i class="bi bi-people display-4 d-block mb-2"></i>
-                  No members found
-                </td>
-              </tr>
-              <tr v-for="member in members" :key="member.id">
-                <td>
-                  <span class="username">@{{ member.user.username }}</span>
-                </td>
-                <td>{{ member.user.name }}</td>
-                <td>{{ member.user.email }}</td>
-                <td>
-                  <span class="status-badge" :class="member.status">
-                    {{ formatStatus(member.status) }}
-                  </span>
-                </td>
-                <td>{{ member.joinedAt ? formatDate(member.joinedAt) : '-' }}</td>
-                <td>
-                  <div class="action-buttons">
-                    <button 
-                      v-if="member.status === 'pending'"
-                      class="btn btn-sm btn-success"
-                      @click="acceptMember(member)"
-                      title="Accept Request"
-                    >
-                      <i class="bi bi-check-lg"></i>
-                    </button>
-                    <span 
-                      v-if="member.status === 'pending_invitation'"
-                      class="invite-status-pill"
-                      title="Invitation sent. Waiting for doctor."
-                    >
-                      <i class="bi bi-hourglass-split me-1"></i>
-                      Invite Sent
+      <!-- Members card (owner Hospital Management style) -->
+      <div v-if="hasHospital" class="mm-card">
+        <div class="mm-members-section">
+          <!-- Status filter pills -->
+          <div class="mm-filter-pills">
+            <button
+              v-for="opt in filterOptions"
+              :key="opt.value"
+              type="button"
+              class="mm-pill"
+              :class="{ active: filterStatus === opt.value }"
+              @click="setFilter(opt.value)"
+            >
+              {{ opt.label }}
+              <span v-if="opt.value && statusCounts[opt.value]" class="mm-pill-count">{{ statusCounts[opt.value] }}</span>
+            </button>
+          </div>
+          <div v-if="loading" class="mm-members-loading">
+            <div class="mm-spinner" role="status"></div>
+          </div>
+          <div v-else-if="members.length === 0" class="mm-members-empty">
+            No members yet. Invite a doctor by username.
+          </div>
+          <div v-else class="mm-members-wrap">
+            <table class="mm-members-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th class="mm-col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="member in members" :key="member.id">
+                  <td>{{ member.user ? member.user.name : '—' }}</td>
+                  <td>@{{ member.user ? member.user.username : '—' }}</td>
+                  <td class="mm-cell-email">{{ member.user ? member.user.email : '—' }}</td>
+                  <td>
+                    <span class="mm-badge mm-badge-status" :class="'mm-status-' + member.status">
+                      {{ statusLabel(member.status) }}
                     </span>
-                    <button 
-                      v-if="member.status === 'accepted'"
-                      class="btn btn-sm btn-warning"
-                      @click="kickMember(member)"
-                      title="Kick"
-                    >
-                      <i class="bi bi-box-arrow-right"></i>
-                    </button>
-                    <button 
-                      v-if="member.status !== 'blocked'"
-                      class="btn btn-sm btn-danger"
-                      @click="blockMember(member)"
-                      title="Block"
-                    >
-                      <i class="bi bi-slash-circle"></i>
-                    </button>
-                    <button 
-                      v-if="member.status === 'blocked'"
-                      class="btn btn-sm btn-secondary"
-                      @click="unblockMember(member)"
-                      title="Unblock"
-                    >
-                      <i class="bi bi-unlock"></i>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  </td>
+                  <td class="mm-col-actions">
+                    <template v-if="member.status === 'pending'">
+                      <button type="button" class="mm-btn mm-btn-row mm-btn-accept" title="Accept" @click="acceptMember(member)">Accept</button>
+                      <button type="button" class="mm-btn mm-btn-row mm-btn-kick" title="Kick" @click="confirmAction(member, 'kick')">Kick</button>
+                      <button type="button" class="mm-btn mm-btn-row mm-btn-block" title="Block" @click="confirmAction(member, 'block')">Block</button>
+                    </template>
+                    <template v-else-if="member.status === 'accepted' || member.status === 'pending_invitation'">
+                      <button type="button" class="mm-btn mm-btn-row mm-btn-kick" title="Kick" @click="confirmAction(member, 'kick')">Kick</button>
+                      <button type="button" class="mm-btn mm-btn-row mm-btn-block" title="Block" @click="confirmAction(member, 'block')">Block</button>
+                    </template>
+                    <template v-else-if="member.status === 'blocked'">
+                      <button type="button" class="mm-btn mm-btn-row mm-btn-unblock" title="Unblock" @click="unblockMember(member)">Unblock</button>
+                    </template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="pagination.pages > 1" class="mm-members-pagination">
+              <button type="button" class="mm-pagination-btn" :disabled="pagination.page <= 1" @click="goToPage(pagination.page - 1)">
+                <i class="bi bi-chevron-left"></i>
+              </button>
+              <span class="mm-page-info">Page <strong>{{ pagination.page }}</strong> of <strong>{{ pagination.pages }}</strong></span>
+              <button type="button" class="mm-pagination-btn" :disabled="pagination.page >= pagination.pages" @click="goToPage(pagination.page + 1)">
+                <i class="bi bi-chevron-right"></i>
+              </button>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <!-- Pagination -->
-        <div v-if="pagination.pages > 1" class="pagination-section">
-          <button 
-            class="btn btn-sm btn-outline-secondary"
-            :disabled="pagination.page <= 1"
-            @click="goToPage(pagination.page - 1)"
-          >
-            <i class="bi bi-chevron-left"></i>
-          </button>
-          <span class="page-info">
-            Page {{ pagination.page }} of {{ pagination.pages }}
-          </span>
-          <button 
-            class="btn btn-sm btn-outline-secondary"
-            :disabled="pagination.page >= pagination.pages"
-            @click="goToPage(pagination.page + 1)"
-          >
-            <i class="bi bi-chevron-right"></i>
-          </button>
+      <!-- Confirm action modal (kick / block) -->
+      <div v-if="showConfirmModal" class="mm-modal-overlay" @click.self="showConfirmModal = false">
+        <div class="mm-modal-dialog">
+          <div class="mm-modal-content">
+            <div class="mm-modal-header">
+              <h5 class="mm-modal-title">{{ confirmTitle }}</h5>
+              <button type="button" class="mm-modal-close" @click="showConfirmModal = false" aria-label="Close">&times;</button>
+            </div>
+            <div class="mm-modal-body">
+              <p class="mm-modal-message">{{ confirmMessage }}</p>
+            </div>
+            <div class="mm-modal-footer">
+              <button type="button" class="mm-btn mm-btn-ghost" @click="showConfirmModal = false">Cancel</button>
+              <button type="button" class="mm-btn mm-btn-danger" :disabled="confirming" @click="executeConfirm">
+                <span v-if="confirming" class="mm-spinner mm-spinner-sm"></span>
+                {{ confirmButtonText }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -233,7 +202,8 @@ export default {
       hasHospital: true,
       searchQuery: '',
       filterStatus: '',
-      statuses: [
+      statusCounts: {},
+      filterOptions: [
         { value: '', label: 'All' },
         { value: 'pending', label: 'Pending Request' },
         { value: 'pending_invitation', label: 'Pending Invitation' },
@@ -241,7 +211,6 @@ export default {
         { value: 'kicked', label: 'Kicked' },
         { value: 'blocked', label: 'Blocked' }
       ],
-      statusCounts: {},
       pagination: {
         page: 1,
         limit: 20,
@@ -255,7 +224,15 @@ export default {
       inviteSuccess: '',
       userSearchResults: [],
       searchingUsers: false,
-      searchTimeout: null
+      searchTimeout: null,
+      showConfirmModal: false,
+      confirmTitle: '',
+      confirmMessage: '',
+      confirmButtonText: '',
+      confirming: false,
+      confirmMember: null,
+      confirmActionType: '',
+      searchTimeoutMembers: null
     };
   },
   async mounted() {
@@ -305,20 +282,15 @@ export default {
     },
     
     async loadStatusCounts() {
+      if (!this.hasHospital) return;
       try {
         const token = localStorage.getItem('auth-token');
-        
-        // Load counts for each status
         for (const status of ['pending', 'pending_invitation', 'accepted', 'kicked', 'blocked']) {
+          const params = new URLSearchParams({ status, limit: 1 });
           const response = await axios.get(
-            `${orthancApiUrl}api/members?status=${status}&limit=1`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            }
+            `${orthancApiUrl}api/members?${params.toString()}`,
+            { headers: { Authorization: `Bearer ${token}` } }
           );
-          
           if (response.data.success) {
             this.statusCounts[status] = response.data.pagination.total;
           }
@@ -326,6 +298,12 @@ export default {
       } catch (error) {
         console.error('Error loading status counts:', error);
       }
+    },
+    
+    setFilter(value) {
+      this.filterStatus = value;
+      this.pagination.page = 1;
+      this.loadMembers();
     },
     
     debouncedSearch() {
@@ -336,6 +314,39 @@ export default {
         this.pagination.page = 1;
         this.loadMembers();
       }, 300);
+    },
+    
+    confirmAction(member, actionType) {
+      this.confirmMember = member;
+      this.confirmActionType = actionType;
+      const name = member.user ? `@${member.user.username}` : 'this member';
+      if (actionType === 'kick') {
+        this.confirmTitle = 'Kick member';
+        this.confirmMessage = `Are you sure you want to kick ${name}?`;
+        this.confirmButtonText = 'Kick';
+      } else if (actionType === 'block') {
+        this.confirmTitle = 'Block member';
+        this.confirmMessage = `Are you sure you want to block ${name}? They won't be able to join your hospital again.`;
+        this.confirmButtonText = 'Block';
+      }
+      this.showConfirmModal = true;
+    },
+    
+    async executeConfirm() {
+      if (!this.confirmMember) return;
+      this.confirming = true;
+      try {
+        if (this.confirmActionType === 'kick') {
+          await this.kickMember(this.confirmMember);
+        } else if (this.confirmActionType === 'block') {
+          await this.blockMember(this.confirmMember);
+        }
+        this.showConfirmModal = false;
+        this.confirmMember = null;
+        this.confirmActionType = '';
+      } finally {
+        this.confirming = false;
+      }
     },
     
     goToPage(page) {
@@ -364,8 +375,6 @@ export default {
     },
     
     async kickMember(member) {
-      if (!confirm(`Are you sure you want to kick @${member.user.username}?`)) return;
-      
       try {
         const token = localStorage.getItem('auth-token');
         await axios.put(
@@ -377,7 +386,6 @@ export default {
             }
           }
         );
-        
         await this.loadMembers();
         await this.loadStatusCounts();
       } catch (error) {
@@ -386,8 +394,6 @@ export default {
     },
     
     async blockMember(member) {
-      if (!confirm(`Are you sure you want to block @${member.user.username}? They won't be able to join your hospital again.`)) return;
-      
       try {
         const token = localStorage.getItem('auth-token');
         await axios.put(
@@ -399,7 +405,6 @@ export default {
             }
           }
         );
-        
         await this.loadMembers();
         await this.loadStatusCounts();
       } catch (error) {
@@ -419,7 +424,6 @@ export default {
             }
           }
         );
-        
         await this.loadMembers();
         await this.loadStatusCounts();
       } catch (error) {
@@ -501,15 +505,16 @@ export default {
       }
     },
     
-    formatStatus(status) {
-      const statuses = {
-        pending: 'Pending Request',
-        pending_invitation: 'Pending Invitation',
-        accepted: 'Active',
+    statusLabel(status) {
+      const labels = {
+        accepted: 'Member',
+        pending: 'Pending',
+        pending_invitation: 'Invited',
         kicked: 'Kicked',
-        blocked: 'Blocked'
+        blocked: 'Blocked',
+        cancelled: 'Cancelled'
       };
-      return statuses[status] || status;
+      return labels[status] || status;
     },
     
     formatDate(dateString) {
@@ -526,10 +531,15 @@ export default {
 
 <style scoped>
 .member-management {
-  padding: 20px;
+  padding: 24px;
 }
 
-.header-section {
+.mm-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.mm-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -538,174 +548,483 @@ export default {
   gap: 16px;
 }
 
-.filters-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.search-box {
-  position: relative;
-  max-width: 400px;
-}
-
-.search-box i {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #6b7280;
-}
-
-.search-box .form-control {
-  padding-left: 40px;
-  border-radius: 8px;
-}
-
-.filter-buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.btn-filter {
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  color: #4b5563;
-  border-radius: 20px;
-  padding: 6px 16px;
-  font-size: 0.875rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-filter:hover {
-  background: #e5e7eb;
-}
-
-.btn-filter.active {
-  background: #4a90e2;
-  border-color: #4a90e2;
-  color: white;
-}
-
-.count-badge {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 0 6px;
-  border-radius: 10px;
-  font-size: 0.75rem;
-}
-
-.btn-filter.active .count-badge {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.card {
-  border: none;
-  border-radius: 12px;
-}
-
-.table {
+.mm-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1e293b;
   margin: 0;
 }
 
-.table th {
-  background: #f9fafb;
-  font-weight: 600;
+.mm-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mm-search-wrap {
+  position: relative;
+  max-width: 320px;
+}
+
+.mm-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  font-size: 14px;
+}
+
+.mm-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+  font-size: 13px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
   color: #374151;
-  border-bottom: 2px solid #e5e7eb;
-  padding: 14px 16px;
-  font-size: 13px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  text-align: left;
 }
 
-.table td {
-  padding: 14px 16px;
-  vertical-align: middle;
-  border-bottom: 1px solid #f3f4f6;
-  font-size: 13px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  text-align: left;
+.mm-search-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
 }
 
-.username {
-  font-weight: 500;
-  color: #4a90e2;
-  font-size: 13px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
-.status-badge {
+.mm-btn {
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
   font-weight: 500;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
 }
 
-.status-badge.pending {
+.mm-btn-primary {
+  background: #4a90e2;
+  color: #fff;
+}
+
+.mm-btn-primary:hover:not(:disabled) {
+  background: #357abd;
+}
+
+.mm-btn-ghost {
+  background: transparent;
+  color: #64748b;
+}
+
+.mm-btn-ghost:hover {
+  background: #f1f5f9;
+}
+
+.mm-btn-danger {
+  background: #dc2626;
+  color: #fff;
+}
+
+.mm-btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.mm-btn-danger:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.mm-alert {
+  padding: 14px 18px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.mm-alert-warning {
   background: #fef3c7;
   color: #92400e;
 }
 
-.status-badge.accepted {
-  background: #d1fae5;
-  color: #065f46;
+.mm-alert-link {
+  color: #b45309;
+  font-weight: 500;
+  margin-left: 4px;
 }
 
-.status-badge.kicked {
-  background: #f3f4f6;
-  color: #4b5563;
+/* Card: same as Hospital Management */
+.mm-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
 }
 
-.status-badge.blocked {
-  background: #fee2e2;
-  color: #991b1b;
+.mm-members-section {
+  padding: 20px 24px 24px;
 }
 
-.invite-status-pill {
+.mm-members-header {
+  margin-bottom: 14px;
+}
+
+.mm-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Status filter pills – match current UI */
+.mm-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.mm-pill {
   display: inline-flex;
   align-items: center;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: #0ea5e9;
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 500;
-  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.35);
-}
-
-.action-buttons {
-  display: flex;
   gap: 6px;
-  justify-content: flex-start;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.action-buttons .btn {
+.mm-pill:hover {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.mm-pill.active {
+  background: #4a90e2;
+  border-color: #4a90e2;
+  color: #fff;
+}
+
+.mm-pill.active:hover {
+  background: #357abd;
+  border-color: #357abd;
+  color: #fff;
+}
+
+.mm-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.mm-pill.active .mm-pill-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.mm-members-loading {
+  padding: 32px;
+  text-align: center;
+}
+
+.mm-spinner {
   width: 32px;
   height: 32px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #4a90e2;
+  border-radius: 50%;
+  animation: mm-spin 0.8s linear infinite;
+  margin: 0 auto;
 }
 
-.pagination-section {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  border-top: 1px solid #e5e7eb;
+.mm-spinner-sm {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: mm-spin 0.8s linear infinite;
+  vertical-align: middle;
 }
 
-.page-info {
-  font-size: 0.875rem;
+@keyframes mm-spin {
+  to { transform: rotate(360deg); }
+}
+
+.mm-members-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
   color: #6b7280;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px dashed #e2e8f0;
+}
+
+.mm-members-wrap {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.mm-members-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+
+.mm-members-table th {
+  text-align: left;
+  padding: 12px 14px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.mm-members-table td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+  vertical-align: middle;
+}
+
+.mm-members-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.mm-members-table tbody tr:hover td {
+  background: #fafbfc;
+}
+
+.mm-cell-email {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b7280;
+}
+
+.mm-col-actions {
+  white-space: nowrap;
+  max-width: 75px;
+  text-align: center !important;
+}
+
+.mm-col-actions .mm-btn {
+  margin-left: 6px;
+}
+
+.mm-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.mm-badge-status {
+  display: inline-block;
+}
+
+.mm-status-accepted {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+
+.mm-status-pending,
+.mm-status-pending_invitation {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+}
+
+.mm-status-blocked {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+}
+
+.mm-status-kicked {
+  background: #f3f4f6 !important;
+  color: #6b7280 !important;
+}
+
+.mm-btn-row {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.mm-btn-accept {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.mm-btn-accept:hover:not(:disabled) {
+  background: #bbf7d0;
+}
+
+.mm-btn-kick {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.mm-btn-kick:hover:not(:disabled) {
+  background: #fde68a;
+}
+
+.mm-btn-block {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.mm-btn-block:hover:not(:disabled) {
+  background: #fecaca;
+}
+
+.mm-btn-unblock {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.mm-btn-unblock:hover:not(:disabled) {
+  background: #bbf7d0;
+}
+
+.mm-members-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid #e5e7eb;
+  background: #fafbfc;
+}
+
+.mm-pagination-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.mm-pagination-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.mm-pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mm-page-info {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* Confirm modal */
+.mm-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 20px;
+}
+
+.mm-modal-dialog {
+  width: 100%;
+  max-width: 420px;
+}
+
+.mm-modal-content {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.mm-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.mm-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: #1e293b;
+}
+
+.mm-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mm-modal-close:hover {
+  color: #1e293b;
+}
+
+.mm-modal-body {
+  padding: 20px;
+}
+
+.mm-modal-message {
+  margin: 0;
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.mm-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+  background: #fafbfc;
 }
 
 /* Modal styles */
@@ -840,18 +1159,18 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .header-section {
+  .mm-header {
     flex-direction: column;
     align-items: flex-start;
   }
   
-  .search-box {
+  .mm-search-wrap {
     max-width: 100%;
     width: 100%;
   }
   
-  .table-responsive {
-    font-size: 0.875rem;
+  .mm-members-table {
+    font-size: 12px;
   }
 }
 </style>

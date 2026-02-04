@@ -1396,17 +1396,17 @@ input.form-control.study-list-filter:focus {
 
 /* Clear filter button */
 .clear-filter-btn {
-    width: 28px;
-    height: 28px;
-    min-width: 28px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
     background: #f9fafb;
     color: #6b7280;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     transition: all 0.15s ease;
     margin-left: 5px;

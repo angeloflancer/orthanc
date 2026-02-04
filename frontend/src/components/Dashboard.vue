@@ -138,7 +138,7 @@ export default {
         <div class="header-section">
             <div class="header-content">
                 <div class="greeting-container">
-                    <h1 class="greeting">Dashboard</h1>
+                    <h1 class="greeting">Medical Imaging Reimagined</h1>
                     <p class="subtitle">Welcome back, Dr. {{ userFullName || 'User' }}</p>
                 </div>
                 <div class="time-display">
@@ -376,7 +376,6 @@ export default {
     padding: 2rem;
     max-width: 1400px;
     margin: 0 auto;
-    background: #fafbfc;
     min-height: 100vh;
 }
 
@@ -407,6 +406,8 @@ export default {
     color: #6b7280;
     margin: 0;
     font-weight: 400;
+    text-align: left;
+    margin-top: 10px;
 }
 
 .time-display {

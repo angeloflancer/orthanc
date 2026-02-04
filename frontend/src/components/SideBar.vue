@@ -679,7 +679,7 @@ export default {
         });
         }
     },
-    components: { UploadHandler, JobsList, LanguagePicker },
+    components: { UploadHandler, JobsList },
 }
 </script>
 <template>
@@ -967,11 +967,11 @@ export default {
                     </div>
                 </ul>
             </div>
-            <div class="bottom-side-bar">
+            <!-- <div class="bottom-side-bar">
                 <div class="bottom-side-bar-button">
                     <LanguagePicker />
                 </div>
-            </div>
+            </div> -->
         </div>
     </div>
 </template>

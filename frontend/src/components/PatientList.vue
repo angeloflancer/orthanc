@@ -547,6 +547,7 @@ export default {
 .patient-table-filters > th {
     background: #ffffff;
     padding: 8px 12px;
+    padding-left: 5px;
     vertical-align: middle;
 }
 
@@ -592,6 +593,7 @@ export default {
     height: 32px;
     min-width: 32px;
     padding: 0;
+    margin-right: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
