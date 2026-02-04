@@ -1,506 +1,414 @@
 <template>
-  <div class="account-settings">
-    <div class="container-fluid py-4">
-      <h2 class="mb-4">Account Settings</h2>
-      
-      <!-- Profile Section -->
-      <div class="card mb-4 shadow-sm">
-        <div class="card-body">
-          <h5 class="card-title mb-4">
-            <i class="bi bi-person-circle me-2"></i>User Profile
-          </h5>
-          <form @submit.prevent="updateProfile">
-            <div class="form-row mb-3">
-              <label for="username" class="form-label">Username</label>
-              <div v-if="!isEditingProfile" class="field-display">
-                <span class="field-value">{{ userProfile.username }}</span>
-              </div>
-              <div v-else class="input-with-status">
-                <input 
-                  type="text" 
-                  class="form-control" 
-                  :class="{ 'is-valid': usernameValid && userProfile.username !== originalUsername, 'is-invalid': usernameError }"
-                  id="username" 
-                  v-model="userProfile.username"
-                  required
-                  placeholder="Enter your username"
-                  @input="checkUsernameAvailability"
-                />
-                <span v-if="checkingUsername" class="input-status checking">
-                  <i class="bi bi-arrow-repeat spin"></i>
-                </span>
-                <span v-else-if="usernameValid && userProfile.username !== originalUsername" class="input-status valid">
-                  <i class="bi bi-check-circle-fill"></i>
-                </span>
-                <span v-else-if="usernameError" class="input-status invalid">
-                  <i class="bi bi-x-circle-fill"></i>
-                </span>
-              </div>
-              <small v-if="isEditingProfile && usernameError" class="text-danger">{{ usernameError }}</small>
+  <div class="as-page">
+    <div class="as-container">
+      <!-- Loading State -->
+      <div v-if="profileDataLoading" class="as-loading">
+        <div class="as-loading-spinner"></div>
+        <p class="as-loading-text">Loading your profile...</p>
+      </div>
+
+      <template v-else>
+        <!-- Profile Hero Card -->
+        <section class="as-profile-hero">
+          <div class="as-profile-bg"></div>
+          <div class="as-profile-content">
+            <div class="as-avatar">
+              <span class="as-avatar-text">{{ getInitials(userProfile.name) }}</span>
             </div>
-            <div class="form-row mb-3">
-              <label for="name" class="form-label">Name</label>
-              <div v-if="!isEditingProfile" class="field-display">
-                <span class="field-value">{{ userProfile.name }}</span>
-              </div>
-              <input 
-                v-else
-                type="text" 
-                class="form-control" 
-                id="name" 
-                v-model="userProfile.name"
-                required
-                placeholder="Enter your name"
-              />
-            </div>
-            <div class="form-row mb-3">
-              <label for="email" class="form-label">Email Address</label>
-              <div v-if="!isEditingProfile" class="field-display">
-                <span class="field-value">{{ userProfile.email }}</span>
-              </div>
-              <input 
-                v-else
-                type="email" 
-                class="form-control" 
-                id="email" 
-                v-model="userProfile.email"
-                required
-                placeholder="Enter your email"
-              />
-            </div>
-            <div class="form-row mb-3">
-              <label class="form-label">Role</label>
-              <div class="role-display">
-                <span class="role-badge" :class="userProfile.role">
-                  <i :class="getRoleIcon(userProfile.role)" class="me-1"></i>
+            <div class="as-profile-info">
+              <h1 class="as-profile-name">{{ userProfile.name }}</h1>
+              <p class="as-profile-username">@{{ userProfile.username }}</p>
+              <div class="as-profile-badges">
+                <span class="as-role-badge" :class="'as-role-' + userProfile.role">
+                  <i :class="getRoleIcon(userProfile.role)"></i>
                   {{ formatRole(userProfile.role) }}
                 </span>
-                <span class="text-muted small ms-2">Role cannot be changed.</span>
+                <span v-if="userProfile.emailVerified" class="as-status-badge as-status-verified">
+                  <i class="bi bi-patch-check-fill"></i> Verified
+                </span>
+                <span v-else class="as-status-badge as-status-unverified">
+                  <i class="bi bi-exclamation-triangle-fill"></i> Unverified
+                </span>
               </div>
             </div>
-            <div class="form-row mb-3">
-              <label class="form-label">Email Verification</label>
-              <div class="verification-status">
-                <!-- Loading state while fetching profile data -->
-                <div v-if="profileDataLoading" class="verification-loading">
-                  <span class="spinner-border spinner-border-sm me-2"></span>
-                  <span>Loading verification status...</span>
+            <button 
+              v-if="!isEditingProfile"
+              type="button" 
+              class="as-edit-btn"
+              @click="startEditingProfile"
+              :disabled="!userProfile.emailVerified"
+            >
+              <i class="bi bi-pencil-square"></i>
+            </button>
+          </div>
+        </section>
+
+        <!-- Profile Details Card -->
+        <section class="as-card">
+          <div class="as-card-header">
+            <h2 class="as-section-title">
+              <i class="bi bi-person-vcard"></i>
+              Profile Information
+            </h2>
+          </div>
+          <div class="as-card-body">
+            <form @submit.prevent="updateProfile">
+              <!-- Info Grid (read-only mode) -->
+              <div v-if="!isEditingProfile" class="as-info-grid">
+                <div class="as-info-item">
+                  <div class="as-info-icon"><i class="bi bi-at"></i></div>
+                  <div class="as-info-content">
+                    <span class="as-info-label">Username</span>
+                    <span class="as-info-value">{{ userProfile.username }}</span>
+                  </div>
                 </div>
-                <!-- Verified state -->
-                <span v-else-if="userProfile.emailVerified" class="status-badge verified">
-                  <i class="bi bi-check-circle me-1"></i> Verified
-                </span>
-                <!-- Not verified state -->
-                <div v-else class="verification-unverified">
-                  <span class="status-badge not-verified">
-                    <i class="bi bi-exclamation-circle me-1"></i> Not Verified
+                <div class="as-info-item">
+                  <div class="as-info-icon"><i class="bi bi-person"></i></div>
+                  <div class="as-info-content">
+                    <span class="as-info-label">Full Name</span>
+                    <span class="as-info-value">{{ userProfile.name }}</span>
+                  </div>
+                </div>
+                <div class="as-info-item as-info-full">
+                  <div class="as-info-icon"><i class="bi bi-envelope"></i></div>
+                  <div class="as-info-content">
+                    <span class="as-info-label">Email Address</span>
+                    <span class="as-info-value">{{ userProfile.email }}</span>
+                  </div>
+                  <span v-if="userProfile.emailVerified" class="as-inline-badge as-badge-success">
+                    <i class="bi bi-check-circle-fill"></i> Verified
                   </span>
-                  <button 
-                    type="button" 
-                    class="btn-resend"
-                    @click="resendVerification"
-                    :disabled="resendLoading"
-                  >
-                    <span v-if="resendLoading" class="spinner-border spinner-border-sm me-1"></span>
-                    {{ resendLoading ? 'Sending...' : 'Resend Email' }}
-                  </button>
-                </div>
-                <div v-if="!profileDataLoading && !userProfile.emailVerified" class="verification-hint">
-                  <i class="bi bi-info-circle me-1"></i>
-                  Please verify your email address to edit your profile, change your role, join a hospital, or change your password.
+                  <span v-else class="as-inline-badge as-badge-warning">
+                    <i class="bi bi-exclamation-circle"></i> Unverified
+                  </span>
                 </div>
               </div>
-            </div>
-            <!-- Email Verification Warning for Edit Button -->
-            <div v-if="!profileDataLoading && !userProfile.emailVerified && !isEditingProfile" class="verification-notice mb-3">
-              <div class="verification-notice-content">
-                <i class="bi bi-shield-exclamation verification-notice-icon"></i>
-                <span class="verification-notice-text">
-                  Verify your email to edit your profile
-                </span>
-              </div>
-            </div>
-            <div v-if="profileSuccess || profileError" class="form-row">
-              <div class="form-label"></div>
-              <div class="alert-wrapper">
-                <div v-if="profileSuccess" class="alert alert-success alert-dismissible fade show" role="alert">
-                  <i class="bi bi-check-circle me-2"></i>{{ profileSuccess }}
-                  <button type="button" class="btn-close" @click="profileSuccess = ''"></button>
+
+              <!-- Edit Mode -->
+              <div v-else class="as-edit-form">
+                <div class="as-form-row">
+                  <div class="as-form-group">
+                    <label class="as-form-label">Username</label>
+                    <div class="as-input-wrap">
+                      <span class="as-input-prefix">@</span>
+                      <input 
+                        type="text" 
+                        class="as-form-input as-input-prefixed"
+                        :class="{ 'as-input-valid': usernameValid && userProfile.username !== originalUsername, 'as-input-invalid': usernameError }"
+                        v-model="userProfile.username"
+                        required
+                        placeholder="username"
+                        @input="checkUsernameAvailability"
+                      />
+                      <span v-if="checkingUsername" class="as-input-status as-status-checking">
+                        <i class="bi bi-arrow-repeat as-spin"></i>
+                      </span>
+                      <span v-else-if="usernameValid && userProfile.username !== originalUsername" class="as-input-status as-status-valid">
+                        <i class="bi bi-check-circle-fill"></i>
+                      </span>
+                      <span v-else-if="usernameError" class="as-input-status as-status-invalid">
+                        <i class="bi bi-x-circle-fill"></i>
+                      </span>
+                    </div>
+                    <p v-if="usernameError" class="as-form-error">{{ usernameError }}</p>
+                  </div>
+                  <div class="as-form-group">
+                    <label class="as-form-label">Full Name</label>
+                    <input 
+                      type="text" 
+                      class="as-form-input"
+                      v-model="userProfile.name"
+                      required
+                      placeholder="Enter your name"
+                    />
+                  </div>
                 </div>
-                <div v-if="profileError" class="alert alert-danger alert-dismissible fade show" role="alert">
-                  <i class="bi bi-exclamation-circle me-2"></i>{{ profileError }}
-                  <button type="button" class="btn-close" @click="profileError = ''"></button>
+                <div class="as-form-group">
+                  <label class="as-form-label">Email Address</label>
+                  <input 
+                    type="email" 
+                    class="as-form-input"
+                    v-model="userProfile.email"
+                    required
+                    placeholder="Enter your email"
+                  />
                 </div>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-label"></div>
-              <div class="profile-actions">
-                <button 
-                  v-if="!isEditingProfile"
-                  type="button" 
-                  class="btn btn-primary"
-                  @click="startEditingProfile"
-                  :disabled="profileDataLoading || !userProfile.emailVerified"
-                >
-                  <i class="bi bi-pencil me-2"></i>Edit Profile
-                </button>
-                <template v-else>
-                  <button 
-                    type="submit" 
-                    class="btn btn-primary"
-                    :disabled="!canSaveProfile"
-                  >
-                    <span v-if="profileLoading" class="spinner-border spinner-border-sm me-2"></span>
-                    <i v-else class="bi bi-check-lg me-2"></i>
+                <div class="as-edit-actions">
+                  <button type="submit" class="as-btn as-btn-primary" :disabled="!canSaveProfile">
+                    <span v-if="profileLoading" class="as-spinner-sm"></span>
+                    <i v-else class="bi bi-check-lg"></i>
                     {{ profileLoading ? 'Saving...' : 'Save Changes' }}
                   </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-outline-secondary ms-2"
-                    @click="cancelEditingProfile"
-                    :disabled="profileLoading"
-                  >
-                    <i class="bi bi-x-lg me-2"></i>Cancel
-                  </button>
-                </template>
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <!-- Subscription Status Section (for admins only) -->
-      <div v-if="userProfile.role === 'admin'" class="card mb-4 shadow-sm">
-        <div class="card-body">
-          <h5 class="card-title mb-4">
-            <i class="bi bi-calendar-check me-2"></i>Subscription Status
-          </h5>
-          
-          <div v-if="subscriptionInfo" class="subscription-details">
-            <div class="subscription-badge mb-3">
-              <span class="badge" :class="getSubscriptionBadgeClass()">
-                <i :class="getSubscriptionIcon()" class="me-1"></i>
-                {{ getSubscriptionPlanName() }}
-              </span>
-            </div>
-            
-            <div v-if="subscriptionInfo.planType !== 'forever'" class="expiration-details">
-              <div class="detail-row">
-                <span class="detail-label"><i class="bi bi-clock me-1"></i>Expires:</span>
-                <span class="detail-value">{{ formatDate(subscriptionInfo.expiresAt) }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label"><i class="bi bi-calendar-x me-1"></i>Days Remaining:</span>
-                <span class="detail-value" :class="getDaysRemainingClass()">
-                  {{ subscriptionInfo.daysUntilExpiration !== null ? Math.max(0, subscriptionInfo.daysUntilExpiration) : 'N/A' }}
-                </span>
-              </div>
-            </div>
-            
-            <div v-else class="forever-plan-info">
-              <i class="bi bi-infinity me-2"></i>
-              <span>Unlimited access - No expiration</span>
-            </div>
-            
-            <div v-if="subscriptionInfo.shouldShowWarning" class="warning-alert mt-3">
-              <i class="bi bi-exclamation-triangle-fill me-2"></i>
-              <span>There are {{ Math.max(0, subscriptionInfo.daysUntilExpiration) }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
-            </div>
-            
-            <div v-if="!subscriptionInfo.isActive && subscriptionInfo.planType !== 'forever'" class="expired-alert mt-3">
-              <i class="bi bi-x-circle-fill me-2"></i>
-              <span>Subscription has expired. Contact the owner to renew.</span>
-            </div>
-          </div>
-          
-          <div v-else class="no-subscription-info">
-            <i class="bi bi-info-circle me-2"></i>
-            <span>No subscription found. Please contact the owner.</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Hospital Membership Section (for doctors only) -->
-      <div v-if="userProfile.role === 'doctor'" class="card mb-4 shadow-sm">
-        <div class="card-body">
-          <h5 class="card-title mb-4">
-            <i class="bi bi-hospital me-2"></i>Hospital Membership
-          </h5>
-          
-          <!-- Pending Invitation (Admin invited) -->
-          <div v-if="hospitalMembership && hospitalMembership.status === 'pending_invitation'" class="invitation-card mb-4">
-            <div class="alert alert-info d-flex align-items-start">
-              <i class="bi bi-envelope-paper me-3 fs-4"></i>
-              <div class="flex-grow-1">
-                <h6 class="alert-heading mb-2">
-                  <i class="bi bi-bell me-2"></i>Hospital Invitation
-                </h6>
-                <p class="mb-2">
-                  <strong>{{ hospitalMembership.hospital.name }}</strong> has invited you to join their hospital.
-                </p>
-                <div class="invitation-details mb-3">
-                  <p class="mb-1"><strong>Hospital ID:</strong> {{ hospitalMembership.hospital.hospitalId }}</p>
-                  <p v-if="hospitalMembership.hospital.address" class="mb-1">
-                    <strong>Address:</strong> {{ hospitalMembership.hospital.address }}
-                  </p>
-                  <p v-if="hospitalMembership.invitedBy" class="mb-0 text-muted small">
-                    <i class="bi bi-person me-1"></i>Invited by: {{ hospitalMembership.invitedBy.name || hospitalMembership.invitedBy.username }}
-                  </p>
-                </div>
-                <div class="invitation-actions d-flex gap-2">
-                  <button 
-                    class="btn btn-success"
-                    @click="acceptInvitation"
-                    :disabled="profileDataLoading || invitationLoading || !userProfile.emailVerified"
-                  >
-                    <span v-if="invitationLoading" class="spinner-border spinner-border-sm me-2"></span>
-                    <i v-else class="bi bi-check-circle me-2"></i>
-                    Accept Invitation
-                  </button>
-                  <button 
-                    class="btn btn-outline-danger"
-                    @click="rejectInvitation"
-                    :disabled="profileDataLoading || invitationLoading || !userProfile.emailVerified"
-                  >
-                    <span v-if="invitationLoading" class="spinner-border spinner-border-sm me-2"></span>
-                    <i v-else class="bi bi-x-circle me-2"></i>
-                    Reject
+                  <button type="button" class="as-btn as-btn-ghost" @click="cancelEditingProfile" :disabled="profileLoading">
+                    Cancel
                   </button>
                 </div>
               </div>
+
+              <!-- Email Verification Warning -->
+              <div v-if="!userProfile.emailVerified && !isEditingProfile" class="as-verify-banner">
+                <div class="as-verify-icon"><i class="bi bi-shield-exclamation"></i></div>
+                <div class="as-verify-content">
+                  <p class="as-verify-title">Email verification required</p>
+                  <p class="as-verify-desc">Verify your email to edit profile, join hospitals, or change password.</p>
+                </div>
+                <button type="button" class="as-btn as-btn-warning" @click="resendVerification" :disabled="resendLoading">
+                  <span v-if="resendLoading" class="as-spinner-sm"></span>
+                  {{ resendLoading ? 'Sending...' : 'Resend Email' }}
+                </button>
+              </div>
+
+              <!-- Alerts -->
+              <div v-if="profileSuccess" class="as-alert as-alert-success">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>{{ profileSuccess }}</span>
+                <button type="button" class="as-alert-close" @click="profileSuccess = ''">&times;</button>
+              </div>
+              <div v-if="profileError" class="as-alert as-alert-error">
+                <i class="bi bi-exclamation-circle-fill"></i>
+                <span>{{ profileError }}</span>
+                <button type="button" class="as-alert-close" @click="profileError = ''">&times;</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- Subscription Status Section (for admins only) -->
+        <section v-if="userProfile.role === 'admin'" class="as-card">
+          <div class="as-card-header">
+            <h2 class="as-section-title">
+              <i class="bi bi-credit-card-2-front"></i>
+              Subscription Status
+            </h2>
+            <span v-if="subscriptionInfo" class="as-plan-badge" :class="getSubscriptionBadgeClass()">
+              <i :class="getSubscriptionIcon()"></i>
+              {{ getSubscriptionPlanName() }}
+            </span>
+          </div>
+          <div class="as-card-body">
+            <div v-if="subscriptionInfo" class="as-sub-content">
+              <div v-if="subscriptionInfo.planType === 'forever'" class="as-sub-forever">
+                <div class="as-forever-icon"><i class="bi bi-infinity"></i></div>
+                <div class="as-forever-text">
+                  <p class="as-forever-title">Unlimited Access</p>
+                  <p class="as-forever-desc">Your subscription never expires</p>
+                </div>
+              </div>
+              <template v-else>
+                <div class="as-sub-grid">
+                  <div class="as-sub-stat">
+                    <div class="as-stat-icon"><i class="bi bi-calendar-event"></i></div>
+                    <div class="as-stat-content">
+                      <span class="as-stat-label">Expires On</span>
+                      <span class="as-stat-value">{{ formatDate(subscriptionInfo.expiresAt) }}</span>
+                    </div>
+                  </div>
+                  <div class="as-sub-stat">
+                    <div class="as-stat-icon" :class="getDaysRemainingClass()"><i class="bi bi-hourglass-split"></i></div>
+                    <div class="as-stat-content">
+                      <span class="as-stat-label">Days Remaining</span>
+                      <span class="as-stat-value" :class="getDaysRemainingClass()">
+                        {{ subscriptionInfo.daysUntilExpiration !== null ? Math.max(0, subscriptionInfo.daysUntilExpiration) : 'N/A' }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="subscriptionInfo.shouldShowWarning" class="as-alert as-alert-warning">
+                  <i class="bi bi-exclamation-triangle-fill"></i>
+                  <span>{{ Math.max(0, subscriptionInfo.daysUntilExpiration) }} days remaining. Contact the owner to extend.</span>
+                </div>
+                <div v-if="!subscriptionInfo.isActive" class="as-alert as-alert-error">
+                  <i class="bi bi-x-circle-fill"></i>
+                  <span>Subscription expired. Contact the owner to renew.</span>
+                </div>
+              </template>
+            </div>
+            <div v-else class="as-empty-state">
+              <i class="bi bi-credit-card-2-front"></i>
+              <p>No subscription found. Contact the owner.</p>
             </div>
           </div>
+        </section>
 
-          <!-- Current Membership Status -->
-          <div v-if="hospitalMembership && hospitalMembership.status !== 'pending_invitation'" class="membership-info mb-4">
-            <div class="membership-card" :class="hospitalMembership.status">
-              <div class="membership-header">
-                <h6 class="mb-0">{{ hospitalMembership.hospital.name }}</h6>
-                <span class="membership-status" :class="hospitalMembership.status">
-                  {{ formatMembershipStatus(hospitalMembership.status) }}
-                </span>
+        <!-- Hospital Membership Section (for doctors only) -->
+        <section v-if="userProfile.role === 'doctor'" class="as-card">
+          <div class="as-card-header">
+            <h2 class="as-section-title">
+              <i class="bi bi-building"></i>
+              Hospital Membership
+            </h2>
+            <span v-if="hospitalMembership" class="as-membership-badge" :class="'as-mbadge-' + hospitalMembership.status">
+              {{ formatMembershipStatus(hospitalMembership.status) }}
+            </span>
+          </div>
+          <div class="as-card-body">
+            <!-- Pending Invitation -->
+            <div v-if="hospitalMembership && hospitalMembership.status === 'pending_invitation'" class="as-invite-card">
+              <div class="as-invite-header">
+                <div class="as-invite-icon"><i class="bi bi-envelope-paper-heart"></i></div>
+                <div class="as-invite-info">
+                  <h3 class="as-invite-title">You've been invited!</h3>
+                  <p class="as-invite-hospital">{{ hospitalMembership.hospital.name }}</p>
+                </div>
               </div>
-              <div class="membership-details">
-                <p class="mb-1"><strong>Hospital ID:</strong> {{ hospitalMembership.hospital.hospitalId }}</p>
-                <p v-if="hospitalMembership.hospital.address" class="mb-1">
-                  <strong>Address:</strong> {{ hospitalMembership.hospital.address }}
-                </p>
-                <p v-if="hospitalMembership.joinedAt" class="mb-0">
-                  <strong>Joined:</strong> {{ formatDate(hospitalMembership.joinedAt) }}
-                </p>
+              <div class="as-invite-details">
+                <div class="as-invite-detail"><i class="bi bi-hash"></i> {{ hospitalMembership.hospital.hospitalId }}</div>
+                <div v-if="hospitalMembership.hospital.address" class="as-invite-detail"><i class="bi bi-geo-alt"></i> {{ hospitalMembership.hospital.address }}</div>
+                <div v-if="hospitalMembership.invitedBy" class="as-invite-detail"><i class="bi bi-person"></i> By {{ hospitalMembership.invitedBy.name || hospitalMembership.invitedBy.username }}</div>
+              </div>
+              <div class="as-invite-actions">
+                <button class="as-btn as-btn-success" @click="acceptInvitation" :disabled="invitationLoading || !userProfile.emailVerified">
+                  <span v-if="invitationLoading" class="as-spinner-sm"></span>
+                  <i v-else class="bi bi-check-lg"></i> Accept
+                </button>
+                <button class="as-btn as-btn-danger-outline" @click="rejectInvitation" :disabled="invitationLoading || !userProfile.emailVerified">
+                  <i class="bi bi-x-lg"></i> Decline
+                </button>
+              </div>
+            </div>
+
+            <!-- Current Membership -->
+            <div v-else-if="hospitalMembership && hospitalMembership.status !== 'pending_invitation'" class="as-hospital-card" :class="'as-hcard-' + hospitalMembership.status">
+              <div class="as-hospital-header">
+                <div class="as-hospital-icon"><i class="bi bi-hospital"></i></div>
+                <div class="as-hospital-info">
+                  <h3 class="as-hospital-name">{{ hospitalMembership.hospital.name }}</h3>
+                  <span class="as-hospital-id">{{ hospitalMembership.hospital.hospitalId }}</span>
+                </div>
+              </div>
+              <div class="as-hospital-meta">
+                <div v-if="hospitalMembership.hospital.address" class="as-hospital-detail">
+                  <i class="bi bi-geo-alt-fill"></i> {{ hospitalMembership.hospital.address }}
+                </div>
+                <div v-if="hospitalMembership.joinedAt" class="as-hospital-detail">
+                  <i class="bi bi-calendar-check-fill"></i> Joined {{ formatDate(hospitalMembership.joinedAt) }}
+                </div>
               </div>
               
-              <!-- Hospital Subscription Status (for accepted members) -->
-              <div v-if="hospitalMembership.status === 'accepted' && doctorSubscription" class="hospital-subscription-info mt-3 pt-3 border-top">
-                <h6 class="mb-2">
-                  <i class="bi bi-calendar-check me-2"></i>Hospital Subscription
-                </h6>
-                <div class="subscription-badge mb-2">
-                  <span class="badge" :class="getDoctorSubscriptionBadgeClass()">
-                    <i :class="getDoctorSubscriptionIcon()" class="me-1"></i>
-                    {{ getDoctorSubscriptionPlanName() }}
+              <!-- Hospital Subscription (for accepted members) -->
+              <div v-if="hospitalMembership.status === 'accepted' && doctorSubscription" class="as-hsub-section">
+                <div class="as-hsub-header">
+                  <span class="as-hsub-label">Hospital Subscription</span>
+                  <span class="as-plan-badge" :class="getDoctorSubscriptionBadgeClass()">
+                    <i :class="getDoctorSubscriptionIcon()"></i> {{ getDoctorSubscriptionPlanName() }}
                   </span>
                 </div>
-                <div v-if="doctorSubscription.planType !== 'forever'" class="expiration-details">
-                  <div class="detail-row">
-                    <span class="detail-label"><i class="bi bi-clock me-1"></i>Expires:</span>
-                    <span class="detail-value">{{ formatDate(doctorSubscription.expiresAt) }}</span>
+                <div v-if="doctorSubscription.planType === 'forever'" class="as-hsub-forever">
+                  <i class="bi bi-infinity"></i> Unlimited access
+                </div>
+                <template v-else>
+                  <div class="as-hsub-info">
+                    <span><i class="bi bi-calendar"></i> Expires: {{ formatDate(doctorSubscription.expiresAt) }}</span>
+                    <span :class="getDoctorDaysRemainingClass()"><i class="bi bi-hourglass"></i> {{ doctorSubscription.daysUntilExpiration !== null ? Math.max(0, doctorSubscription.daysUntilExpiration) : 'N/A' }} days</span>
                   </div>
-                  <div class="detail-row">
-                    <span class="detail-label"><i class="bi bi-calendar-x me-1"></i>Days Remaining:</span>
-                    <span class="detail-value" :class="getDoctorDaysRemainingClass()">
-                      {{ doctorSubscription.daysUntilExpiration !== null ? Math.max(0, doctorSubscription.daysUntilExpiration) : 'N/A' }}
-                    </span>
+                  <div v-if="doctorSubscription.shouldShowWarning" class="as-alert as-alert-warning as-alert-sm">
+                    <i class="bi bi-exclamation-triangle"></i> Contact admin to extend.
                   </div>
-                </div>
-                <div v-else class="forever-plan-info">
-                  <i class="bi bi-infinity me-2"></i>
-                  <span>Unlimited access - No expiration</span>
-                </div>
-                <div v-if="doctorSubscription.shouldShowWarning" class="warning-alert mt-2">
-                  <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                  <span>There are {{ Math.max(0, doctorSubscription.daysUntilExpiration) }} days left until the deadline. Please contact the administrator to extend the deadline.</span>
-                </div>
-                <div v-if="!doctorSubscription.isActive && doctorSubscription.planType !== 'forever'" class="expired-alert mt-2">
-                  <i class="bi bi-x-circle-fill me-2"></i>
-                  <span>Hospital is currently suspended. Wait for the administrator to renew.</span>
-                </div>
+                  <div v-if="!doctorSubscription.isActive" class="as-alert as-alert-error as-alert-sm">
+                    <i class="bi bi-x-circle"></i> Hospital suspended.
+                  </div>
+                </template>
               </div>
-              <div class="membership-actions" v-if="hospitalMembership.status === 'pending' || hospitalMembership.status === 'accepted'">
-                <button 
-                  class="btn btn-outline-danger btn-sm"
-                  @click="leaveHospital"
-                  :disabled="leaveLoading"
-                >
-                  <span v-if="leaveLoading" class="spinner-border spinner-border-sm me-1"></span>
+              <div v-if="hospitalMembership.status === 'pending' || hospitalMembership.status === 'accepted'" class="as-hospital-actions">
+                <button class="as-btn as-btn-danger-outline" @click="leaveHospital" :disabled="leaveLoading">
+                  <span v-if="leaveLoading" class="as-spinner-sm"></span>
+                  <i v-else class="bi bi-box-arrow-right"></i>
                   {{ hospitalMembership.status === 'pending' ? 'Cancel Request' : 'Leave Hospital' }}
                 </button>
               </div>
             </div>
-          </div>
-          
-          <!-- Join Hospital Form (only if not a member or kicked) -->
-          <div v-if="!hospitalMembership || hospitalMembership.status === 'kicked'">
-            <p class="text-muted mb-3">
-              <i class="bi bi-info-circle me-1"></i>
-              Enter a hospital ID to request membership. The hospital admin will need to approve your request.
-            </p>
-            <div v-if="!userProfile.emailVerified" class="verification-blocker mb-3">
-              <div class="verification-blocker-content">
-                <i class="bi bi-shield-exclamation verification-blocker-icon"></i>
-                <div class="verification-blocker-text">
-                  <p class="verification-blocker-message mb-0">
-                    Please verify your email address to join a hospital.
-                  </p>
+
+            <!-- Join Hospital Form -->
+            <div v-if="!hospitalMembership || hospitalMembership.status === 'kicked'" class="as-join-section">
+              <div class="as-join-header">
+                <i class="bi bi-hospital"></i>
+                <div>
+                  <h3 class="as-join-title">Join a Hospital</h3>
+                  <p class="as-join-desc">Enter a hospital ID to request membership</p>
                 </div>
               </div>
+              <div v-if="!userProfile.emailVerified" class="as-verify-banner as-verify-compact">
+                <i class="bi bi-shield-exclamation"></i>
+                <span>Verify your email to join a hospital.</span>
+              </div>
+              <form @submit.prevent="joinHospital" class="as-join-form">
+                <input type="text" class="as-form-input" v-model="joinHospitalId" placeholder="HSP-XXXXXX" :disabled="!userProfile.emailVerified" />
+                <button type="submit" class="as-btn as-btn-primary" :disabled="joinLoading || !joinHospitalId || !userProfile.emailVerified">
+                  <span v-if="joinLoading" class="as-spinner-sm"></span>
+                  <i v-else class="bi bi-send"></i> Request
+                </button>
+              </form>
+              <div v-if="hospitalSuccess" class="as-alert as-alert-success"><i class="bi bi-check-circle-fill"></i> {{ hospitalSuccess }} <button type="button" class="as-alert-close" @click="hospitalSuccess = ''">&times;</button></div>
+              <div v-if="hospitalError" class="as-alert as-alert-error"><i class="bi bi-exclamation-circle-fill"></i> {{ hospitalError }} <button type="button" class="as-alert-close" @click="hospitalError = ''">&times;</button></div>
             </div>
-            <form @submit.prevent="joinHospital">
-              <div class="form-row mb-3">
-                <label for="hospitalId" class="form-label">Hospital ID</label>
-                <input 
-                  type="text" 
-                  class="form-control" 
-                  id="hospitalId" 
-                  v-model="joinHospitalId"
-                  placeholder="e.g., HSP-A1B2C3"
-                  pattern="HSP-[A-Za-z0-9]{6}"
-                  :disabled="profileDataLoading || !userProfile.emailVerified"
-                />
+          </div>
+        </section>
+
+        <!-- Change Password Section -->
+        <section class="as-card">
+          <div class="as-card-header">
+            <h2 class="as-section-title">
+              <i class="bi bi-shield-lock"></i>
+              Security Settings
+            </h2>
+          </div>
+          <div class="as-card-body">
+            <div v-if="!userProfile.emailVerified" class="as-verify-banner as-verify-compact">
+              <i class="bi bi-shield-exclamation"></i>
+              <span>Verify your email to change your password.</span>
+            </div>
+            <form @submit.prevent="changePassword" class="as-password-form">
+              <div class="as-form-group">
+                <label class="as-form-label">Current Password</label>
+                <div class="as-password-wrap">
+                  <input :type="showCurrentPassword ? 'text' : 'password'" class="as-form-input" v-model="passwordForm.currentPassword" required placeholder="Enter current password" :disabled="!userProfile.emailVerified" />
+                  <button type="button" class="as-password-toggle" @click="showCurrentPassword = !showCurrentPassword">
+                    <i :class="showCurrentPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                  </button>
+                </div>
               </div>
-              <div v-if="hospitalSuccess || hospitalError" class="form-row">
-                <div class="form-label"></div>
-                <div class="alert-wrapper">
-                  <div v-if="hospitalSuccess" class="alert alert-success alert-dismissible fade show" role="alert">
-                    <i class="bi bi-check-circle me-2"></i>{{ hospitalSuccess }}
-                    <button type="button" class="btn-close" @click="hospitalSuccess = ''"></button>
+              <div class="as-form-row">
+                <div class="as-form-group">
+                  <label class="as-form-label">New Password</label>
+                  <div class="as-password-wrap">
+                    <input :type="showNewPassword ? 'text' : 'password'" class="as-form-input" v-model="passwordForm.newPassword" required minlength="6" placeholder="Min. 6 characters" :disabled="!userProfile.emailVerified" />
+                    <button type="button" class="as-password-toggle" @click="showNewPassword = !showNewPassword">
+                      <i :class="showNewPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                    </button>
                   </div>
-                  <div v-if="hospitalError" class="alert alert-danger alert-dismissible fade show" role="alert">
-                    <i class="bi bi-exclamation-circle me-2"></i>{{ hospitalError }}
-                    <button type="button" class="btn-close" @click="hospitalError = ''"></button>
+                </div>
+                <div class="as-form-group">
+                  <label class="as-form-label">Confirm Password</label>
+                  <div class="as-password-wrap">
+                    <input :type="showConfirmPassword ? 'text' : 'password'" class="as-form-input" v-model="passwordForm.confirmPassword" required placeholder="Confirm password" :disabled="!userProfile.emailVerified" />
+                    <button type="button" class="as-password-toggle" @click="showConfirmPassword = !showConfirmPassword">
+                      <i :class="showConfirmPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                    </button>
                   </div>
                 </div>
               </div>
-              <div class="form-row">
-                <div class="form-label"></div>
-                <button type="submit" class="btn btn-primary" :disabled="profileDataLoading || joinLoading || !joinHospitalId || !userProfile.emailVerified">
-                  <span v-if="joinLoading" class="spinner-border spinner-border-sm me-2"></span>
-                  {{ joinLoading ? 'Joining...' : 'Request to Join' }}
+              <div v-if="passwordSuccess" class="as-alert as-alert-success">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>{{ passwordSuccess }}</span>
+                <button type="button" class="as-alert-close" @click="passwordSuccess = ''">&times;</button>
+              </div>
+              <div v-if="passwordError" class="as-alert as-alert-error">
+                <i class="bi bi-exclamation-circle-fill"></i>
+                <span>{{ passwordError }}</span>
+                <button type="button" class="as-alert-close" @click="passwordError = ''">&times;</button>
+              </div>
+              
+              <div class="as-pwd-actions">
+                <button type="submit" class="as-btn as-btn-primary" :disabled="passwordLoading || !userProfile.emailVerified">
+                  <span v-if="passwordLoading" class="as-spinner-sm"></span>
+                  <i v-else class="bi bi-shield-check"></i>
+                  {{ passwordLoading ? 'Updating...' : 'Update Password' }}
                 </button>
               </div>
             </form>
           </div>
-        </div>
-      </div>
-
-      <!-- Change Password Section -->
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <h5 class="card-title mb-4">
-            <i class="bi bi-shield-lock me-2"></i>Change Password
-          </h5>
-          <div v-if="!userProfile.emailVerified" class="verification-blocker mb-4">
-            <div class="verification-blocker-content">
-              <i class="bi bi-shield-exclamation verification-blocker-icon"></i>
-              <div class="verification-blocker-text">
-                <p class="verification-blocker-message mb-0">
-                  Please verify your email address to change your password.
-                </p>
-              </div>
-            </div>
-          </div>
-          <form @submit.prevent="changePassword">
-            <div class="form-row mb-3">
-              <label for="currentPassword" class="form-label">Current Password</label>
-              <div class="password-input-wrapper">
-                <input 
-                  :type="showCurrentPassword ? 'text' : 'password'"
-                  class="form-control" 
-                  id="currentPassword" 
-                  v-model="passwordForm.currentPassword"
-                  required
-                  placeholder="Enter current password"
-                  :disabled="profileDataLoading || !userProfile.emailVerified"
-                />
-                <button
-                  type="button"
-                  class="password-toggle"
-                  @click="showCurrentPassword = !showCurrentPassword"
-                  :aria-label="showCurrentPassword ? 'Hide password' : 'Show password'"
-                >
-                  <i :class="showCurrentPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
-                </button>
-              </div>
-            </div>
-            <div class="form-row mb-3">
-              <label for="newPassword" class="form-label">New Password</label>
-              <div class="password-input-wrapper">
-                <input 
-                  :type="showNewPassword ? 'text' : 'password'"
-                  class="form-control" 
-                  id="newPassword" 
-                  v-model="passwordForm.newPassword"
-                  required
-                  minlength="6"
-                  placeholder="Enter new password (min. 6 characters)"
-                  :disabled="profileDataLoading || !userProfile.emailVerified"
-                />
-                <button
-                  type="button"
-                  class="password-toggle"
-                  @click="showNewPassword = !showNewPassword"
-                  :aria-label="showNewPassword ? 'Hide password' : 'Show password'"
-                >
-                  <i :class="showNewPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
-                </button>
-              </div>
-            </div>
-            <div class="form-row mb-3">
-              <label for="confirmPassword" class="form-label">Confirm New Password</label>
-              <div class="password-input-wrapper">
-                <input 
-                  :type="showConfirmPassword ? 'text' : 'password'"
-                  class="form-control" 
-                  id="confirmPassword" 
-                  v-model="passwordForm.confirmPassword"
-                  required
-                  placeholder="Confirm new password"
-                  :disabled="profileDataLoading || !userProfile.emailVerified"
-                />
-                <button
-                  type="button"
-                  class="password-toggle"
-                  @click="showConfirmPassword = !showConfirmPassword"
-                  :aria-label="showConfirmPassword ? 'Hide password' : 'Show password'"
-                >
-                  <i :class="showConfirmPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
-                </button>
-              </div>
-            </div>
-            <div v-if="passwordSuccess || passwordError" class="form-row">
-              <div class="form-label"></div>
-              <div class="alert-wrapper">
-                <div v-if="passwordSuccess" class="alert alert-success alert-dismissible fade show" role="alert">
-                  <i class="bi bi-check-circle me-2"></i>{{ passwordSuccess }}
-                  <button type="button" class="btn-close" @click="passwordSuccess = ''"></button>
-                </div>
-                <div v-if="passwordError" class="alert alert-danger alert-dismissible fade show" role="alert">
-                  <i class="bi bi-exclamation-circle me-2"></i>{{ passwordError }}
-                  <button type="button" class="btn-close" @click="passwordError = ''"></button>
-                </div>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-label"></div>
-              <button type="submit" class="btn btn-primary" :disabled="profileDataLoading || passwordLoading || !userProfile.emailVerified">
-                <span v-if="passwordLoading" class="spinner-border spinner-border-sm me-2"></span>
-                {{ passwordLoading ? 'Changing...' : 'Change Password' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
+        </section>
+      </template>
     </div>
     
     <!-- Confirm Dialog -->
@@ -1003,6 +911,15 @@ export default {
       return roles[role] || role;
     },
     
+    getInitials(name) {
+      if (!name) return '?';
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      }
+      return name.substring(0, 2).toUpperCase();
+    },
+    
     getRoleIcon(role) {
       const icons = {
         doctor: 'bi bi-person-badge',
@@ -1214,1241 +1131,1158 @@ export default {
 </script>
 
 <style scoped>
-.account-settings {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
+/* ==========================================
+   ACCOUNT SETTINGS - MODERN HEAVY DESIGN
+   ========================================== */
 
-.account-settings .container-fluid {
-  max-width: 600px;
+.as-page {
   width: 100%;
+  min-height: calc(100vh - 60px);
+  padding: 32px 20px;
+  background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-.card {
-  border: none;
-  border-radius: 12px;
-  transition: box-shadow 0.3s ease;
+.as-container {
+  max-width: 720px;
+  margin: 0 auto;
 }
 
-.card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
-}
+/* ==========================================
+   PROFILE HERO SECTION
+   ========================================== */
 
-.card-title {
-  font-weight: 600;
-  color: #374151;
-  font-size: 1.1rem;
-}
-
-.form-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.form-row .form-label {
-  flex: 0 0 140px;
-  font-weight: 500;
-  color: #4b5563;
-  margin-bottom: 0;
-  text-align: right;
-}
-
-.form-row .form-control,
-.form-row .verification-status {
-  flex: 1;
-  min-width: 0;
-}
-
-.form-control {
-  border-radius: 8px;
-  border: 1px solid #d1d5db;
-  padding: 10px 14px;
-  transition: all 0.2s ease;
-}
-
-.form-control:focus {
-  border-color: #4a90e2;
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-  outline: none;
-}
-
-.password-input-wrapper {
+.as-profile-hero {
   position: relative;
-  flex: 1;
+  background: #fff;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  margin-bottom: 24px;
 }
 
-.password-toggle {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: #6b7280;
-  cursor: pointer;
-  padding: 4px 8px;
+.as-profile-bg {
+  height: 100px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+}
+
+.as-profile-content {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  padding: 0 28px 28px;
+  margin-top: -50px;
+  position: relative;
+}
+
+.as-avatar {
+  width: 100px;
+  height: 100px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+  border: 4px solid #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s;
+  flex-shrink: 0;
 }
 
-.password-toggle:hover {
-  color: #4a90e2;
+.as-avatar-text {
+  font-size: 36px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
 }
 
-.password-toggle:focus {
-  outline: none;
+.as-profile-info {
+  flex: 1;
+  padding-top: 54px;
 }
 
-.password-toggle i {
-  font-size: 18px;
+.as-profile-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0 0 2px 0;
+  letter-spacing: -0.02em;
 }
 
-.verification-status {
+.as-profile-username {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0 0 12px 0;
+}
+
+.as-profile-badges {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.verification-loading {
+.as-role-badge {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
-  color: #6b7280;
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.verification-loading .spinner-border-sm {
-  width: 1rem;
-  height: 1rem;
-  border-width: 0.15em;
-}
-
-.verification-unverified {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-weight: 500;
-  font-size: 0.875rem;
-  white-space: nowrap;
-}
-
-.status-badge.verified {
-  background-color: #d1fae5;
-  color: #065f46;
-}
-
-.status-badge.not-verified {
-  background-color: #fef3c7;
-  color: #92400e;
-}
-
-.btn-resend {
-  background-color: transparent;
-  border: 1px solid #4a90e2;
-  color: #4a90e2;
-  border-radius: 6px;
+  gap: 6px;
   padding: 6px 14px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.as-role-doctor {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1d4ed8;
+}
+
+.as-role-admin {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #b45309;
+}
+
+.as-role-owner {
+  background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+  color: #7c3aed;
+}
+
+.as-status-badge {
   display: inline-flex;
   align-items: center;
-  white-space: nowrap;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.btn-resend:hover:not(:disabled) {
-  background-color: #4a90e2;
-  color: white;
+.as-status-verified {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  color: #047857;
 }
 
-.btn-resend:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.as-status-unverified {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #b45309;
 }
 
-.verification-hint {
-  font-size: 0.8125rem;
-  color: #6b7280;
-  display: flex;
-  align-items: center;
-  margin-top: 4px;
-}
-
-.btn-primary {
-  background-color: #4a90e2;
-  border-color: #4a90e2;
-  border-radius: 8px;
-  padding: 10px 24px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.btn-primary:hover {
-  background-color: #357abd;
-  border-color: #357abd;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(74, 144, 226, 0.2);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.alert-wrapper {
-  flex: 1;
-  min-width: 0;
-}
-
-.alert {
-  border-radius: 8px;
-  border: none;
-  padding: 12px 16px;
-  margin-bottom: 0;
-}
-
-.alert-success {
-  background-color: #d1fae5;
-  color: #065f46;
-}
-
-.alert-danger {
-  background-color: #fee2e2;
-  color: #991b1b;
-}
-
-.shadow-sm {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-@media (max-width: 768px) {
-  .form-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  
-  .form-row .form-label {
-    flex: none;
-    text-align: left;
-    width: 100%;
-  }
-  
-  .form-row .form-control,
-  .form-row .verification-status {
-    width: 100%;
-  }
-  
-  .verification-unverified {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-/* Username validation styles */
-.input-with-status {
-  position: relative;
-  flex: 1;
-}
-
-.input-with-status .form-control {
-  padding-right: 40px;
-}
-
-.input-status {
+.as-edit-btn {
   position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: -36px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 18px;
+  color: #64748b;
+  transition: all 0.2s ease;
 }
 
-.input-status.checking {
-  color: #6b7280;
+.as-edit-btn:hover:not(:disabled) {
+  background: #fff;
+  color: #667eea;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.25);
 }
 
-.input-status.valid {
-  color: #059669;
+.as-edit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.input-status.invalid {
-  color: #dc2626;
+/* ==========================================
+   LOADING STATE
+   ========================================== */
+
+.as-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 24px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
 }
 
-.spin {
-  animation: spin 1s linear infinite;
+.as-loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: as-spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
+.as-loading-text {
+  margin: 20px 0 0 0;
+  font-size: 15px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+@keyframes as-spin {
   to { transform: rotate(360deg); }
 }
 
-.form-control.is-valid {
-  border-color: #059669;
-}
-
-.form-control.is-valid:focus {
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
-}
-
-.form-control.is-invalid {
-  border-color: #dc2626;
-}
-
-.form-control.is-invalid:focus {
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
-}
-
-.text-danger {
-  color: #dc2626;
-  font-size: 12px;
-  margin-top: 4px;
-  display: block;
-  flex: 1;
-  margin-left: 156px;
-}
-
-.text-muted {
-  color: #6b7280;
-  font-size: 13px;
-}
-
-/* Role badge styles */
-.role-display {
-  flex: 1;
-}
-
-.role-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-weight: 500;
-  font-size: 0.875rem;
-}
-
-.role-badge.doctor {
-  background-color: #e0f2fe;
-  color: #0369a1;
-}
-
-.role-badge.admin {
-  background-color: #fef3c7;
-  color: #92400e;
-}
-
-.role-badge.owner {
-  background-color: #ede9fe;
-  color: #6b21a8;
-}
-
-/* Creative Upgrade Button Design */
-.role-toggle-wrapper {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  gap: 14px;
-}
-
-.role-toggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 14px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.role-toggle input[type="checkbox"] {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.upgrade-button {
-  position: relative;
-  min-width: 120px;
-  height: 40px;
-  padding: 0 20px;
-  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
-  border-radius: 20px;
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid transparent;
-}
-
-.upgrade-button-bg {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
-  opacity: 0;
-  transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  z-index: 1;
-}
-
-.upgrade-button-content {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  z-index: 2;
-  font-weight: 600;
-  font-size: 13px;
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.upgrade-icon {
-  font-size: 16px;
-  color: #6b7280;
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  display: flex;
-  align-items: center;
-}
-
-.upgrade-icon.active {
-  color: #ffffff;
-}
-
-.upgrade-text {
-  color: #6b7280;
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  letter-spacing: 0.3px;
-}
-
-.upgrade-text.active {
-  color: #ffffff;
-}
-
-.upgrade-button-shine {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, 
-    transparent 0%,
-    rgba(255, 255, 255, 0.3) 50%,
-    transparent 100%
-  );
-  transform: translateX(-100%);
-  transition: transform 0.6s ease;
-  z-index: 3;
-  pointer-events: none;
-}
-
-.upgrade-button:hover .upgrade-button-shine {
-  transform: translateX(100%);
-}
-
-/* Checked State - Admin Active */
-.role-toggle input[type="checkbox"]:checked ~ .upgrade-button {
-  border-color: rgba(59, 130, 246, 0.3);
-  box-shadow: 
-    0 0 20px rgba(59, 130, 246, 0.4),
-    0 4px 12px rgba(59, 130, 246, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-}
-
-.role-toggle input[type="checkbox"]:checked ~ .upgrade-button .upgrade-button-bg {
-  opacity: 1;
-}
-
-/* Admin Active State - Subtle Breathing */
-.role-toggle.admin-active input[type="checkbox"]:checked ~ .upgrade-button {
-  animation: button-breathe 4s ease-in-out infinite;
-}
-
-/* Upgrading State - Smooth Flow */
-.role-toggle.upgrading .upgrade-button {
-  animation: button-flow 1.5s ease-in-out infinite;
-  box-shadow: 
-    0 0 25px rgba(59, 130, 246, 0.5),
-    0 6px 16px rgba(59, 130, 246, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-}
-
-.role-toggle.upgrading .upgrade-button-content {
-  animation: content-pulse 1.5s ease-in-out infinite;
-}
-
-/* Upgraded Success State - Fun & Fantastic Celebration */
-.role-toggle.upgraded .upgrade-button {
-  animation: button-celebration 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  position: relative;
-}
-
-.role-toggle.upgraded .upgrade-button::before {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 20px;
-  background: linear-gradient(45deg, 
-    rgba(16, 185, 129, 0.3) 0%,
-    rgba(59, 130, 246, 0.3) 25%,
-    rgba(168, 85, 247, 0.3) 50%,
-    rgba(236, 72, 153, 0.3) 75%,
-    rgba(251, 191, 36, 0.3) 100%
-  );
-  animation: rainbow-shimmer 1.5s ease-in-out;
-  z-index: 0;
-}
-
-.role-toggle.upgraded .upgrade-button-content {
-  animation: content-bounce 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.role-toggle.upgraded .upgrade-icon::after {
-  content: '✨';
-  position: absolute;
-  font-size: 12px;
-  animation: sparkle-pop 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  pointer-events: none;
-  margin-left: 4px;
-}
-
-/* Smooth Fade-Out Transition */
-.role-toggle.fading-out .upgrade-button {
-  animation: button-fade-out 1.5s ease-out forwards;
-}
-
-.role-toggle.fading-out .upgrade-button::before {
-  animation: rainbow-fade-out 1.5s ease-out forwards;
-}
-
-.role-toggle.fading-out .upgrade-success {
-  animation: success-fade-out 1.5s ease-out forwards;
-}
-
-.role-toggle input[type="checkbox"]:disabled ~ .upgrade-button {
-  opacity: 0.6;
-  cursor: not-allowed;
-  filter: grayscale(0.3);
-}
-
-.role-toggle-label {
-  font-size: 14px;
-  font-weight: 500;
-  user-select: none;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-}
-
-.role-label-active {
-  color: #3b82f6;
-}
-
-.role-label-inactive {
-  color: #6b7280;
-}
-
-.role-toggle input[type="checkbox"]:checked ~ .role-toggle-label .role-label-active {
-  animation: natural-glow 2.5s ease-in-out infinite;
-}
-
-/* Upgrade Status Indicators */
-.upgrade-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 12px;
-  color: #4a90e2;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.upgrade-spinner {
+.as-spinner-sm {
   display: inline-block;
-  animation: spin 1s linear infinite;
-  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: as-spin 0.7s linear infinite;
+  opacity: 0.7;
 }
 
-.upgrade-success {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 12px;
-  animation: success-fade-in 0.5s ease-out;
-  position: relative;
-}
+/* ==========================================
+   CARDS
+   ========================================== */
 
-.upgrade-success::before {
-  content: '🎉';
-  position: absolute;
-  left: -20px;
-  font-size: 14px;
-  animation: confetti-burst 1.5s ease-out;
-  pointer-events: none;
-}
-
-.upgrade-success::after {
-  content: '✨';
-  position: absolute;
-  right: -20px;
-  font-size: 14px;
-  animation: confetti-burst 1.5s ease-out 0.2s;
-  pointer-events: none;
-}
-
-.success-icon {
-  color: #10b981;
-  font-size: 18px;
-  animation: success-scale 0.5s ease-out;
-}
-
-.success-text {
-  color: #10b981;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-/* Animations */
-@keyframes button-breathe {
-  0%, 100% {
-    box-shadow: 
-      0 0 20px rgba(59, 130, 246, 0.4),
-      0 4px 12px rgba(59, 130, 246, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  50% {
-    box-shadow: 
-      0 0 28px rgba(59, 130, 246, 0.5),
-      0 6px 16px rgba(59, 130, 246, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-}
-
-@keyframes button-flow {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 
-      0 0 25px rgba(59, 130, 246, 0.5),
-      0 6px 16px rgba(59, 130, 246, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  50% {
-    transform: scale(1.02);
-    box-shadow: 
-      0 0 35px rgba(59, 130, 246, 0.6),
-      0 8px 20px rgba(59, 130, 246, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-}
-
-@keyframes content-pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-}
-
-@keyframes button-celebration {
-  0% {
-    transform: scale(1) rotate(0deg);
-    box-shadow: 
-      0 0 20px rgba(59, 130, 246, 0.4),
-      0 4px 12px rgba(59, 130, 246, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  20% {
-    transform: scale(1.1) rotate(2deg);
-    box-shadow: 
-      0 0 45px rgba(16, 185, 129, 0.7),
-      0 8px 24px rgba(16, 185, 129, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  40% {
-    transform: scale(1.06) rotate(-1deg);
-    box-shadow: 
-      0 0 40px rgba(168, 85, 247, 0.6),
-      0 7px 22px rgba(168, 85, 247, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  60% {
-    transform: scale(1.08) rotate(1deg);
-    box-shadow: 
-      0 0 42px rgba(236, 72, 153, 0.6),
-      0 7px 23px rgba(236, 72, 153, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  80% {
-    transform: scale(1.04) rotate(-0.5deg);
-    box-shadow: 
-      0 0 32px rgba(251, 191, 36, 0.5),
-      0 6px 20px rgba(251, 191, 36, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  100% {
-    transform: scale(1) rotate(0deg);
-    box-shadow: 
-      0 0 20px rgba(59, 130, 246, 0.4),
-      0 4px 12px rgba(59, 130, 246, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-}
-
-@keyframes content-bounce {
-  0%, 100% {
-    transform: scale(1) translateY(0);
-  }
-  15% {
-    transform: scale(1.15) translateY(-2px);
-  }
-  30% {
-    transform: scale(1.08) translateY(0);
-  }
-  45% {
-    transform: scale(1.12) translateY(-1px);
-  }
-  60% {
-    transform: scale(1.06) translateY(0);
-  }
-  75% {
-    transform: scale(1.09) translateY(-0.5px);
-  }
-  90% {
-    transform: scale(1.03) translateY(0);
-  }
-}
-
-@keyframes button-fade-out {
-  0% {
-    transform: scale(1);
-    box-shadow: 
-      0 0 20px rgba(59, 130, 246, 0.4),
-      0 4px 12px rgba(59, 130, 246, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 
-      0 0 20px rgba(59, 130, 246, 0.4),
-      0 4px 12px rgba(59, 130, 246, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-}
-
-@keyframes rainbow-shimmer {
-  0% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  30% {
-    opacity: 0.8;
-    transform: scale(1.1);
-  }
-  60% {
-    opacity: 0.6;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-}
-
-@keyframes sparkle-pop {
-  0% {
-    opacity: 0;
-    transform: translateY(0) scale(0) rotate(0deg);
-  }
-  30% {
-    opacity: 1;
-    transform: translateY(-15px) scale(1.5) rotate(180deg);
-  }
-  60% {
-    opacity: 0.8;
-    transform: translateY(-25px) scale(1.2) rotate(360deg);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-35px) scale(0.8) rotate(540deg);
-  }
-}
-
-@keyframes rainbow-fade-out {
-  0% {
-    opacity: 0.3;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes success-fade-out {
-  0% {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(-10px) scale(0.9);
-  }
-}
-
-@keyframes success-fade-in {
-  0% {
-    opacity: 0;
-    transform: translateX(-10px) scale(0.9);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-@keyframes confetti-burst {
-  0% {
-    opacity: 0;
-    transform: translateY(0) scale(0) rotate(0deg);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-20px) scale(1.2) rotate(180deg);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-40px) scale(0.8) rotate(360deg);
-  }
-}
-
-@keyframes success-scale {
-  0% {
-    transform: scale(0);
-  }
-  50% {
-    transform: scale(1.2);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes natural-glow {
-  0%, 100% {
-    text-shadow: 0 0 5px rgba(59, 130, 246, 0.3);
-  }
-  50% {
-    text-shadow: 0 0 15px rgba(59, 130, 246, 0.6), 0 0 25px rgba(59, 130, 246, 0.4);
-  }
-}
-
-/* Hospital membership styles */
-.membership-info {
+.as-card {
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
   margin-bottom: 20px;
 }
 
-.membership-card {
-  background: #f9fafb;
+.as-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+}
+
+.as-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.as-section-title i {
+  font-size: 18px;
+  color: #64748b;
+}
+
+.as-card-body {
+  padding: 24px;
+}
+
+/* ==========================================
+   INFO GRID (Profile Display)
+   ========================================== */
+
+.as-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.as-info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+  background: #f8fafc;
   border-radius: 12px;
-  padding: 20px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e2e8f0;
 }
 
-.membership-card.accepted {
-  border-left: 4px solid #059669;
+.as-info-item.as-info-full {
+  grid-column: 1 / -1;
 }
 
-.membership-card.pending {
-  border-left: 4px solid #f59e0b;
+.as-info-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.membership-card.blocked {
-  border-left: 4px solid #dc2626;
+.as-info-icon i {
+  font-size: 18px;
+  color: #fff;
 }
 
-.membership-card.kicked {
-  border-left: 4px solid #6b7280;
+.as-info-content {
+  flex: 1;
+  min-width: 0;
 }
 
-.membership-header {
+.as-info-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.as-info-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.as-inline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.as-badge-success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.as-badge-warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+/* ==========================================
+   EDIT FORM
+   ========================================== */
+
+.as-edit-form {
+  padding: 4px 0;
+}
+
+.as-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.as-form-group {
+  margin-bottom: 20px;
+}
+
+.as-form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.as-form-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 500;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #1e293b;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.as-form-input:focus {
+  outline: none;
+  border-color: #667eea;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+}
+
+.as-form-input::placeholder {
+  color: #94a3b8;
+}
+
+.as-form-input:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.as-input-wrap {
+  position: relative;
+}
+
+.as-input-prefix {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.as-input-prefixed {
+  padding-left: 32px;
+}
+
+.as-input-status {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+}
+
+.as-status-checking { color: #94a3b8; }
+.as-status-valid { color: #10b981; }
+.as-status-invalid { color: #ef4444; }
+
+.as-spin { animation: as-spin 0.8s linear infinite; }
+
+.as-form-input.as-input-valid { border-color: #10b981; }
+.as-form-input.as-input-invalid { border-color: #ef4444; }
+
+.as-form-error {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #ef4444;
+}
+
+.as-edit-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* ==========================================
+   BUTTONS
+   ========================================== */
+
+.as-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.as-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.as-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(102, 126, 234, 0.35);
+}
+
+.as-btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.45);
+}
+
+.as-btn-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.as-btn-success:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+}
+
+.as-btn-ghost {
+  background: #fff;
+  color: #64748b;
+  border: 2px solid #e2e8f0;
+}
+
+.as-btn-ghost:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+.as-btn-warning {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+
+.as-btn-warning:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.45);
+}
+
+.as-btn-danger-outline {
+  background: #fff;
+  color: #ef4444;
+  border: 2px solid #fecaca;
+}
+
+.as-btn-danger-outline:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
+/* ==========================================
+   VERIFICATION BANNER
+   ========================================== */
+
+.as-verify-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #fbbf24;
+  border-radius: 12px;
+  margin-top: 20px;
+}
+
+.as-verify-banner.as-verify-compact {
+  padding: 12px 16px;
+  gap: 12px;
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.as-verify-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(217, 119, 6, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.as-verify-icon i {
+  font-size: 22px;
+  color: #b45309;
+}
+
+.as-verify-content {
+  flex: 1;
+}
+
+.as-verify-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #92400e;
+  margin: 0 0 2px 0;
+}
+
+.as-verify-desc {
+  font-size: 13px;
+  color: #78350f;
+  margin: 0;
+}
+
+/* ==========================================
+   ALERTS
+   ========================================== */
+
+.as-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  margin-top: 16px;
+}
+
+.as-alert i { font-size: 18px; flex-shrink: 0; }
+
+.as-alert-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  opacity: 0.5;
+  margin-left: auto;
+  padding: 0;
+}
+
+.as-alert-close:hover { opacity: 1; }
+
+.as-alert-success {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #166534;
+}
+
+.as-alert-error {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+}
+
+.as-alert-warning {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+}
+
+.as-alert-sm {
+  padding: 10px 14px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+
+/* ==========================================
+   PLAN BADGES
+   ========================================== */
+
+.as-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.as-plan-badge.bg-success {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #166534;
+}
+
+.as-plan-badge.bg-primary {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1e40af;
+}
+
+.as-plan-badge.bg-danger {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+}
+
+/* ==========================================
+   SUBSCRIPTION SECTION
+   ========================================== */
+
+.as-sub-content {
+  padding: 4px 0;
+}
+
+.as-sub-forever {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-radius: 14px;
+}
+
+.as-forever-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.as-forever-icon i {
+  font-size: 28px;
+  color: #fff;
+}
+
+.as-forever-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #065f46;
+  margin: 0 0 2px 0;
+}
+
+.as-forever-desc {
+  font-size: 14px;
+  color: #047857;
+  margin: 0;
+}
+
+.as-sub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.as-sub-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.as-stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.as-stat-icon i {
+  font-size: 20px;
+  color: #fff;
+}
+
+.as-stat-icon.text-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+.as-stat-icon.text-warning { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+.as-stat-icon.text-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+
+.as-stat-label {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.as-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.as-stat-value.text-danger { color: #dc2626; }
+.as-stat-value.text-warning { color: #d97706; }
+.as-stat-value.text-success { color: #059669; }
+
+/* ==========================================
+   MEMBERSHIP BADGES
+   ========================================== */
+
+.as-membership-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.as-mbadge-accepted { background: #dcfce7; color: #166534; }
+.as-mbadge-pending { background: #fef3c7; color: #b45309; }
+.as-mbadge-pending_invitation { background: #dbeafe; color: #1e40af; }
+.as-mbadge-blocked { background: #fee2e2; color: #dc2626; }
+.as-mbadge-kicked { background: #f1f5f9; color: #64748b; }
+
+/* ==========================================
+   INVITATION CARD
+   ========================================== */
+
+.as-invite-card {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid #bfdbfe;
+}
+
+.as-invite-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.as-invite-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.as-invite-icon i {
+  font-size: 26px;
+  color: #fff;
+}
+
+.as-invite-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e40af;
+  margin: 0 0 2px 0;
+}
+
+.as-invite-hospital {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.as-invite-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+}
+
+.as-invite-detail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.as-invite-detail i {
+  color: #3b82f6;
+}
+
+.as-invite-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* ==========================================
+   HOSPITAL CARD
+   ========================================== */
+
+.as-hospital-card {
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #e2e8f0;
+}
+
+.as-hcard-accepted { border-left-color: #10b981; }
+.as-hcard-pending { border-left-color: #f59e0b; }
+.as-hcard-blocked { border-left-color: #ef4444; }
+.as-hcard-kicked { border-left-color: #94a3b8; }
+
+.as-hospital-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.as-hospital-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.as-hospital-icon i {
+  font-size: 24px;
+  color: #fff;
+}
+
+.as-hospital-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 4px 0;
+}
+
+.as-hospital-id {
+  font-size: 12px;
+  font-family: "SF Mono", Monaco, monospace;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+.as-hospital-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.as-hospital-detail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.as-hospital-detail i {
+  color: #8b5cf6;
+}
+
+.as-hospital-actions {
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Hospital Subscription Sub-section */
+.as-hsub-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.as-hsub-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  flex-wrap: wrap;
+}
+
+.as-hsub-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+}
+
+.as-hsub-forever {
+  display: flex;
+  align-items: center;
   gap: 8px;
-}
-
-.membership-header h6 {
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.membership-status {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.membership-status.accepted {
-  background-color: #d1fae5;
-  color: #065f46;
-}
-
-.membership-status.pending {
-  background-color: #fef3c7;
-  color: #92400e;
-}
-
-.membership-status.blocked {
-  background-color: #fee2e2;
-  color: #991b1b;
-}
-
-.membership-status.kicked {
-  background-color: #f3f4f6;
-  color: #4b5563;
-}
-
-.membership-status.pending_invitation {
-  background-color: #dbeafe;
-  color: #1e40af;
-}
-
-.membership-card.pending_invitation {
-  border-left: 4px solid #3b82f6;
-}
-
-.invitation-card {
-  margin-bottom: 24px;
-}
-
-.invitation-card .alert {
-  border-radius: 12px;
-  border: 1px solid #bfdbfe;
-  background-color: #eff6ff;
-}
-
-.invitation-card .alert-heading {
-  color: #1e40af;
-  font-weight: 600;
-}
-
-.invitation-details {
-  background-color: #ffffff;
-  padding: 12px;
-  border-radius: 8px;
-  margin-top: 12px;
-  border: 1px solid #dbeafe;
-}
-
-.invitation-actions {
-  margin-top: 16px;
-}
-
-.invitation-actions .btn {
-  min-width: 140px;
-}
-
-.membership-details {
-  font-size: 0.875rem;
-  color: #4b5563;
-  margin-bottom: 16px;
-}
-
-.membership-details p {
-  margin-bottom: 4px;
-}
-
-.membership-actions {
-  padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
-}
-
-.btn-outline-danger {
-  color: #dc2626;
-  border-color: #dc2626;
-}
-
-.btn-outline-danger:hover {
-  background-color: #dc2626;
-  color: white;
-}
-
-/* Subscription styles */
-.subscription-details {
-  padding: 8px 0;
-}
-
-.subscription-badge {
-  display: flex;
-  align-items: center;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.expiration-details {
-  margin-top: 16px;
-}
-
-.detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
-  margin-bottom: 8px;
-}
-
-.detail-label {
-  color: #6b7280;
-  display: flex;
-  align-items: center;
-}
-
-.detail-value {
-  font-weight: 600;
-  color: #111827;
-}
-
-.forever-plan-info {
-  display: flex;
-  align-items: center;
-  padding: 12px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  padding: 10px 14px;
+  background: #dcfce7;
   border-radius: 8px;
   color: #166534;
   font-size: 14px;
-  font-weight: 500;
-}
-
-.warning-alert {
-  display: flex;
-  align-items: flex-start;
-  padding: 12px 16px;
-  background: #fef3c7;
-  border: 1px solid #fde68a;
-  border-radius: 8px;
-  color: #92400e;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.warning-alert i {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.expired-alert {
-  display: flex;
-  align-items: flex-start;
-  padding: 12px 16px;
-  background: #fee2e2;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  color: #991b1b;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.expired-alert i {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.no-subscription-info {
-  display: flex;
-  align-items: center;
-  padding: 12px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.hospital-subscription-info {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #e5e7eb;
-}
-
-/* Field Display Styles */
-.field-display {
-  flex: 1;
-  display: flex;
-  align-items: center;
-}
-
-.field-value {
-  font-size: 15px;
-  color: #1f2937;
-  font-weight: 500;
-  padding: 8px 0;
-  line-height: 1.5;
-}
-
-/* Profile Actions */
-.profile-actions {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* Verification Blocker Styles */
-.verification-blocker {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  border: 1px solid #fbbf24;
-  border-radius: 12px;
-  padding: 16px;
-  animation: slideDown 0.3s ease-out;
-}
-
-.verification-blocker-content {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.verification-blocker-icon {
-  font-size: 24px;
-  color: #d97706;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.verification-blocker-text {
-  flex: 1;
-}
-
-.verification-blocker-title {
-  font-size: 15px;
   font-weight: 600;
-  color: #92400e;
-  margin-bottom: 4px;
 }
 
-.verification-blocker-message {
-  font-size: 14px;
-  color: #78350f;
-  line-height: 1.5;
+.as-hsub-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #475569;
+  padding: 8px 0;
+}
+
+.as-hsub-info i {
+  margin-right: 4px;
+}
+
+/* ==========================================
+   JOIN HOSPITAL SECTION
+   ========================================== */
+
+.as-join-section {
+  padding: 4px 0;
+}
+
+.as-join-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.as-join-header i {
+  font-size: 28px;
+  color: #8b5cf6;
+}
+
+.as-join-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 2px 0;
+}
+
+.as-join-desc {
+  font-size: 13px;
+  color: #64748b;
   margin: 0;
 }
 
-/* Verification Notice (less intrusive) */
-.verification-notice {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  border: 1px solid #fbbf24;
-  border-radius: 8px;
-  padding: 12px 16px;
-  animation: slideDown 0.3s ease-out;
-}
-
-.verification-notice-content {
+.as-join-form {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 12px;
+  margin-top: 16px;
 }
 
-.verification-notice-icon {
+.as-join-form .as-form-input {
+  flex: 1;
+  max-width: 200px;
+  font-family: "SF Mono", Monaco, monospace;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ==========================================
+   PASSWORD SECTION
+   ========================================== */
+
+.as-password-form {
+  padding: 4px 0;
+}
+
+.as-password-wrap {
+  position: relative;
+}
+
+.as-password-wrap .as-form-input {
+  padding-right: 48px;
+}
+
+.as-password-toggle {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
   font-size: 18px;
-  color: #d97706;
-  flex-shrink: 0;
+  transition: color 0.2s ease;
 }
 
-.verification-notice-text {
+.as-password-toggle:hover {
+  color: #667eea;
+}
+
+.as-pwd-actions {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* ==========================================
+   EMPTY STATE
+   ========================================== */
+
+.as-empty-state {
+  text-align: center;
+  padding: 40px 24px;
+  background: #f8fafc;
+  border-radius: 14px;
+  border: 2px dashed #e2e8f0;
+}
+
+.as-empty-state i {
+  font-size: 48px;
+  color: #cbd5e1;
+  display: block;
+  margin-bottom: 16px;
+}
+
+.as-empty-state p {
   font-size: 14px;
-  color: #78350f;
-  font-weight: 500;
+  color: #64748b;
+  margin: 0;
 }
 
-.role-toggle.disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
+/* ==========================================
+   TEXT UTILITY CLASSES
+   ========================================== */
 
-.role-toggle.disabled .upgrade-button {
-  filter: grayscale(0.5);
-  opacity: 0.8;
-}
+.text-danger { color: #dc2626 !important; }
+.text-warning { color: #d97706 !important; }
+.text-success { color: #059669 !important; }
 
-/* Disabled Input Styles */
-.form-control:disabled {
-  background-color: #f3f4f6;
-  color: #9ca3af;
-  cursor: not-allowed;
-  opacity: 0.7;
-}
+/* ==========================================
+   RESPONSIVE
+   ========================================== */
 
-.btn-primary:disabled {
-  background-color: #d1d5db;
-  border-color: #d1d5db;
-  color: #9ca3af;
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-/* Animation */
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .profile-actions {
-    flex-direction: column;
-    align-items: stretch;
+@media (max-width: 640px) {
+  .as-page {
+    padding: 16px 12px;
   }
   
-  .profile-actions .btn {
-    width: 100%;
-  }
-  
-  .verification-blocker-content {
+  .as-profile-content {
     flex-direction: column;
+    align-items: center;
     text-align: center;
+    padding: 0 20px 24px;
   }
   
-  .verification-blocker-icon {
-    align-self: center;
+  .as-avatar {
+    margin-top: -60px;
+  }
+  
+  .as-profile-info {
+    padding-top: 16px;
+  }
+  
+  .as-profile-badges {
+    justify-content: center;
+  }
+  
+  .as-edit-btn {
+    position: static;
+    margin-top: 16px;
+  }
+  
+  .as-info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .as-form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .as-sub-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .as-edit-actions,
+  .as-invite-actions,
+  .as-join-form {
+    flex-direction: column;
+  }
+  
+  .as-join-form .as-form-input {
+    max-width: none;
+  }
+  
+  .as-invite-card,
+  .as-hospital-card {
+    padding: 20px;
   }
 }
 </style>

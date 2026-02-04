@@ -315,7 +315,6 @@ router.get('/stats/overview', protect, requireOwner(), async (req, res) => {
     const totalUsers = await User.countDocuments();
     const doctorCount = await User.countDocuments({ role: 'doctor' });
     const adminCount = await User.countDocuments({ role: 'admin' });
-    const ownerCount = await User.countDocuments({ role: 'owner' });
     const blockedCount = await User.countDocuments({ blocked: true });
     const hospitalCount = await Hospital.countDocuments();
     
@@ -325,7 +324,6 @@ router.get('/stats/overview', protect, requireOwner(), async (req, res) => {
         totalUsers,
         doctorCount,
         adminCount,
-        ownerCount,
         blockedCount,
         hospitalCount
       }

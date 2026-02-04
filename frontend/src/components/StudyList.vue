@@ -420,19 +420,17 @@ export default {
     },
     async mounted() {
         this.updateSelectAll();
-        // If configuration is already loaded, ensure we process the route query params
-        // This is critical when navigating from other routes (e.g., WordFileList, PatientList) to filtered-studies
+        // If configuration is already loaded, ensure we load the study list
+        // This is critical when navigating from other routes (e.g., Dashboard, WordFileList, PatientList) to studies
         // The isConfigurationLoaded watcher might have already fired before the component was mounted,
-        // or the route watcher might not fire on initial mount
+        // or the route watcher might not fire on initial mount (immediate: false)
         if (this.isConfigurationLoaded) {
             // Use nextTick to ensure route is fully initialized
             await this.$nextTick();
-            // Check if we have query params that need to be processed
-            if (this.$route.query && Object.keys(this.$route.query).length > 0) {
-                // Only update if we're not already updating (avoid duplicate calls)
-                if (!this.updatingRouteWithoutReload && !this.updatingFilterUi) {
-                    await this.updateFilterFromRoute(this.$route.query);
-                }
+            // Always call updateFilterFromRoute when config is loaded, even without query params
+            // This ensures the study list is loaded when navigating to /studies from other pages
+            if (!this.updatingRouteWithoutReload && !this.updatingFilterUi) {
+                await this.updateFilterFromRoute(this.$route.query || {});
             }
         }
     },

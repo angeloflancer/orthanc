@@ -490,7 +490,7 @@ export default {
     </div>
 </template>
 
-<style scoped>
+<style>
 /* Page Container */
 .patients-page {
     width: 100%;
@@ -549,6 +549,36 @@ export default {
     padding: 8px 12px;
     vertical-align: middle;
 }
+
+/* Generic date picker styling - works everywhere */
+.dp__input_wrap {
+    height: 34px !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+.dp__input {
+    height: 34px !important;
+    min-height: 34px !important;
+    max-height: 34px !important;
+    padding: 6px 10px !important;
+    border-radius: 6px !important;
+    border: 1px solid #e5e7eb !important;
+    font-size: 13px !important;
+    transition: all 0.15s ease !important;
+    background: #f9fafb !important;
+    box-shadow: none !important;
+    line-height: 1.5 !important;
+    box-sizing: border-box !important;
+}
+
+.dp__input:focus {
+    border-color: #4a90e2 !important;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15) !important;
+    outline: none !important;
+    background: white !important;
+}
+
 
 .filter-with-clear {
     display: flex;

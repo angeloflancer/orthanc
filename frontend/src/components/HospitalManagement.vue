@@ -1,204 +1,156 @@
 <template>
-  <div class="hospital-management">
+  <div class="hm-page">
     <div class="hm-container">
       <header class="hm-header">
         <div class="hm-header-row">
-          <div>
+          <div class="hm-header-text">
             <h1 class="hm-title">Hospital Management</h1>
             <p class="hm-subtitle">Manage hospitals, members, and subscriptions.</p>
           </div>
           <button
             v-if="!loading && hospitals.length === 0"
             type="button"
-            class="btn btn-primary"
+            class="hm-btn hm-btn-primary"
             @click="openCreateHospital"
           >
-            <i class="bi bi-plus-lg me-1"></i>Create hospital
+            <i class="bi bi-plus-lg"></i> Create hospital
           </button>
         </div>
       </header>
 
       <div v-if="loading" class="hm-loading">
-        <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">Loading...</span>
-        </div>
+        <div class="hm-loading-spinner"></div>
+        <p class="hm-loading-text">Loading hospitals...</p>
       </div>
 
       <div v-else-if="hospitals.length === 0" class="hm-empty">
-        <div class="hm-empty-icon">
-          <i class="bi bi-building"></i>
-        </div>
-        <h3>No hospitals yet</h3>
-        <p>Create the first hospital and assign a user as its admin (they must be a registered doctor).</p>
-        <button type="button" class="btn btn-primary mt-3" @click="openCreateHospital">
-          <i class="bi bi-plus-lg me-1"></i>Create hospital
+        <div class="hm-empty-icon"><i class="bi bi-building"></i></div>
+        <h3 class="hm-empty-title">No hospitals yet</h3>
+        <p class="hm-empty-text">Create the first hospital and assign a user as its admin (they must be a registered doctor).</p>
+        <button type="button" class="hm-btn hm-btn-primary" @click="openCreateHospital">
+          <i class="bi bi-plus-lg"></i> Create hospital
         </button>
       </div>
 
       <div v-else>
         <div class="hm-cards">
-        <section
-          v-for="hospital in hospitals"
-          :key="hospital.id"
-          class="hm-card"
-        >
-          <div class="hm-card-head">
-            <div class="hm-card-title-row">
-              <h2 class="hm-card-name">{{ hospital.name }}</h2>
-              <span class="hm-card-id">{{ hospital.hospitalId }}</span>
-              <span
-                class="hm-badge hm-badge-sub"
-                :class="subClass(hospital)"
-              >
-                {{ subscriptionLabel(hospital) }}
-              </span>
+          <section
+            v-for="hospital in hospitals"
+            :key="hospital.id"
+            class="hm-card"
+          >
+            <div class="hm-card-head">
+              <div class="hm-card-hero">
+                <div class="hm-card-icon">
+                  <i class="bi bi-building"></i>
+                </div>
+                <div class="hm-card-titles">
+                  <h2 class="hm-card-name">{{ hospital.name }}</h2>
+                  <span class="hm-card-id">{{ hospital.hospitalId }}</span>
+                </div>
+                <span class="hm-badge hm-badge-sub" :class="subClass(hospital)">
+                  {{ subscriptionLabel(hospital) }}
+                </span>
+              </div>
+              <div class="hm-card-meta">
+                <span class="hm-meta-item">
+                  <i class="bi bi-people"></i>
+                  <strong>{{ hospital.memberCount || 0 }}</strong> members
+                  <template v-if="hospital.pendingCount > 0">
+                    <span class="hm-meta-pending"> · {{ hospital.pendingCount }} pending</span>
+                  </template>
+                </span>
+                <span v-if="hospital.admin" class="hm-meta-item hm-meta-admin">
+                  Admin: {{ hospital.admin.name }} <span class="hm-meta-detail">@{{ hospital.admin.username }}</span>
+                </span>
+              </div>
+              <p v-if="hospital.address" class="hm-card-address">{{ hospital.address }}</p>
             </div>
-            <div class="hm-card-meta">
-              <span class="hm-meta-item">
-                <i class="bi bi-people"></i>
-                <strong>{{ hospital.memberCount || 0 }}</strong> members
-                <template v-if="hospital.pendingCount > 0">
-                  · <span class="text-muted">{{ hospital.pendingCount }} pending</span>
-                </template>
-              </span>
-              <span v-if="hospital.admin" class="hm-meta-item hm-meta-admin">
-                Admin: {{ hospital.admin.name }} <span class="hm-meta-detail">@{{ hospital.admin.username }}</span>
-              </span>
-            </div>
-            <p v-if="hospital.address" class="hm-card-address">{{ hospital.address }}</p>
-          </div>
 
-          <div class="hm-card-body">
-            <div class="hm-members-section">
-              <div class="hm-members-header">
-                <h3 class="hm-section-title">Members</h3>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary"
-                  @click.stop="openAddDoctor(hospital)"
-                >
-                  <i class="bi bi-person-plus me-1"></i>Add doctor
-                </button>
-              </div>
-              <div v-if="membersLoading[hospital.id]" class="hm-members-loading">
-                <div class="spinner-border spinner-border-sm" role="status"></div>
-              </div>
-              <div v-else-if="!membersByHospital[hospital.id] || membersByHospital[hospital.id].length === 0" class="hm-members-empty">
-                No members yet. Add a doctor by username.
-              </div>
-              <div v-else>
-                <table class="hm-members-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Username</th>
-                      <th>Email</th>
-                      <th>Status</th>
-                      <th class="hm-col-actions">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="m in membersByHospital[hospital.id]" :key="m.id">
-                      <td>{{ m.user ? m.user.name : '—' }}</td>
-                      <td>@{{ m.user ? m.user.username : '—' }}</td>
-                      <td class="hm-cell-email">{{ m.user ? m.user.email : '—' }}</td>
-                      <td>
-                        <span class="hm-badge hm-badge-status" :class="'hm-status-' + m.status">
-                          {{ statusLabel(m.status) }}
-                        </span>
-                      </td>
-                      <td class="hm-col-actions">
-                        <template v-if="m.status === 'accepted' || m.status === 'pending' || m.status === 'pending_invitation'">
-                          <button
-                            type="button"
-                            class="btn btn-sm btn-outline-danger me-1"
-                            title="Kick"
-                            @click="confirmAction(hospital, m, 'kick')"
-                          >
-                            Kick
-                          </button>
-                          <button
-                            type="button"
-                            class="btn btn-sm btn-outline-danger"
-                            title="Block"
-                            @click="confirmAction(hospital, m, 'block')"
-                          >
-                            Block
-                          </button>
-                        </template>
-                        <template v-else-if="m.status === 'blocked'">
-                          <button
-                            type="button"
-                            class="btn btn-sm btn-outline-secondary"
-                            title="Unblock"
-                            @click="confirmAction(hospital, m, 'unblock')"
-                          >
-                            Unblock
-                          </button>
-                        </template>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div v-if="membersPagination[hospital.id] && membersPagination[hospital.id].pages > 1" class="hm-members-pagination">
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-secondary"
-                    :disabled="!membersPagination[hospital.id] || membersPagination[hospital.id].page <= 1"
-                    @click="goToMembersPage(hospital.id, (membersPagination[hospital.id]?.page || 1) - 1)"
-                  >
-                    <i class="bi bi-chevron-left"></i>
-                  </button>
-                  <span class="hm-page-info">Page {{ membersPagination[hospital.id]?.page || 1 }} of {{ membersPagination[hospital.id]?.pages || 1 }}</span>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-secondary"
-                    :disabled="!membersPagination[hospital.id] || membersPagination[hospital.id].page >= membersPagination[hospital.id].pages"
-                    @click="goToMembersPage(hospital.id, (membersPagination[hospital.id]?.page || 1) + 1)"
-                  >
-                    <i class="bi bi-chevron-right"></i>
+            <div class="hm-card-body">
+              <div class="hm-members-section">
+                <div class="hm-members-header">
+                  <h3 class="hm-section-title">Members</h3>
+                  <button type="button" class="hm-btn hm-btn-add" @click.stop="openAddDoctor(hospital)">
+                    <i class="bi bi-person-plus"></i> Add doctor
                   </button>
                 </div>
+                <div v-if="membersLoading[hospital.id]" class="hm-members-loading">
+                  <div class="hm-spinner-sm" role="status"></div>
+                </div>
+                <div v-else-if="!membersByHospital[hospital.id] || membersByHospital[hospital.id].length === 0" class="hm-members-empty">
+                  No members yet. Add a doctor by username.
+                </div>
+                <div v-else class="hm-members-wrap">
+                  <table class="hm-members-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th class="hm-col-actions">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="m in membersByHospital[hospital.id]" :key="m.id">
+                        <td>{{ m.user ? m.user.name : '—' }}</td>
+                        <td>@{{ m.user ? m.user.username : '—' }}</td>
+                        <td class="hm-cell-email">{{ m.user ? m.user.email : '—' }}</td>
+                        <td>
+                          <span class="hm-badge hm-badge-status" :class="'hm-status-' + m.status">
+                            {{ statusLabel(m.status) }}
+                          </span>
+                        </td>
+                        <td class="hm-col-actions">
+                          <template v-if="m.status === 'accepted' || m.status === 'pending' || m.status === 'pending_invitation'">
+                            <button type="button" class="hm-btn hm-btn-row hm-btn-kick" title="Kick" @click="confirmAction(hospital, m, 'kick')">Kick</button>
+                            <button type="button" class="hm-btn hm-btn-row hm-btn-block" title="Block" @click="confirmAction(hospital, m, 'block')">Block</button>
+                          </template>
+                          <template v-else-if="m.status === 'blocked'">
+                            <button type="button" class="hm-btn hm-btn-row hm-btn-unblock" title="Unblock" @click="confirmAction(hospital, m, 'unblock')">Unblock</button>
+                          </template>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-if="membersPagination[hospital.id] && membersPagination[hospital.id].pages > 1" class="hm-members-pagination">
+                    <button type="button" class="hm-pagination-btn" :disabled="!membersPagination[hospital.id] || membersPagination[hospital.id].page <= 1"
+                      @click="goToMembersPage(hospital.id, (membersPagination[hospital.id]?.page || 1) - 1)">
+                      <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <span class="hm-page-info">Page <strong>{{ membersPagination[hospital.id]?.page || 1 }}</strong> of <strong>{{ membersPagination[hospital.id]?.pages || 1 }}</strong></span>
+                    <button type="button" class="hm-pagination-btn" :disabled="!membersPagination[hospital.id] || membersPagination[hospital.id].page >= membersPagination[hospital.id].pages"
+                      @click="goToMembersPage(hospital.id, (membersPagination[hospital.id]?.page || 1) + 1)">
+                      <i class="bi bi-chevron-right"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="hm-card-actions">
+                <button type="button" class="hm-btn hm-btn-primary" @click.stop="openSubscribe(hospital)">
+                  <i class="bi bi-calendar-check"></i> Subscribe / Extend
+                </button>
+                <button v-if="hospital.admin && hospital.subscription && hospital.subscription.isActive" type="button" class="hm-btn hm-btn-danger-outline"
+                  @click.stop="confirmExpireHospital(hospital)">
+                  <i class="bi bi-x-circle"></i> Expire subscription
+                </button>
+                <button type="button" class="hm-btn hm-btn-secondary-outline" @click.stop="openChangeAdmin(hospital)">
+                  <i class="bi bi-person-gear"></i> Change admin
+                </button>
+                <button type="button" class="hm-btn hm-btn-danger-outline" @click.stop="confirmDeleteHospital(hospital)">
+                  <i class="bi bi-trash"></i> Delete hospital
+                </button>
               </div>
             </div>
-            <div class="hm-card-actions">
-              <button type="button" class="btn btn-primary" @click.stop="openSubscribe(hospital)">
-                <i class="bi bi-calendar-check me-1"></i>Subscribe / Extend
-              </button>
-              <button
-                v-if="hospital.admin && hospital.subscription && hospital.subscription.isActive"
-                type="button"
-                class="btn btn-outline-danger"
-                @click.stop="expireHospital(hospital)"
-              >
-                <i class="bi bi-x-circle me-1"></i>Expire subscription
-              </button>
-              <button type="button" class="btn btn-outline-secondary" @click.stop="openChangeAdmin(hospital)">
-                <i class="bi bi-person-gear me-1"></i>Change admin
-              </button>
-              <button type="button" class="btn btn-outline-danger" @click.stop="confirmDeleteHospital(hospital)">
-                <i class="bi bi-trash me-1"></i>Delete hospital
-              </button>
-            </div>
-          </div>
-        </section>
+          </section>
         </div>
         <div v-if="!loading && pagination.pages > 1" class="hm-pagination-section">
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-secondary"
-            :disabled="pagination.page <= 1"
-            @click="goToHospitalsPage(pagination.page - 1)"
-          >
+          <button type="button" class="hm-pagination-btn" :disabled="pagination.page <= 1" @click="goToHospitalsPage(pagination.page - 1)">
             <i class="bi bi-chevron-left"></i>
           </button>
-          <span class="hm-page-info">Page {{ pagination.page }} of {{ pagination.pages }}</span>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-secondary"
-            :disabled="pagination.page >= pagination.pages"
-            @click="goToHospitalsPage(pagination.page + 1)"
-          >
+          <span class="hm-page-info">Page <strong>{{ pagination.page }}</strong> of <strong>{{ pagination.pages }}</strong></span>
+          <button type="button" class="hm-pagination-btn" :disabled="pagination.page >= pagination.pages" @click="goToHospitalsPage(pagination.page + 1)">
             <i class="bi bi-chevron-right"></i>
           </button>
         </div>
@@ -208,34 +160,23 @@
       <div v-if="showSubscribeModal" class="hm-modal-overlay" @click.self="showSubscribeModal = false">
         <div class="hm-modal">
           <div class="hm-modal-header">
-            <h3>Subscribe / Extend</h3>
-            <button type="button" class="btn-close" @click="showSubscribeModal = false" aria-label="Close"></button>
+            <h3 class="hm-modal-title">Subscribe / Extend</h3>
+            <button type="button" class="hm-modal-close" @click="showSubscribeModal = false" aria-label="Close"><i class="bi bi-x-lg"></i></button>
           </div>
           <div class="hm-modal-body">
             <p class="hm-modal-hospital-name">{{ selectedHospital ? selectedHospital.name : '' }}</p>
             <div class="hm-plan-options">
-              <div
-                v-for="plan in subscriptionPlans"
-                :key="plan.value"
-                class="form-check"
-              >
-                <input
-                  :id="`plan-${plan.value}`"
-                  v-model="selectedPlan"
-                  type="radio"
-                  :value="plan.value"
-                  class="form-check-input"
-                />
-                <label :for="`plan-${plan.value}`" class="form-check-label">
-                  {{ plan.name }} – {{ plan.description }}
-                </label>
-              </div>
+              <label v-for="plan in subscriptionPlans" :key="plan.value" class="hm-plan-option" :class="{ active: selectedPlan === plan.value }">
+                <input :id="`plan-${plan.value}`" v-model="selectedPlan" type="radio" :value="plan.value" class="hm-plan-radio" />
+                <span class="hm-plan-name">{{ plan.name }}</span>
+                <span class="hm-plan-desc">{{ plan.description }}</span>
+              </label>
             </div>
           </div>
           <div class="hm-modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showSubscribeModal = false">Cancel</button>
-            <button type="button" class="btn btn-primary" :disabled="!selectedPlan || applyingPlan" @click="applyPlan">
-              <span v-if="applyingPlan" class="spinner-border spinner-border-sm me-2"></span>
+            <button type="button" class="hm-btn hm-btn-ghost" @click="showSubscribeModal = false">Cancel</button>
+            <button type="button" class="hm-btn hm-btn-primary" :disabled="!selectedPlan || applyingPlan" @click="applyPlan">
+              <span v-if="applyingPlan" class="hm-spinner-sm me-2" role="status"></span>
               Apply
             </button>
           </div>
@@ -246,35 +187,35 @@
       <div v-if="showCreateHospitalModal" class="hm-modal-overlay" @click.self="showCreateHospitalModal = false">
         <div class="hm-modal">
           <div class="hm-modal-header">
-            <h3>Create hospital</h3>
-            <button type="button" class="btn-close" @click="showCreateHospitalModal = false" aria-label="Close"></button>
+            <h3 class="hm-modal-title">Create hospital</h3>
+            <button type="button" class="hm-modal-close" @click="showCreateHospitalModal = false" aria-label="Close"><i class="bi bi-x-lg"></i></button>
           </div>
           <div class="hm-modal-body">
-            <p class="text-muted small mb-3">Create a new hospital and assign a user as its admin. The user must be a registered doctor (or existing admin without a hospital).</p>
-            <div class="mb-3">
-              <label class="form-label">Hospital name <span class="text-danger">*</span></label>
-              <input v-model="createName" type="text" class="form-control" placeholder="e.g. City General Hospital" />
+            <p class="hm-modal-desc">Create a new hospital and assign a user as its admin. The user must be a registered doctor (or existing admin without a hospital).</p>
+            <div class="hm-form-group">
+              <label class="hm-form-label">Hospital name <span class="hm-required">*</span></label>
+              <input v-model="createName" type="text" class="hm-form-input" placeholder="e.g. City General Hospital" />
             </div>
-            <div class="mb-3">
-              <label class="form-label">Address (optional)</label>
-              <input v-model="createAddress" type="text" class="form-control" placeholder="Street, City" />
+            <div class="hm-form-group">
+              <label class="hm-form-label">Address (optional)</label>
+              <input v-model="createAddress" type="text" class="hm-form-input" placeholder="Street, City" />
             </div>
-            <div class="mb-3">
-              <label class="form-label">Admin user <span class="text-danger">*</span></label>
-              <div v-if="usersForAdminLoading" class="text-muted small">Loading users...</div>
-              <select v-else v-model="createAdminUserId" class="form-select">
+            <div class="hm-form-group">
+              <label class="hm-form-label">Admin user <span class="hm-required">*</span></label>
+              <div v-if="usersForAdminLoading" class="hm-form-hint">Loading users...</div>
+              <select v-else v-model="createAdminUserId" class="hm-form-input hm-form-select">
                 <option value="">Select a user...</option>
                 <option v-for="u in usersForAdmin" :key="u.id" :value="u.id">
                   {{ u.name }} (@{{ u.username }}) – {{ u.email }}
                 </option>
               </select>
-              <p v-if="!usersForAdminLoading && usersForAdmin.length === 0" class="text-muted small mt-2 mb-0">No users found. Register doctors first in User Management.</p>
+              <p v-if="!usersForAdminLoading && usersForAdmin.length === 0" class="hm-form-hint mt-2 mb-0">No users found. Register doctors first in User Management.</p>
             </div>
           </div>
           <div class="hm-modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showCreateHospitalModal = false">Cancel</button>
-            <button type="button" class="btn btn-primary" :disabled="!createName.trim() || !createAdminUserId || createLoading" @click="createHospital">
-              <span v-if="createLoading" class="spinner-border spinner-border-sm me-2"></span>
+            <button type="button" class="hm-btn hm-btn-ghost" @click="showCreateHospitalModal = false">Cancel</button>
+            <button type="button" class="hm-btn hm-btn-primary" :disabled="!createName.trim() || !createAdminUserId || createLoading" @click="createHospital">
+              <span v-if="createLoading" class="hm-spinner-sm me-2" role="status"></span>
               Create
             </button>
           </div>
@@ -285,38 +226,26 @@
       <div v-if="showChangeAdminModal" class="hm-modal-overlay" @click.self="showChangeAdminModal = false">
         <div class="hm-modal">
           <div class="hm-modal-header">
-            <h3>Change admin</h3>
-            <button type="button" class="btn-close" @click="showChangeAdminModal = false" aria-label="Close"></button>
+            <h3 class="hm-modal-title">Change admin</h3>
+            <button type="button" class="hm-modal-close" @click="showChangeAdminModal = false" aria-label="Close"><i class="bi bi-x-lg"></i></button>
           </div>
           <div class="hm-modal-body">
-            <p class="text-muted small mb-3">Select a doctor to assign as admin of {{ selectedHospital ? selectedHospital.name : '' }}.</p>
-            <div v-if="doctorsLoading" class="text-center py-3">
-              <div class="spinner-border spinner-border-sm" role="status"></div>
+            <p class="hm-modal-desc">Select a doctor to assign as admin of {{ selectedHospital ? selectedHospital.name : '' }}.</p>
+            <div v-if="doctorsLoading" class="hm-modal-loading">
+              <div class="hm-spinner-sm" role="status"></div>
             </div>
             <div v-else class="hm-doctor-list">
-              <div
-                v-for="doc in doctors"
-                :key="doc.id"
-                class="form-check py-2 border-bottom"
-              >
-                <input
-                  :id="`doctor-${doc.id}`"
-                  v-model="selectedDoctorId"
-                  type="radio"
-                  :value="doc.id"
-                  class="form-check-input"
-                />
-                <label :for="`doctor-${doc.id}`" class="form-check-label">
-                  {{ doc.name }} @{{ doc.username }} ({{ doc.email }})
-                </label>
-              </div>
-              <p v-if="doctors.length === 0" class="text-muted small mb-0">No doctors found.</p>
+              <label v-for="doc in doctors" :key="doc.id" class="hm-doctor-option" :class="{ active: selectedDoctorId === doc.id }">
+                <input :id="`doctor-${doc.id}`" v-model="selectedDoctorId" type="radio" :value="doc.id" class="hm-doctor-radio" />
+                <span>{{ doc.name }} @{{ doc.username }} ({{ doc.email }})</span>
+              </label>
+              <p v-if="doctors.length === 0" class="hm-form-hint mb-0">No doctors found.</p>
             </div>
           </div>
           <div class="hm-modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showChangeAdminModal = false">Cancel</button>
-            <button type="button" class="btn btn-primary" :disabled="!selectedDoctorId || changingAdmin" @click="confirmChangeAdmin">
-              <span v-if="changingAdmin" class="spinner-border spinner-border-sm me-2"></span>
+            <button type="button" class="hm-btn hm-btn-ghost" @click="showChangeAdminModal = false">Cancel</button>
+            <button type="button" class="hm-btn hm-btn-primary" :disabled="!selectedDoctorId || changingAdmin" @click="confirmChangeAdmin">
+              <span v-if="changingAdmin" class="hm-spinner-sm me-2" role="status"></span>
               Assign admin
             </button>
           </div>
@@ -327,44 +256,38 @@
       <div v-if="showAddDoctorModal" class="hm-modal-overlay" @click.self="showAddDoctorModal = false">
         <div class="hm-modal hm-modal-sm">
           <div class="hm-modal-header">
-            <h3>Add doctor</h3>
-            <button type="button" class="btn-close" @click="showAddDoctorModal = false" aria-label="Close"></button>
+            <h3 class="hm-modal-title">Add doctor</h3>
+            <button type="button" class="hm-modal-close" @click="showAddDoctorModal = false" aria-label="Close"><i class="bi bi-x-lg"></i></button>
           </div>
           <div class="hm-modal-body">
-            <p class="text-muted small mb-2">Invite a doctor to {{ selectedHospital ? selectedHospital.name : '' }} by username.</p>
-            <input
-              v-model="inviteUsername"
-              type="text"
-              class="form-control"
-              placeholder="Username"
-              @keydown.enter="sendInvite"
-            />
-            <p v-if="inviteError" class="text-danger small mt-2 mb-0">{{ inviteError }}</p>
+            <p class="hm-modal-desc">Invite a doctor to {{ selectedHospital ? selectedHospital.name : '' }} by username.</p>
+            <input v-model="inviteUsername" type="text" class="hm-form-input" placeholder="Username" @keydown.enter="sendInvite" />
+            <p v-if="inviteError" class="hm-form-error mt-2 mb-0">{{ inviteError }}</p>
           </div>
           <div class="hm-modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showAddDoctorModal = false">Cancel</button>
-            <button type="button" class="btn btn-primary" :disabled="!inviteUsername.trim() || inviting" @click="sendInvite">
-              <span v-if="inviting" class="spinner-border spinner-border-sm me-2"></span>
+            <button type="button" class="hm-btn hm-btn-ghost" @click="showAddDoctorModal = false">Cancel</button>
+            <button type="button" class="hm-btn hm-btn-primary" :disabled="!inviteUsername.trim() || inviting" @click="sendInvite">
+              <span v-if="inviting" class="hm-spinner-sm me-2" role="status"></span>
               Send invitation
             </button>
           </div>
         </div>
       </div>
 
-      <!-- Confirm action modal (kick / block / unblock) -->
+      <!-- Confirm action modal (kick / block / unblock / delete) -->
       <div v-if="showConfirmModal" class="hm-modal-overlay" @click.self="showConfirmModal = false">
         <div class="hm-modal hm-modal-sm">
           <div class="hm-modal-header">
-            <h3>{{ confirmTitle }}</h3>
-            <button type="button" class="btn-close" @click="showConfirmModal = false" aria-label="Close"></button>
+            <h3 class="hm-modal-title">{{ confirmTitle }}</h3>
+            <button type="button" class="hm-modal-close" @click="showConfirmModal = false" aria-label="Close"><i class="bi bi-x-lg"></i></button>
           </div>
           <div class="hm-modal-body">
-            <p>{{ confirmMessage }}</p>
+            <p class="hm-confirm-message">{{ confirmMessage }}</p>
           </div>
           <div class="hm-modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showConfirmModal = false">Cancel</button>
-            <button type="button" class="btn btn-danger" :disabled="confirming" @click="executeConfirm">
-              <span v-if="confirming" class="spinner-border spinner-border-sm me-2"></span>
+            <button type="button" class="hm-btn hm-btn-ghost" @click="showConfirmModal = false">Cancel</button>
+            <button type="button" class="hm-btn hm-btn-danger" :disabled="confirming" @click="executeConfirm">
+              <span v-if="confirming" class="hm-spinner-sm me-2" role="status"></span>
               {{ confirmButtonText }}
             </button>
           </div>
@@ -595,19 +518,15 @@ export default {
         this.applyingPlan = false;
       }
     },
-    async expireHospital(hospital) {
-      if (!hospital.admin || !confirm(`Expire subscription for ${hospital.name}?`)) return;
-      try {
-        await axios.post(
-          `${orthancApiUrl}api/users/${hospital.admin.id}/expire-hospital`,
-          {},
-          { headers: { Authorization: `Bearer ${this.getToken()}` } }
-        );
-        this.toast('Subscription expired', 'success');
-        await this.loadHospitals();
-      } catch (error) {
-        this.toast(error.response?.data?.error || 'Failed to expire hospital', 'error');
-      }
+    confirmExpireHospital(hospital) {
+      if (!hospital || !hospital.admin) return;
+      this.selectedHospital = hospital;
+      this.confirmMember = null;
+      this.confirmActionType = 'expire_hospital';
+      this.confirmTitle = 'Expire subscription';
+      this.confirmMessage = `Expire subscription for ${hospital.name}? Doctors in this hospital will lose access until a new subscription is created.`;
+      this.confirmButtonText = 'Expire subscription';
+      this.showConfirmModal = true;
     },
     async openChangeAdmin(hospital) {
       this.selectedHospital = hospital;
@@ -691,8 +610,10 @@ export default {
     },
     async executeConfirm() {
       if (!this.confirmActionType) return;
-      if (this.confirmActionType !== 'delete_hospital' && (!this.selectedHospital || !this.confirmMember)) return;
-      if (this.confirmActionType === 'delete_hospital' && !this.selectedHospital) return;
+      // For hospital-wide actions, we only need selectedHospital
+      if ((this.confirmActionType === 'delete_hospital' || this.confirmActionType === 'expire_hospital') && !this.selectedHospital) return;
+      // For member actions, we need both selectedHospital and confirmMember
+      if (!['delete_hospital', 'expire_hospital'].includes(this.confirmActionType) && (!this.selectedHospital || !this.confirmMember)) return;
       this.confirming = true;
       try {
         if (this.confirmActionType === 'delete_hospital') {
@@ -700,6 +621,15 @@ export default {
             headers: { Authorization: `Bearer ${this.getToken()}` }
           });
           this.toast('Hospital deleted', 'success');
+          this.showConfirmModal = false;
+          await this.loadHospitals();
+        } else if (this.confirmActionType === 'expire_hospital') {
+          await axios.post(
+            `${orthancApiUrl}api/users/${this.selectedHospital.admin.id}/expire-hospital`,
+            {},
+            { headers: { Authorization: `Bearer ${this.getToken()}` } }
+          );
+          this.toast('Subscription expired', 'success');
           this.showConfirmModal = false;
           await this.loadHospitals();
         } else {
@@ -729,15 +659,21 @@ export default {
 </script>
 
 <style scoped>
-.hospital-management {
-  padding: 0 8px 24px;
+/* Page – same feel as Patient / User Management */
+.hm-page {
+  width: 100%;
+  min-height: calc(100vh - 60px);
+  padding: 16px;
+  background: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 .hm-container {
-  max-width: 900px;
+  max-width: 960px;
   margin: 0 auto;
 }
 
+/* Header */
 .hm-header {
   margin-bottom: 28px;
 }
@@ -747,114 +683,299 @@ export default {
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: 16px;
+}
+
+.hm-header-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .hm-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: var(--bs-body-color, #111);
+  color: #1f2937;
   margin: 0 0 4px 0;
+  letter-spacing: -0.02em;
 }
 
 .hm-subtitle {
-  color: var(--bs-secondary-color, #6b7280);
   font-size: 0.9375rem;
+  color: #6b7280;
   margin: 0;
+  line-height: 1.45;
 }
 
+/* Buttons – single design system */
+.hm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.hm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hm-btn-primary {
+  background: #4a90e2;
+  color: #fff;
+}
+
+.hm-btn-primary:hover:not(:disabled) {
+  background: #357abd;
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.35);
+}
+
+.hm-btn-ghost {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.hm-btn-ghost:hover:not(:disabled) {
+  background: #e5e7eb;
+  color: #1f2937;
+}
+
+.hm-btn-secondary-outline {
+  background: transparent;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.hm-btn-secondary-outline:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.hm-btn-danger-outline {
+  background: transparent;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.hm-btn-danger-outline:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
+.hm-btn-danger {
+  background: #dc2626;
+  color: #fff;
+}
+
+.hm-btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.35);
+}
+
+.hm-btn-add {
+  background: #e8f4fd;
+  color: #2563eb;
+}
+
+.hm-btn-add:hover:not(:disabled) {
+  background: #d1e9fa;
+}
+
+.hm-btn-row {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.hm-btn-kick {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.hm-btn-kick:hover:not(:disabled) { background: #fde68a; }
+
+.hm-btn-block {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.hm-btn-block:hover:not(:disabled) { background: #fecaca; }
+
+.hm-btn-unblock {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.hm-btn-unblock:hover:not(:disabled) { background: #bbf7d0; }
+
+/* Loading */
 .hm-loading {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding: 48px;
+  padding: 80px 24px;
 }
 
+.hm-loading-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid #e5e7eb;
+  border-top-color: #4a90e2;
+  border-radius: 50%;
+  animation: hm-spin 0.8s linear infinite;
+}
+
+.hm-loading-text {
+  margin: 16px 0 0 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+@keyframes hm-spin {
+  to { transform: rotate(360deg); }
+}
+
+.hm-spinner-sm {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid #e5e7eb;
+  border-top-color: #4a90e2;
+  border-radius: 50%;
+  animation: hm-spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
+/* Empty state */
 .hm-empty {
   text-align: center;
-  padding: 48px 24px;
-  background: var(--bs-body-bg, #fff);
-  border-radius: 12px;
-  border: 1px solid var(--bs-border-color, #e5e7eb);
+  padding: 64px 32px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .hm-empty-icon {
-  font-size: 2.5rem;
-  color: var(--bs-secondary-color, #9ca3af);
-  margin-bottom: 12px;
+  font-size: 56px;
+  color: #cbd5e1;
+  margin-bottom: 20px;
 }
 
-.hm-empty h3 {
-  font-size: 1.125rem;
+.hm-empty-title {
+  font-size: 1.25rem;
   font-weight: 600;
+  color: #374151;
   margin: 0 0 8px 0;
 }
 
-.hm-empty p {
-  color: var(--bs-secondary-color);
-  font-size: 0.9375rem;
-  margin: 0;
+.hm-empty-text {
+  font-size: 14px;
+  color: #6b7280;
+  max-width: 400px;
+  margin: 0 auto 24px;
+  line-height: 1.6;
 }
 
+/* Cards – heavy, natural */
 .hm-cards {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
 .hm-card {
-  background: var(--bs-body-bg, #fff);
-  border: 1px solid var(--bs-border-color, #e5e7eb);
-  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
   overflow: hidden;
-  transition: box-shadow 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .hm-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  border-color: #e2e8f0;
 }
 
 .hm-card-head {
-  padding: 18px 20px;
+  padding: 24px 24px 20px;
+  background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.hm-card-title-row {
+.hm-card-hero {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.hm-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.hm-card-icon i {
+  font-size: 24px;
+  color: #fff;
+}
+
+.hm-card-titles {
+  flex: 1;
+  min-width: 0;
 }
 
 .hm-card-name {
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-weight: 600;
-  margin: 0;
-  color: var(--bs-body-color, #111);
+  color: #1f2937;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }
 
 .hm-card-id {
-  font-size: 0.75rem;
-  color: var(--bs-secondary-color);
-  background: var(--bs-light, #f3f4f6);
+  font-size: 12px;
+  font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+  color: #6b7280;
+  background: #f3f4f6;
   padding: 2px 8px;
   border-radius: 6px;
+  display: inline-block;
 }
 
 .hm-badge {
-  font-size: 0.7rem;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
-.hm-badge-active {
-  background: #d1fae5;
-  color: #065f46;
+.hm-badge-sub.hm-badge-active {
+  background: #dcfce7;
+  color: #15803d;
 }
 
-.hm-badge-expired {
+.hm-badge-sub.hm-badge-expired {
   background: #fee2e2;
-  color: #991b1b;
+  color: #dc2626;
 }
 
 .hm-badge-status {
@@ -862,42 +983,58 @@ export default {
   color: #374151;
 }
 
-.hm-status-accepted { background: #d1fae5; color: #065f46; }
+.hm-status-accepted { background: #dcfce7 !important; color: #15803d !important; }
 .hm-status-pending,
-.hm-status-pending_invitation { background: #fef3c7; color: #92400e; }
-.hm-status-blocked { background: #fee2e2; color: #991b1b; }
-.hm-status-kicked { background: #f3f4f6; color: #6b7280; }
+.hm-status-pending_invitation { background: #fef3c7 !important; color: #92400e !important; }
+.hm-status-blocked { background: #fee2e2 !important; color: #dc2626 !important; }
+.hm-status-kicked { background: #f3f4f6 !important; color: #6b7280 !important; }
 
 .hm-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  font-size: 0.875rem;
-  color: var(--bs-secondary-color);
+  gap: 16px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.hm-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .hm-meta-item i {
-  margin-right: 4px;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.hm-meta-item strong {
+  color: #374151;
+}
+
+.hm-meta-pending {
+  color: #9ca3af;
 }
 
 .hm-meta-admin .hm-meta-detail {
-  color: var(--bs-secondary-color);
-  font-weight: normal;
+  color: #9ca3af;
+  font-weight: 400;
 }
 
 .hm-card-address {
-  font-size: 0.8125rem;
-  color: var(--bs-secondary-color);
-  margin: 6px 0 0 0;
+  font-size: 13px;
+  color: #6b7280;
+  margin: 10px 0 0 0;
+  line-height: 1.45;
 }
-
 
 .hm-card-body {
-  border-top: 1px solid var(--bs-border-color, #e5e7eb);
-  padding: 20px;
-  background: var(--bs-body-bg, #fafafa);
+  padding: 20px 24px 24px;
+  background: #fff;
+  border-top: 1px solid #f1f5f9;
 }
 
+/* Members section */
 .hm-members-section {
   margin-bottom: 20px;
 }
@@ -906,163 +1043,418 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .hm-section-title {
-  font-size: 0.9375rem;
+  font-size: 13px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
   margin: 0;
-  color: var(--bs-body-color);
 }
 
-.hm-members-loading,
-.hm-members-empty {
-  padding: 16px;
+.hm-members-loading {
+  padding: 32px;
   text-align: center;
-  color: var(--bs-secondary-color);
-  font-size: 0.875rem;
-  background: var(--bs-body-bg, #fff);
-  border-radius: 8px;
-  border: 1px dashed var(--bs-border-color);
 }
 
-.hm-members-table-wrap {
-  overflow-x: auto;
-  border-radius: 8px;
-  border: 1px solid var(--bs-border-color);
-  background: var(--bs-body-bg, #fff);
+.hm-members-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px dashed #e2e8f0;
 }
 
-.hm-pagination-section,
-.hm-members-pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 0;
-  margin-top: 8px;
-}
-
-.hm-members-pagination {
-  padding: 12px 0 0;
-}
-
-.hm-page-info {
-  font-size: 0.875rem;
-  color: var(--bs-secondary-color);
+.hm-members-wrap {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
 }
 
 .hm-members-table {
   width: 100%;
-  font-size: 0.875rem;
+  font-size: 13px;
   border-collapse: collapse;
 }
 
-.hm-members-table th,
-.hm-members-table td {
-  padding: 10px 12px;
+.hm-members-table th {
   text-align: left;
-  border-bottom: 1px solid var(--bs-border-color-translucent, #eee);
+  padding: 12px 14px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.hm-members-table th {
-  font-weight: 600;
-  color: var(--bs-secondary-color);
-  background: var(--bs-tertiary-bg, #f9fafb);
+.hm-members-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+  vertical-align: middle;
 }
 
 .hm-members-table tbody tr:last-child td {
   border-bottom: none;
 }
 
+.hm-members-table tbody tr:hover td {
+  background: #fafbfc;
+}
+
 .hm-cell-email {
-  max-width: 180px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #6b7280;
 }
 
 .hm-col-actions {
   white-space: nowrap;
+  text-align: right;
+}
+
+.hm-col-actions .hm-btn {
+  margin-left: 6px;
+}
+
+.hm-members-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid #e5e7eb;
+  background: #fafbfc;
+}
+
+.hm-pagination-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 0 8px;
+}
+
+.hm-pagination-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 16px;
+}
+
+.hm-pagination-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.hm-pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hm-page-info {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.hm-page-info strong {
+  color: #1f2937;
 }
 
 .hm-card-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  padding-top: 16px;
-  border-top: 1px solid var(--bs-border-color-translucent, #eee);
+  padding-top: 18px;
+  border-top: 1px solid #e5e7eb;
 }
 
-/* Modals */
+/* Modals – modern, heavy */
 .hm-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(15, 23, 42, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1050;
   padding: 20px;
+  animation: hm-fadeIn 0.2s ease-out;
+}
+
+@keyframes hm-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .hm-modal {
-  background: var(--bs-body-bg, #fff);
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.1);
   max-width: 440px;
   width: 100%;
   max-height: 90vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  animation: hm-modalIn 0.25s ease-out;
 }
 
 .hm-modal-sm {
-  max-width: 380px;
+  max-width: 400px;
+}
+
+@keyframes hm-modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .hm-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 20px;
-  border-bottom: 1px solid var(--bs-border-color, #e5e7eb);
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
 }
 
-.hm-modal-header h3 {
-  font-size: 1.1rem;
+.hm-modal-title {
+  font-size: 1.125rem;
   font-weight: 600;
+  color: #111827;
   margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.hm-modal-close {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 18px;
+}
+
+.hm-modal-close:hover {
+  background: #f3f4f6;
+  color: #111827;
 }
 
 .hm-modal-body {
-  padding: 20px;
+  padding: 24px;
   overflow-y: auto;
+  background: #fff;
+}
+
+.hm-modal-desc {
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.55;
+  margin: 0 0 20px 0;
 }
 
 .hm-modal-hospital-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 16px 0;
+}
+
+.hm-modal-loading {
+  padding: 24px;
+  text-align: center;
+}
+
+.hm-confirm-message {
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Plan options */
+.hm-plan-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hm-plan-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: #fff;
+}
+
+.hm-plan-option:hover {
+  border-color: #c7d2fe;
+  background: #f8fafc;
+}
+
+.hm-plan-option.active {
+  border-color: #4a90e2;
+  background: #e8f4fd;
+}
+
+.hm-plan-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hm-plan-name {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.hm-plan-desc {
+  font-size: 13px;
+  color: #6b7280;
+  margin-left: auto;
+}
+
+/* Form */
+.hm-form-group {
+  margin-bottom: 18px;
+}
+
+.hm-form-group:last-child {
+  margin-bottom: 0;
+}
+
+.hm-form-label {
+  display: block;
+  font-size: 13px;
   font-weight: 500;
-  margin-bottom: 14px;
+  color: #374151;
+  margin-bottom: 6px;
 }
 
-.hm-plan-options .form-check {
-  padding-left: 1.5rem;
-  margin-bottom: 8px;
+.hm-required {
+  color: #dc2626;
 }
 
+.hm-form-input {
+  width: 100%;
+  height: 40px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #1f2937;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.hm-form-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+}
+
+.hm-form-input::placeholder {
+  color: #9ca3af;
+}
+
+.hm-form-select {
+  height: 40px;
+  cursor: pointer;
+  appearance: auto;
+}
+
+.hm-form-hint {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.hm-form-error {
+  font-size: 13px;
+  color: #dc2626;
+}
+
+/* Doctor list */
 .hm-doctor-list {
   max-height: 280px;
   overflow-y: auto;
+}
+
+.hm-doctor-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.hm-doctor-option:hover {
+  background: #f8fafc;
+}
+
+.hm-doctor-option.active {
+  background: #e8f4fd;
+  border-color: #4a90e2;
+}
+
+.hm-doctor-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .hm-modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--bs-border-color, #e5e7eb);
-  background: var(--bs-tertiary-bg, #f9fafb);
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
 }
+
+.mt-2 { margin-top: 8px; }
+.mb-0 { margin-bottom: 0; }
+.me-2 { margin-right: 8px; }
 </style>

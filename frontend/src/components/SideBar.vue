@@ -517,8 +517,44 @@ export default {
             }
             return true;
         },
-        handleStudiesNavClick() {
-            this.onAllLocalStudiesClick();
+        handleStudiesNavClickWrapper(event) {
+            if (!this.canAccessFeatures) {
+                event.preventDefault();
+                event.stopPropagation();
+                this.handleDisabledNavClick('studies');
+                return;
+            }
+            // Manually toggle the collapse
+            this.toggleStudiesSubmenu();
+            // Navigate to studies
+            this.handleStudiesNavClick();
+        },
+        toggleStudiesSubmenu() {
+            const studiesDropdown = document.getElementById('studies-labels-list');
+            if (studiesDropdown) {
+                let bsCollapse = bootstrap.Collapse.getInstance(studiesDropdown);
+                if (!bsCollapse) {
+                    bsCollapse = new bootstrap.Collapse(studiesDropdown, { toggle: false });
+                }
+                // Always show it when clicking the main nav item
+                if (!studiesDropdown.classList.contains('show')) {
+                    bsCollapse.show();
+                }
+            }
+        },
+        async handleStudiesNavClick() {
+            // Clear label selection
+            this.selectedLabel = null;
+            // Clear label filters in the store
+            await this.$store.dispatch('studies/updateLabelFilterNoReload', { labels: [], constraint: 'All' });
+            // Navigate to studies page
+            if (this.$route.path !== '/studies') {
+                await this.$router.push('/studies');
+            } else {
+                // If already on /studies, trigger a reload
+                this.messageBus.emit('filter-label-changed', null);
+            }
+            // Collapse other dropdowns, keep studies-labels-list open
             this.collapseAllDropdowns('studies-labels-list');
         }
     },
@@ -677,9 +713,7 @@ export default {
                             'nav-active': isRouteActive('/studies'),
                             'nav-disabled': !canAccessFeatures
                         }" 
-                        @click="!canAccessFeatures ? handleDisabledNavClick('studies') : handleStudiesNavClick()"
-                        :data-bs-toggle="canAccessFeatures ? 'collapse' : null"
-                        :data-bs-target="canAccessFeatures ? '#studies-labels-list' : null">
+                        @click="handleStudiesNavClickWrapper($event)">
                         <div class="nav-link">
                             <i class="fa fa-x-ray fa-lg nav-icon"></i>
                             <span class="nav-text">{{ $t('local_studies') }}</span>

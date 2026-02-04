@@ -487,14 +487,14 @@ export default {
         <table class="table table-sm study-table table-borderless">
             <thead class="sticky-top">
                 <tr class="study-column-titles">
-                    <th scope="col" class="checkbox-cell"></th>
+                    <th scope="col" class="checkbox-cell" width="1%"></th>
                     <th width="20%" class="study-table-title" scope="col">File Name</th>
                     <th width="10%" class="study-table-title" scope="col">Patient ID</th>
-                    <th width="15%" class="study-table-title" scope="col">Patient Name</th>
-                    <th width="12%" class="study-table-title" scope="col">Hospital</th>
-                    <th width="12%" class="study-table-title" scope="col">Uploaded By</th>
+                    <th width="20%" class="study-table-title" scope="col">Patient Name</th>
+                    <th width="15%" class="study-table-title" scope="col">Hospital</th>
+                    <th width="15%" class="study-table-title" scope="col">Uploaded By</th>
                     <th width="15%" class="study-table-title" scope="col">Uploaded At</th>
-                    <th width="7%" class="study-table-title" scope="col">Delete</th>
+                    <th width="5%" class="study-table-title" scope="col">Delete</th>
                 </tr>
                 <tr class="study-table-filters">
                     <th scope="col" class="checkbox-cell">
@@ -533,7 +533,7 @@ export default {
                             <span class="selection-count">{{ selectedWordFileIds.length }}</span>
                         </div>
                     </th>
-                    <th width="97%" colspan="7" scope="col">
+                    <th width="97%" colspan="8" scope="col">
                         <div class="bulk-actions-wrap">
                             <button class="btn btn-sm btn-secondary" @click="downloadSelectedWordFiles" 
                                 :disabled="!hasSelection" title="Download">
@@ -787,7 +787,7 @@ export default {
 }
 
 .study-table {
-    table-layout: auto;
+    table-layout: fixed !important;
     min-width: 900px;
     border-radius: 12px;
     overflow: hidden;
@@ -922,17 +922,19 @@ export default {
 
 /* Checkbox cell - consistent alignment */
 .checkbox-cell {
-    width: 36px !important;
-    min-width: 36px !important;
-    max-width: 36px !important;
-    padding: 8px 6px 8px 10px !important;
+    width: 60px !important;
+    min-width: 60px !important;
+    max-width: 60px !important;
+    padding: 8px 12px !important;  /* More comfortable padding */
     vertical-align: middle !important;
+    box-sizing: border-box !important;
 }
 
 .checkbox-wrapper {
     display: flex;
     align-items: center;
     gap: 4px;
+    padding-left: 8px;
 }
 
 .checkbox-wrapper .form-check-input {
@@ -964,6 +966,7 @@ export default {
     color: #6b7280;
     cursor: pointer;
     transition: all 0.15s ease;
+    margin-left: 8px;
 }
 
 .clear-filter-btn:hover {

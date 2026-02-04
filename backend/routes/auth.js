@@ -70,6 +70,11 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Please provide username, email, password, and name' });
     }
     
+    const ownerEmail = process.env.OWNER_EMAIL && process.env.OWNER_EMAIL.trim().toLowerCase();
+    if (ownerEmail && email.toString().trim().toLowerCase() === ownerEmail) {
+      return res.status(400).json({ error: 'This email is reserved and cannot be used to register.' });
+    }
+    
     // Validate username format
     const usernameRegex = /^[a-zA-Z0-9_]+$/;
     if (!usernameRegex.test(username)) {
@@ -176,6 +181,11 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne(query).select('+password');
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Only doctor and admin roles from DB are allowed to log in.
+    if (user.role !== 'doctor' && user.role !== 'admin') {
+      return res.status(403).json({ error: 'This account role is not allowed to log in.' });
     }
 
     const isMatch = await user.comparePassword(password);
@@ -554,6 +564,11 @@ router.put('/profile', protect, async (req, res) => {
 
     // Handle email change
     if (email && email !== user.email) {
+      const ownerEmail = process.env.OWNER_EMAIL && process.env.OWNER_EMAIL.trim().toLowerCase();
+      if (ownerEmail && email.toString().trim().toLowerCase() === ownerEmail) {
+        return res.status(400).json({ error: 'This email is reserved and cannot be used.' });
+      }
+      
       // Check if new email is already taken
       const emailExists = await User.findOne({ email });
       if (emailExists && emailExists._id.toString() !== user._id.toString()) {
