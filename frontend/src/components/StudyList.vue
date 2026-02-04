@@ -1113,7 +1113,7 @@ export default {
                     </th>
                 </tr>
                 <tr class="study-table-filters" v-on:keyup.enter="search">
-                    <th scope="col" :colspan="colSpanClearFilter" style="width: 40px; min-width: 40px; padding: 0 4px; text-align: center; vertical-align: middle;">
+                    <th scope="col" :colspan="colSpanClearFilter" style="width: 50px; min-width: 50px; padding-left: 10px; text-align: center;">
                         <button @click="clearFilters" type="button" class="clear-filter-btn"
                             data-bs-toggle="tooltip" title="Clear filter">
                             <i class="fa-regular fa-circle-xmark"></i>
@@ -1409,7 +1409,7 @@ input.form-control.study-list-filter:focus {
     color: #6b7280;
     cursor: pointer;
     transition: all 0.15s ease;
-    margin: 0;
+    margin-left: 5px;
 }
 
 .clear-filter-btn:hover {
