@@ -3,9 +3,9 @@ const router = express.Router();
 const User = require('../models/User');
 const Hospital = require('../models/Hospital');
 const HospitalMember = require('../models/HospitalMember');
-const HospitalSubscription = require('../models/HospitalSubscription');
 const { protect } = require('../middleware/auth');
 const { requireOwner } = require('../middleware/roleAuth');
+const subscriptionService = require('../utils/subscriptionService');
 
 // Get all users (Owner only)
 router.get('/', protect, requireOwner(), async (req, res) => {
@@ -363,9 +363,8 @@ router.get('/:id/hospital-info', protect, requireOwner(), async (req, res) => {
       status: 'accepted'
     });
     
-    // Get subscription info
-    const HospitalSubscription = require('../models/HospitalSubscription');
-    const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+    // Get subscription info using subscription service (handles decryption)
+    const subscriptionInfo = await subscriptionService.getSubscriptionForApi(hospital._id);
     
     // Get DICOM study count (all studies for this hospital)
     const DicomStudy = require('../models/DicomStudy');
@@ -389,13 +388,7 @@ router.get('/:id/hospital-info', protect, requireOwner(), async (req, res) => {
         memberCount,
         dicomCount,
         documentCount,
-        subscription: subscription ? {
-          planType: subscription.planType,
-          expiresAt: subscription.expiresAt,
-          isActive: subscription.isActive,
-          daysUntilExpiration: subscription.getDaysUntilExpiration(),
-          shouldShowWarning: subscription.shouldShowWarning()
-        } : null
+        subscription: subscriptionInfo
       }
     });
   } catch (error) {
@@ -423,27 +416,25 @@ router.post('/:id/expire-hospital', protect, requireOwner(), async (req, res) =>
       return res.status(404).json({ error: 'Admin does not have a hospital' });
     }
     
-    const HospitalSubscription = require('../models/HospitalSubscription');
-    const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+    // Check if subscription exists
+    const existingSub = await subscriptionService.loadSubscription(hospital._id);
     
-    if (!subscription) {
+    if (!existingSub) {
       return res.status(404).json({ error: 'No subscription found for this hospital' });
     }
     
-    // Set expiration to past date (1 day ago)
-    subscription.expiresAt = new Date();
-    subscription.expiresAt.setDate(subscription.expiresAt.getDate() - 1);
-    await subscription.save();
+    // Use subscription service to expire (handles encryption)
+    const subscription = await subscriptionService.expireSubscription(hospital._id);
     
     res.json({
       success: true,
       message: 'Hospital subscription expired successfully',
       subscription: {
-        id: subscription._id,
+        id: subscription.id,
         planType: subscription.planType,
         expiresAt: subscription.expiresAt,
         isActive: subscription.isActive,
-        daysUntilExpiration: subscription.getDaysUntilExpiration()
+        daysUntilExpiration: subscription.daysUntilExpiration
       }
     });
   } catch (error) {

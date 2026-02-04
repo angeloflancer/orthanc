@@ -7,6 +7,7 @@ const HospitalSubscription = require('../models/HospitalSubscription');
 const { protect } = require('../middleware/auth');
 const { requireAdmin, requireRole, requireOwner } = require('../middleware/roleAuth');
 const orthancClient = require('../utils/orthancClient');
+const subscriptionService = require('../utils/subscriptionService');
 
 // Create hospital (Owner only, and only when no hospital exists)
 // Server allows only one hospital. Owner can create it when there are none; when one exists, owner can only delete it.
@@ -189,7 +190,8 @@ router.get('/all', protect, requireOwner(), async (req, res) => {
       .limit(limit);
 
     const result = await Promise.all(hospitals.map(async (h) => {
-      const subscription = await HospitalSubscription.findOne({ hospital: h._id });
+      // Use subscription service (handles decryption)
+      const subscriptionInfo = await subscriptionService.getSubscriptionForApi(h._id);
       const memberCount = await HospitalMember.countDocuments({
         hospital: h._id,
         status: 'accepted'
@@ -211,13 +213,7 @@ router.get('/all', protect, requireOwner(), async (req, res) => {
         } : null,
         memberCount,
         pendingCount,
-        subscription: subscription ? {
-          planType: subscription.planType,
-          expiresAt: subscription.expiresAt,
-          isActive: subscription.isActive,
-          daysUntilExpiration: subscription.getDaysUntilExpiration(),
-          shouldShowWarning: subscription.shouldShowWarning()
-        } : null,
+        subscription: subscriptionInfo,
         createdAt: h.createdAt,
         updatedAt: h.updatedAt
       };

@@ -8,10 +8,18 @@ const hospitalSubscriptionSchema = new mongoose.Schema({
     unique: true,
     index: true
   },
+  // Encrypted payload containing {planType, expiresAt}
+  // This is the primary source of truth when present
+  encryptedPayload: {
+    type: String,
+    default: null
+  },
+  // Legacy fields - kept for migration detection
+  // Do NOT trust these directly; use subscriptionService instead
   planType: {
     type: String,
     enum: ['monthly', 'yearly', 'forever'],
-    required: [true, 'Plan type is required']
+    required: false // No longer required - encryptedPayload is the source of truth
   },
   expiresAt: {
     type: Date,

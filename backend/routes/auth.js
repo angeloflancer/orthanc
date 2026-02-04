@@ -331,19 +331,21 @@ router.get('/me', protect, async (req, res) => {
       });
     }
 
-    const HospitalSubscription = require('../models/HospitalSubscription');
+    // Use subscription service for encrypted subscription data
+    const subscriptionService = require('../utils/subscriptionService');
 
     let hospital = null;
-    let subscription = null;
+    let subscriptionInfo = null;
     if (req.user.role === 'admin') {
       hospital = await Hospital.findOne({ admin: req.user._id });
       if (hospital) {
-        subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+        // Use subscription service (handles decryption)
+        subscriptionInfo = await subscriptionService.getSubscriptionForApi(hospital._id);
       }
     }
 
     let hospitalMembership = null;
-    let doctorSubscription = null;
+    let doctorSubscriptionInfo = null;
     if (req.user.role === 'doctor') {
       const membership = await HospitalMember.findOne({
         user: req.user._id
@@ -355,33 +357,10 @@ router.get('/me', protect, async (req, res) => {
           status: membership.status
         };
         if (membership.status === 'accepted' && membership.hospital) {
-          doctorSubscription = await HospitalSubscription.findOne({
-            hospital: membership.hospital._id
-          });
+          // Use subscription service (handles decryption)
+          doctorSubscriptionInfo = await subscriptionService.getSubscriptionForApi(membership.hospital._id);
         }
       }
-    }
-
-    let subscriptionInfo = null;
-    if (subscription) {
-      subscriptionInfo = {
-        planType: subscription.planType,
-        expiresAt: subscription.expiresAt,
-        isActive: subscription.isActive,
-        daysUntilExpiration: subscription.getDaysUntilExpiration(),
-        shouldShowWarning: subscription.shouldShowWarning()
-      };
-    }
-
-    let doctorSubscriptionInfo = null;
-    if (doctorSubscription) {
-      doctorSubscriptionInfo = {
-        planType: doctorSubscription.planType,
-        expiresAt: doctorSubscription.expiresAt,
-        isActive: doctorSubscription.isActive,
-        daysUntilExpiration: doctorSubscription.getDaysUntilExpiration(),
-        shouldShowWarning: doctorSubscription.shouldShowWarning()
-      };
     }
 
     res.json({

@@ -59,8 +59,25 @@ const PORT = process.env.PORT || 5830;
 const TARGET_SERVICE = orthancClient.getTargetBase();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Connect to MongoDB
-connectDB();
+// Hardware fingerprint and subscription service for license protection
+const { getFingerprint } = require('./utils/hardwareFingerprint');
+const subscriptionService = require('./utils/subscriptionService');
+
+// Connect to MongoDB and initialize license protection
+connectDB().then(async () => {
+  try {
+    // Initialize hardware fingerprint on startup (caches it for later use)
+    console.log('[Startup] Initializing hardware fingerprint...');
+    const fingerprint = await getFingerprint();
+    console.log('[Startup] Hardware fingerprint initialized');
+    
+    // Migrate old unencrypted subscriptions to encrypted format (as expired)
+    await subscriptionService.migrateOldSubscriptions();
+  } catch (error) {
+    console.error('[Startup] License protection initialization error:', error.message);
+    // Don't crash the server, but log the error
+  }
+});
 
 // Middleware
 app.use(cors({

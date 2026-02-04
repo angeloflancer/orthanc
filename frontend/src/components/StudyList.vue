@@ -5,15 +5,11 @@ import LabelsEditor from "./LabelsEditor.vue"
 import Toasts from "./Toasts.vue"
 
 import { mapState, mapGetters } from "vuex"
-import { baseOe2Url } from "../globalConfigurations"
 import { translateDicomTag } from "../locales/i18n"
 import dateHelpers from "../helpers/date-helpers"
 import $ from "jquery"
-import { endOfMonth, endOfYear, startOfMonth, startOfYear, subMonths, subDays, startOfWeek, endOfWeek, subYears } from 'date-fns';
 import api from "../orthancApi";
-import { ref } from 'vue';
 import SourceType from "../helpers/source-type";
-import { ObserveVisibility as vObserveVisibility } from 'vue3-observe-visibility'
 import { nextTick } from 'vue';
 
 const Status = Object.freeze({
@@ -175,11 +171,11 @@ export default {
             'studies/isMostRecentOrdering',         // -> this['studies/isMostRecentOrdering']
         ]),
         notShowingAllResults() {
-            if (this.sourceType == SourceType.LOCAL_ORTHANC && !this.hasExtendedFind) {
+            if (this.sourceType === SourceType.LOCAL_ORTHANC && !this.hasExtendedFind) {
                 if (this.studiesIds.length >= this.statistics.CountStudies) {
                     return false;
                 }
-                return this.studiesIds.length == this.uiOptions.MaxStudiesDisplayed; // in this case, the result has been limited
+                return this.studiesIds.length === this.uiOptions.MaxStudiesDisplayed; // in this case, the result has been limited
             } else {
                 return false;
             }

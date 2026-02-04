@@ -1,9 +1,10 @@
 const Hospital = require('../models/Hospital');
 const HospitalMember = require('../models/HospitalMember');
-const HospitalSubscription = require('../models/HospitalSubscription');
+const subscriptionService = require('../utils/subscriptionService');
 
 /**
  * Middleware to check if hospital has active subscription
+ * Uses subscription service which handles decryption of license data
  * Attaches subscription info to req.subscription
  */
 exports.requireActiveSubscription = () => {
@@ -27,7 +28,8 @@ exports.requireActiveSubscription = () => {
           });
         }
 
-        const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+        // Use subscription service (handles decryption)
+        const subscription = await subscriptionService.loadSubscription(hospital._id);
         if (!subscription) {
           return res.status(403).json({ 
             error: 'Access denied. Hospital subscription not found. Please contact the owner to set up your hospital subscription.' 
@@ -58,9 +60,8 @@ exports.requireActiveSubscription = () => {
           });
         }
 
-        const subscription = await HospitalSubscription.findOne({ 
-          hospital: membership.hospital._id 
-        });
+        // Use subscription service (handles decryption)
+        const subscription = await subscriptionService.loadSubscription(membership.hospital._id);
 
         if (!subscription) {
           return res.status(403).json({ 
@@ -134,6 +135,7 @@ exports.requireHospitalMembership = () => {
 /**
  * Combined middleware to check feature access
  * Checks both membership (for doctors) and subscription (for admins)
+ * Uses subscription service which handles decryption of license data
  */
 exports.checkFeatureAccess = () => {
   return async (req, res, next) => {
@@ -156,7 +158,8 @@ exports.checkFeatureAccess = () => {
           });
         }
 
-        const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+        // Use subscription service (handles decryption)
+        const subscription = await subscriptionService.loadSubscription(hospital._id);
         if (!subscription || !subscription.isActive) {
           return res.status(403).json({ 
             error: 'Access denied. Contact the owner to extend the subscription.' 
@@ -181,9 +184,8 @@ exports.checkFeatureAccess = () => {
           });
         }
 
-        const subscription = await HospitalSubscription.findOne({ 
-          hospital: membership.hospital._id 
-        });
+        // Use subscription service (handles decryption)
+        const subscription = await subscriptionService.loadSubscription(membership.hospital._id);
 
         if (!subscription || !subscription.isActive) {
           return res.status(403).json({ 

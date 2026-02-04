@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Hospital = require('../models/Hospital');
-const HospitalSubscription = require('../models/HospitalSubscription');
 const { protect } = require('../middleware/auth');
 const { requireOwner } = require('../middleware/roleAuth');
+const subscriptionService = require('../utils/subscriptionService');
 
 /**
  * Check if subscription expires in 3 days or less
@@ -36,7 +36,8 @@ router.get('/check-expiration', protect, async (req, res) => {
       });
     }
     
-    const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+    // Use subscription service (handles decryption)
+    const subscription = await subscriptionService.loadSubscription(hospital._id);
     
     if (!subscription) {
       return res.json({
@@ -46,18 +47,15 @@ router.get('/check-expiration', protect, async (req, res) => {
       });
     }
     
-    const shouldShowWarning = subscription.shouldShowWarning();
-    const daysUntilExpiration = subscription.getDaysUntilExpiration();
-    
     res.json({
       success: true,
-      hasWarning: shouldShowWarning,
-      daysUntilExpiration,
+      hasWarning: subscription.shouldShowWarning,
+      daysUntilExpiration: subscription.daysUntilExpiration,
       planType: subscription.planType,
       expiresAt: subscription.expiresAt,
       isActive: subscription.isActive,
-      message: shouldShowWarning 
-        ? `There are ${daysUntilExpiration} days left until the deadline. Please contact the administrator to extend the deadline.`
+      message: subscription.shouldShowWarning 
+        ? `There are ${subscription.daysUntilExpiration} days left until the deadline. Please contact the administrator to extend the deadline.`
         : null
     });
   } catch (error) {
@@ -96,31 +94,23 @@ router.post('/:hospitalId', protect, requireOwner(), async (req, res) => {
     }
     // forever plans have expiresAt = null
     
-    // Find existing subscription or create new one
-    let subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
-    
-    if (subscription) {
-      subscription.planType = planType;
-      subscription.expiresAt = expiresAt;
-      await subscription.save();
-    } else {
-      subscription = await HospitalSubscription.create({
-        hospital: hospital._id,
-        planType,
-        expiresAt
-      });
-    }
+    // Use subscription service to save (handles encryption)
+    const subscription = await subscriptionService.saveSubscription(
+      hospital._id,
+      planType,
+      expiresAt
+    );
     
     res.json({
       success: true,
       message: 'Subscription created/updated successfully',
       subscription: {
-        id: subscription._id,
+        id: subscription.id,
         planType: subscription.planType,
         expiresAt: subscription.expiresAt,
         isActive: subscription.isActive,
-        daysUntilExpiration: subscription.getDaysUntilExpiration(),
-        shouldShowWarning: subscription.shouldShowWarning()
+        daysUntilExpiration: subscription.daysUntilExpiration,
+        shouldShowWarning: subscription.shouldShowWarning
       }
     });
   } catch (error) {
@@ -162,7 +152,8 @@ router.get('/:hospitalId', protect, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     
-    const subscription = await HospitalSubscription.findOne({ hospital: hospital._id });
+    // Use subscription service (handles decryption)
+    const subscription = await subscriptionService.loadSubscription(hospital._id);
     
     if (!subscription) {
       return res.json({
@@ -175,12 +166,12 @@ router.get('/:hospitalId', protect, async (req, res) => {
     res.json({
       success: true,
       subscription: {
-        id: subscription._id,
+        id: subscription.id,
         planType: subscription.planType,
         expiresAt: subscription.expiresAt,
         isActive: subscription.isActive,
-        daysUntilExpiration: subscription.getDaysUntilExpiration(),
-        shouldShowWarning: subscription.shouldShowWarning(),
+        daysUntilExpiration: subscription.daysUntilExpiration,
+        shouldShowWarning: subscription.shouldShowWarning,
         createdAt: subscription.createdAt,
         updatedAt: subscription.updatedAt
       }
