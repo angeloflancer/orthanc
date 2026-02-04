@@ -545,12 +545,12 @@ export default {
 .stat-icon {
     width: 3rem;
     height: 3rem;
-    background: #f3f4f6;
+    background: #3b82f6;
     border-radius: 0.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #374151;
+    color: white;
 }
 
 .stat-title {

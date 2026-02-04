@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="emedx">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/backend/dist/emedx.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
