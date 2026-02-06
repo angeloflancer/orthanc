@@ -112,8 +112,10 @@ router.post('/register', async (req, res) => {
       emailVerificationTokenExpiry
     });
     
+    const serverIPUsed = req.get('host') ? req.get('host').split(':')[0] : 'unknown';
+
     // Send verification email
-    await sendVerificationEmail(user.email, user.name, emailVerificationToken);
+    await sendVerificationEmail(serverIPUsed, user.email, user.name, emailVerificationToken);
     
     res.status(201).json({
       success: true,
@@ -436,8 +438,10 @@ router.post('/resend-verification', protect, async (req, res) => {
     user.emailVerificationTokenExpiry = emailVerificationTokenExpiry;
     await user.save();
     
+    const serverIPUsed = req.get('host') ? req.get('host').split(':')[0] : 'unknown';
+    
     // Send verification email
-    await sendVerificationEmail(user.email, user.name, emailVerificationToken);
+    await sendVerificationEmail(serverIPUsed, user.email, user.name, emailVerificationToken);
     
     res.json({
       success: true,
@@ -492,8 +496,9 @@ router.post('/resend-verification-public', async (req, res) => {
     user.emailVerificationTokenExpiry = emailVerificationTokenExpiry;
     await user.save();
     
+    const serverIPUsed = req.get('host') ? req.get('host').split(':')[0] : 'unknown';
     // Send verification email
-    await sendVerificationEmail(user.email, user.name, emailVerificationToken);
+    await sendVerificationEmail(serverIPUsed, user.email, user.name, emailVerificationToken);
     
     res.json({
       success: true,
@@ -564,7 +569,8 @@ router.put('/profile', protect, async (req, res) => {
     await user.save();
     
     if (emailChanged) {
-      await sendVerificationEmail(user.email, user.name, user.emailVerificationToken);
+      const serverIPUsed = req.get('host') ? req.get('host').split(':')[0] : 'unknown';
+      await sendVerificationEmail(serverIPUsed, user.email, user.name, user.emailVerificationToken);
     }
 
     let message = 'Profile updated successfully';

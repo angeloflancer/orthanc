@@ -445,24 +445,24 @@ const proxy = createProxyMiddleware(proxyOptions);
 
 // Frontend: serve built files on port 5829 only (backend stays on 5830 only).
 // When packaged (pkg), frontend is embedded in the exe and read from the snapshot (__dirname).
-const frontendDistDir = path.join(__dirname, 'frontend-dist');
-if (fs.existsSync(frontendDistDir)) {
-  const frontendApp = express();
-  frontendApp.use(express.static(frontendDistDir));
-  frontendApp.get('*', (req, res) => {
-    res.sendFile(path.join(frontendDistDir, 'index.html'));
-  });
-  const frontendServer = frontendApp.listen(5829, '0.0.0.0', () => {
-    console.log('Frontend serving on http://localhost:5829');
-  });
-  frontendServer.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.log('Port 5829 in use; start backend only. Serve frontend separately on 5829.');
-    } else {
-      console.error('Frontend server error:', err.message);
-    }
-  });
-}
+// const frontendDistDir = path.join(__dirname, 'frontend-dist');
+// if (fs.existsSync(frontendDistDir)) {
+//   const frontendApp = express();
+//   frontendApp.use(express.static(frontendDistDir));
+//   frontendApp.get('*', (req, res) => {
+//     res.sendFile(path.join(frontendDistDir, 'index.html'));
+//   });
+//   const frontendServer = frontendApp.listen(5829, '0.0.0.0', () => {
+//     console.log('Frontend serving on http://localhost:5829');
+//   });
+//   frontendServer.on('error', (err) => {
+//     if (err.code === 'EADDRINUSE') {
+//       console.log('Port 5829 in use; start backend only. Serve frontend separately on 5829.');
+//     } else {
+//       console.error('Frontend server error:', err.message);
+//     }
+//   });
+// }
 
 // Proxy all other routes to Orthanc service (conditionally - only for Orthanc API routes)
 app.use((req, res, next) => {
@@ -494,5 +494,4 @@ app.use((req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
-  console.log(`Proxying Orthanc requests to ${TARGET_SERVICE}`);
 });

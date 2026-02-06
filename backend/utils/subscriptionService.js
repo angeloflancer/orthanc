@@ -7,6 +7,7 @@
 const HospitalSubscription = require('../models/HospitalSubscription');
 const { getFingerprint } = require('./hardwareFingerprint');
 const { encryptSubscription, decryptSubscription } = require('./licenseEncryption');
+const clockGuard = require('./clockGuard');
 
 /**
  * Default expired subscription result (returned when decryption fails)
@@ -126,11 +127,19 @@ async function saveSubscription(hospitalId, planType, expiresAt = null) {
 
 /**
  * Load a subscription (decrypt after fetching)
- * Returns expired result if decryption fails (hardware mismatch)
+ * Returns expired result if decryption fails (hardware mismatch) or if system clock was set back.
  * @param {string|ObjectId} hospitalId - Hospital ID
  * @returns {Promise<object|null>} - Subscription info or null if not found
  */
 async function loadSubscription(hospitalId) {
+  const clock = await clockGuard.check();
+  if (!clock.valid) {
+    return {
+      ...EXPIRED_RESULT,
+      clockTampered: true
+    };
+  }
+
   const subscription = await HospitalSubscription.findOne({ hospital: hospitalId });
   
   if (!subscription) {

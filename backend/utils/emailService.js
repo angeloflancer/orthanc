@@ -12,7 +12,7 @@ const nodemailer = require('nodemailer');
  * Note: The "from" address will be your Gmail address. This works for
  * verification emails and doesn't require domain verification.
  */
-const sendVerificationEmail = async (email, name, token) => {
+const sendVerificationEmail = async (host, email, name, token) => {
   try {
     // Check if Gmail credentials are configured
     const gmailUser = process.env.GMAIL_USER;
@@ -33,7 +33,7 @@ const sendVerificationEmail = async (email, name, token) => {
     }
 
     // Get base URL and create verification URL
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5829';
+    const baseUrl = host !== "unknown" ? (host + ':' + process.env.FRONTEND_PORT) : process.env.FRONTEND_URL;
     const verificationUrl = `${baseUrl}/verify-email/${token}`;
     
     // Use Gmail SMTP via nodemailer

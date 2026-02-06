@@ -4,6 +4,7 @@ const Hospital = require('../models/Hospital');
 const HospitalMember = require('../models/HospitalMember');
 const User = require('../models/User');
 const HospitalSubscription = require('../models/HospitalSubscription');
+const LicenseGuard = require('../models/LicenseGuard');
 const { protect } = require('../middleware/auth');
 const { requireAdmin, requireRole, requireOwner } = require('../middleware/roleAuth');
 const orthancClient = require('../utils/orthancClient');
@@ -160,6 +161,9 @@ router.delete('/:hospitalId', protect, requireOwner(), async (req, res) => {
     await HospitalSubscription.deleteOne({ hospital: hospital._id });
     await HospitalMember.deleteMany({ hospital: hospital._id });
     await Hospital.findByIdAndDelete(hospital._id);
+
+    // Clear all LicenseGuard entries so clock-tamper state is reset
+    await LicenseGuard.deleteMany({});
 
     if (hospital.admin) {
       await User.findByIdAndUpdate(hospital.admin, { $set: { role: 'doctor' } });
@@ -517,6 +521,9 @@ router.delete('/', protect, requireRole('admin'), async (req, res) => {
     
     // Delete the hospital
     await Hospital.findByIdAndDelete(hospital._id);
+
+    // Clear all LicenseGuard entries so clock-tamper state is reset
+    await LicenseGuard.deleteMany({});
     
     res.json({
       success: true,
