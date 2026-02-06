@@ -63,6 +63,48 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 const { getFingerprint } = require('./utils/hardwareFingerprint');
 const subscriptionService = require('./utils/subscriptionService');
 
+// ============================================================================
+// NEW: Cache for logo data URLs (loaded once at startup)
+// ============================================================================
+let cachedLogoDataUrl = null;
+let cachedFaviconDataUrl = null;
+
+async function loadLogosAtStartup() {
+  try {
+    const assetsDirCandidates = [
+      path.join(__dirname, 'assets'),
+      ...(typeof process.pkg !== 'undefined' && process.pkg
+        ? [path.join(path.dirname(process.execPath), 'assets')]
+        : [])
+    ];
+    const assetsDir = assetsDirCandidates.find(d => fs.existsSync(d)) || assetsDirCandidates[0];
+    
+    // Load main logo asynchronously
+    const logoPath = path.join(assetsDir, 'emedx-logo.png');
+    if (fs.existsSync(logoPath)) {
+      const logoBuffer = await fs.promises.readFile(logoPath);
+      const logoBase64 = logoBuffer.toString('base64');
+      cachedLogoDataUrl = `data:image/png;base64,${logoBase64}`;
+      console.log('[Startup] Logo cached successfully');
+    } else {
+      console.warn(`[Startup] Logo file not found at ${logoPath}`);
+    }
+    
+    // Load favicon logo asynchronously
+    const faviconLogoPath = path.join(assetsDir, 'logo.png');
+    if (fs.existsSync(faviconLogoPath)) {
+      const faviconBuffer = await fs.promises.readFile(faviconLogoPath);
+      const faviconBase64 = faviconBuffer.toString('base64');
+      cachedFaviconDataUrl = `data:image/png;base64,${faviconBase64}`;
+      console.log('[Startup] Favicon logo cached successfully');
+    } else {
+      console.warn(`[Startup] Favicon logo file not found at ${faviconLogoPath}`);
+    }
+  } catch (error) {
+    console.error('[Startup] Error loading logos:', error.message);
+  }
+}
+
 // Connect to MongoDB and initialize license protection
 connectDB().then(async () => {
   try {
@@ -73,6 +115,9 @@ connectDB().then(async () => {
     
     // Migrate old unencrypted subscriptions to encrypted format (as expired)
     await subscriptionService.migrateOldSubscriptions();
+    
+    // NEW: Load logos at startup (asynchronously)
+    await loadLogosAtStartup();
   } catch (error) {
     console.error('[Startup] License protection initialization error:', error.message);
     // Don't crash the server, but log the error
@@ -314,6 +359,48 @@ app.post('/tools/find', express.json(), async (req, res) => {
   }
 });
 
+// ============================================================================
+// NEW: Optimized HTML modification function (non-blocking)
+// ============================================================================
+function modifyHtmlContent(htmlString, isStoneViewer) {
+  let modifiedHtml = htmlString;
+  
+  // Use cached logo URLs (no file I/O)
+  const logoDataUrl = cachedLogoDataUrl;
+  const faviconDataUrl = cachedFaviconDataUrl;
+  
+  // Replace favicon links (for stone viewer)
+  if (faviconDataUrl && isStoneViewer) {
+    modifiedHtml = modifiedHtml.replace(/<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*>/gi, `<link rel="icon" href="${faviconDataUrl}" />`);
+    modifiedHtml = modifiedHtml.replace(/<link[^>]*href=["'][^"']*favicon[^"']*["'][^>]*rel=["'](?:shortcut )?icon["'][^>]*>/gi, `<link rel="icon" href="${faviconDataUrl}" />`);
+  }
+  
+  // Replace title tags - "EMEDX Viewer" for stone viewer, "EMEDX" for others
+  const titleText = isStoneViewer ? 'EMEDX Viewer' : 'EMEDX';
+  modifiedHtml = modifiedHtml.replace(/<title>([^<]*)<\/title>/gi, `<title>${titleText}</title>`);
+  modifiedHtml = modifiedHtml.replace(/<title\s+[^>]*>([^<]*)<\/title>/gi, `<title>${titleText}</title>`);
+  
+  // Replace Orthanc logo images with custom logo
+  if (logoDataUrl) {
+    modifiedHtml = modifiedHtml.replace(/src="img\/orthanc\.png"/g, `src="${logoDataUrl}"`);
+    modifiedHtml = modifiedHtml.replace(/src='img\/orthanc\.png'/g, `src='${logoDataUrl}'`);
+  }
+  
+  // Replace product info text
+  modifiedHtml = modifiedHtml.replace(/Orthanc:?\s*{{[^}]*orthancSystem\.Version[^}]*}}/g, 'EMEDX');
+  modifiedHtml = modifiedHtml.replace(/Orthanc:?\s*\d+\.\d+\.\d+/g, 'EMEDX');
+  modifiedHtml = modifiedHtml.replace(/Orthanc\s*Web\s*Viewer/gi, 'EMEDX');
+  modifiedHtml = modifiedHtml.replace(/orthanc-system/gi, 'emedx-system');
+  
+  // Replace product info images
+  if (logoDataUrl) {
+    modifiedHtml = modifiedHtml.replace(/src="[^"]*orthanc[^"]*\.(png|jpg|jpeg|svg)"/gi, `src="${logoDataUrl}"`);
+    modifiedHtml = modifiedHtml.replace(/src='[^']*orthanc[^']*\.(png|jpg|jpeg|svg)'/gi, `src='${logoDataUrl}'`);
+  }
+  
+  return modifiedHtml;
+}
+
 // Proxy middleware configuration for Orthanc service
 const proxyOptions = {
   target: TARGET_SERVICE,
@@ -352,72 +439,8 @@ const proxyOptions = {
       // Convert buffer to string
       let modifiedHtml = responseBuffer.toString('utf8');
       
-      // Replace logo and product info (pkg exe: try snapshot path first, then next to exe)
-      const assetsDirCandidates = [
-        path.join(__dirname, 'assets'),
-        ...(typeof process.pkg !== 'undefined' && process.pkg
-          ? [path.join(path.dirname(process.execPath), 'assets')]
-          : [])
-      ];
-      const assetsDir = assetsDirCandidates.find(d => fs.existsSync(d)) || assetsDirCandidates[0];
-      const logoPath = path.join(assetsDir, 'emedx-logo.png');
-      const faviconLogoPath = path.join(assetsDir, 'logo.png');
-      let logoDataUrl = null;
-      let faviconDataUrl = null;
-      
-      // Read logo file once if it exists
-      if (fs.existsSync(logoPath)) {
-        const logoBuffer = fs.readFileSync(logoPath);
-        const logoBase64 = logoBuffer.toString('base64');
-        logoDataUrl = `data:image/png;base64,${logoBase64}`;
-        console.log('Logo file loaded');
-      } else {
-        console.warn(`Logo file not found at ${logoPath}`);
-      }
-      
-      // Read favicon logo file for stone viewer
-      if (fs.existsSync(faviconLogoPath)) {
-        const faviconBuffer = fs.readFileSync(faviconLogoPath);
-        const faviconBase64 = faviconBuffer.toString('base64');
-        faviconDataUrl = `data:image/png;base64,${faviconBase64}`;
-        console.log('Favicon logo file loaded');
-      } else {
-        console.warn(`Favicon logo file not found at ${faviconLogoPath}`);
-      }
-      
-      // Replace favicon links (for stone viewer)
-      if (faviconDataUrl && isStoneViewer) {
-        modifiedHtml = modifiedHtml.replace(/<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*>/gi, `<link rel="icon" href="${faviconDataUrl}" />`);
-        modifiedHtml = modifiedHtml.replace(/<link[^>]*href=["'][^"']*favicon[^"']*["'][^>]*rel=["'](?:shortcut )?icon["'][^>]*>/gi, `<link rel="icon" href="${faviconDataUrl}" />`);
-        console.log('Favicon links replaced for stone viewer');
-      }
-      
-      // Replace title tags - "EMEDX Viewer" for stone viewer, "EMEDX" for others
-      const titleText = isStoneViewer ? 'EMEDX Viewer' : 'EMEDX';
-      modifiedHtml = modifiedHtml.replace(/<title>([^<]*)<\/title>/gi, `<title>${titleText}</title>`);
-      modifiedHtml = modifiedHtml.replace(/<title\s+[^>]*>([^<]*)<\/title>/gi, `<title>${titleText}</title>`);
-      console.log(`Title tags replaced with "${titleText}"`);
-      
-      // Replace Orthanc logo images with custom logo
-      if (logoDataUrl) {
-        modifiedHtml = modifiedHtml.replace(/src="img\/orthanc\.png"/g, `src="${logoDataUrl}"`);
-        modifiedHtml = modifiedHtml.replace(/src='img\/orthanc\.png'/g, `src='${logoDataUrl}'`);
-        console.log('Logo images replaced');
-      }
-      
-      // Replace product info text (Orthanc version info, product names, etc.)
-      modifiedHtml = modifiedHtml.replace(/Orthanc:?\s*{{[^}]*orthancSystem\.Version[^}]*}}/g, 'EMEDX');
-      modifiedHtml = modifiedHtml.replace(/Orthanc:?\s*\d+\.\d+\.\d+/g, 'EMEDX');
-      modifiedHtml = modifiedHtml.replace(/Orthanc\s*Web\s*Viewer/gi, 'EMEDX');
-      modifiedHtml = modifiedHtml.replace(/orthanc-system/gi, 'emedx-system');
-      console.log('Product info text replaced');
-      
-      // Replace product info images (any Orthanc branding images)
-      if (logoDataUrl) {
-        modifiedHtml = modifiedHtml.replace(/src="[^"]*orthanc[^"]*\.(png|jpg|jpeg|svg)"/gi, `src="${logoDataUrl}"`);
-        modifiedHtml = modifiedHtml.replace(/src='[^']*orthanc[^']*\.(png|jpg|jpeg|svg)'/gi, `src='${logoDataUrl}'`);
-        console.log('Product info images replaced');
-      }
+      // NEW: Use optimized modification function (no file I/O, no fs.readFileSync)
+      modifiedHtml = modifyHtmlContent(modifiedHtml, isStoneViewer);
       
       console.log(`HTML modified and sent to browser`);
       console.log(`=====================================================\n`);
@@ -445,24 +468,24 @@ const proxy = createProxyMiddleware(proxyOptions);
 
 // Frontend: serve built files on port 5829 only (backend stays on 5830 only).
 // When packaged (pkg), frontend is embedded in the exe and read from the snapshot (__dirname).
-// const frontendDistDir = path.join(__dirname, 'frontend-dist');
-// if (fs.existsSync(frontendDistDir)) {
-//   const frontendApp = express();
-//   frontendApp.use(express.static(frontendDistDir));
-//   frontendApp.get('*', (req, res) => {
-//     res.sendFile(path.join(frontendDistDir, 'index.html'));
-//   });
-//   const frontendServer = frontendApp.listen(5829, '0.0.0.0', () => {
-//     console.log('Frontend serving on http://localhost:5829');
-//   });
-//   frontendServer.on('error', (err) => {
-//     if (err.code === 'EADDRINUSE') {
-//       console.log('Port 5829 in use; start backend only. Serve frontend separately on 5829.');
-//     } else {
-//       console.error('Frontend server error:', err.message);
-//     }
-//   });
-// }
+const frontendDistDir = path.join(__dirname, 'frontend-dist');
+if (fs.existsSync(frontendDistDir)) {
+  const frontendApp = express();
+  frontendApp.use(express.static(frontendDistDir));
+  frontendApp.get('*', (req, res) => {
+    res.sendFile(path.join(frontendDistDir, 'index.html'));
+  });
+  const frontendServer = frontendApp.listen(5829, '0.0.0.0', () => {
+    console.log('Frontend serving on http://localhost:5829');
+  });
+  frontendServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log('Port 5829 in use; start backend only. Serve frontend separately on 5829.');
+    } else {
+      console.error('Frontend server error:', err.message);
+    }
+  });
+}
 
 // Proxy all other routes to Orthanc service (conditionally - only for Orthanc API routes)
 app.use((req, res, next) => {
