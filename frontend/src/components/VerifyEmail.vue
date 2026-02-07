@@ -4,31 +4,30 @@
       <transition name="dialog" appear>
         <div class="verify-card">
           <div class="verify-header">
-            <img class="verify-logo" src="../assets/images/emedx-logo.png" alt="EMEDX Logo" />
-            <h1 class="verify-title">Email Verification</h1>
+            <img class="verify-logo" src="../assets/images/emedx-logo.png" alt="EMEDX" />
+            <h1 class="verify-title">Email verification</h1>
+            <p class="verify-subtitle">We’re checking your verification link.</p>
           </div>
           
-          <div v-if="loading" class="verify-content">
-            <div class="spinner-border text-primary" role="status">
-              <span class="visually-hidden">Loading...</span>
-            </div>
-            <p>Verifying your email...</p>
+          <div v-if="loading" class="verify-content verify-loading">
+            <div class="verify-spinner" role="status" aria-hidden="true"></div>
+            <p class="verify-status-text">Verifying your email…</p>
           </div>
           
           <div v-else-if="success" class="verify-content">
-            <div class="alert alert-success">
-              <i class="bi bi-check-circle-fill"></i>
-              <p>{{ message }}</p>
+            <div class="verify-message verify-message--success">
+              <span class="verify-message-icon" aria-hidden="true">✓</span>
+              <p class="verify-message-text">{{ message }}</p>
             </div>
-            <router-link to="/login" class="btn btn-primary">Go to Login</router-link>
+            <router-link to="/login" class="verify-btn">Go to login</router-link>
           </div>
           
           <div v-else-if="error" class="verify-content">
-            <div class="alert alert-danger">
-              <i class="bi bi-x-circle-fill"></i>
-              <p>{{ error }}</p>
+            <div class="verify-message verify-message--error">
+              <span class="verify-message-icon" aria-hidden="true">×</span>
+              <p class="verify-message-text">{{ error }}</p>
             </div>
-            <router-link to="/login" class="btn btn-primary">Go to Login</router-link>
+            <router-link to="/login" class="verify-btn">Go to login</router-link>
           </div>
         </div>
       </transition>
@@ -64,8 +63,8 @@ export default {
         this.success = true;
         this.message = response.data.message || 'Email verified successfully!';
       }
-    } catch (error) {
-      this.error = error.response?.data?.error || 'Verification failed. The link may be invalid or expired.';
+    } catch (err) {
+      this.error = err.response?.data?.error || 'Verification failed. The link may be invalid or expired.';
     } finally {
       this.loading = false;
     }
@@ -76,40 +75,24 @@ export default {
 <style scoped>
 .verify-page {
   min-height: 100vh;
-  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: 
-    linear-gradient(180deg, rgba(74, 144, 226, 0.85) 0%, rgba(53, 122, 189, 0.85) 100%),
-    url('https://images.unsplash.com/photo-1559757148-5c350d0d3c56?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  padding: 40px 20px;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow-y: auto;
+  background: #f8fafc;
+  padding: 24px;
 }
 
 .verify-container {
   width: 100%;
-  max-width: 500px;
-  position: relative;
-  z-index: 1;
+  max-width: 420px;
 }
 
 .verify-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(15px);
-  border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  padding: 40px 50px;
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 48px 40px;
+  border: 1px solid #e2e8f0;
 }
 
 .verify-header {
@@ -118,15 +101,25 @@ export default {
 }
 
 .verify-logo {
-  height: 70px;
-  margin-bottom: 20px;
+  height: 48px;
+  margin-bottom: 24px;
   object-fit: contain;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .verify-title {
-  color: #1a1f2e;
-  font-size: 28px;
+  font-size: 1.5rem;
   font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.02em;
+}
+
+.verify-subtitle {
+  font-size: 0.9375rem;
+  color: #64748b;
   margin: 0;
 }
 
@@ -134,75 +127,119 @@ export default {
   text-align: center;
 }
 
-.verify-content p {
-  margin: 20px 0;
-  color: #374151;
+.verify-loading {
+  padding: 8px 0;
 }
 
-.alert {
+.verify-spinner {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 16px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: verify-spin 0.7s linear infinite;
+}
+
+@keyframes verify-spin {
+  to { transform: rotate(360deg); }
+}
+
+.verify-status-text {
+  font-size: 0.9375rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.verify-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
   padding: 16px;
-  border-radius: 10px;
+  border-radius: 12px;
   margin-bottom: 24px;
 }
 
-.alert-success {
-  background: #d1fae5;
-  color: #059669;
-  border: 1px solid #10b981;
+.verify-message--success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
 }
 
-.alert-danger {
-  background: #fee2e2;
-  color: #dc2626;
-  border: 1px solid #ef4444;
+.verify-message--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
 }
 
-.alert i {
-  font-size: 24px;
-  margin-bottom: 10px;
-  display: block;
+.verify-message-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.spinner-border {
-  width: 3rem;
-  height: 3rem;
-  margin-bottom: 20px;
+.verify-message--success .verify-message-icon {
+  background: #22c55e;
+  color: #fff;
 }
 
-.btn-primary {
-  padding: 12px 24px;
-  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
-  border: none;
-  border-radius: 10px;
-  color: white;
-  font-weight: 600;
-  text-decoration: none;
+.verify-message--error .verify-message-icon {
+  background: #ef4444;
+  color: #fff;
+}
+
+.verify-message-text {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.verify-message--success .verify-message-text {
+  color: #166534;
+}
+
+.verify-message--error .verify-message-text {
+  color: #991b1b;
+}
+
+.verify-btn {
   display: inline-block;
-  transition: all 0.2s;
+  padding: 12px 24px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 10px;
+  transition: background 0.2s, color 0.2s;
 }
 
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+.verify-btn:hover {
+  background: #1e293b;
+  color: #fff;
 }
 
-/* Dialog transition */
-.dialog-enter-active, .dialog-leave-active {
-  transition: opacity 0.35s ease, transform 0.35s ease;
+.dialog-enter-active,
+.dialog-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
-.dialog-enter-from {
-  opacity: 0;
-  transform: translateY(30px) scale(0.95);
-}
-
+.dialog-enter-from,
 .dialog-leave-to {
   opacity: 0;
-  transform: translateY(-30px) scale(0.95);
+  transform: translateY(12px);
 }
 
-.dialog-enter-to, .dialog-leave-from {
+.dialog-enter-to,
+.dialog-leave-from {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateY(0);
 }
 </style>

@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     host: '0.0.0.0', // Explicitly bind to all network interfaces
-    port: 5829,
+    port: 5831,
     allowedHosts: true,
     strictPort: false // Allow port fallback if 5829 is busy
   },
