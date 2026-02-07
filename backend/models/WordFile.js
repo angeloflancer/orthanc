@@ -40,7 +40,8 @@ const wordFileSchema = new mongoose.Schema({
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    // Optional because owner is not stored in the Users collection and uploads as a synthetic user
+    required: false
   },
   uploadedByName: {
     type: String,

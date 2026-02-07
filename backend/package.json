@@ -8,14 +8,11 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build:frontend": "cd ../frontend && npm run build",
-    "build:exe": "pkg . --targets win-x64 --output dist/orthanc-backend.exe --icon ./assets/emedx.ico"
+    "build:exe": "pkg . --targets node18-win-x64 --output dist/orthanc-backend.exe --icon ./assets/emedx.ico"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "pkg": {
     "scripts": [
       "server.js",
@@ -31,7 +28,7 @@
       "frontend-dist/**/*"
     ],
     "targets": [
-      "win-x64"
+      "node18-win-x64"
     ],
     "outputPath": "dist"
   },
