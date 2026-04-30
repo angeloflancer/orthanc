@@ -67,8 +67,8 @@ export default {
         hasLogout() {
             return window.keycloak !== undefined;
         },
-        hasUserProfile() {
-            return this.userProfile != null && this.userProfile.name;
+        hasSessionLogout() {
+            return this.hasLogout || !!localStorage.getItem('auth-token');
         },
         displayedStudyCount() {
             if (this.studiesSourceType == SourceType.LOCAL_ORTHANC) {
@@ -156,14 +156,23 @@ export default {
         },
         logout(event) {
             event.preventDefault();
-            let logoutOptions = {
-                "redirectUri": window.location.href
+            if (this.hasLogout) {
+                let logoutOptions = {
+                    "redirectUri": window.location.href
+                }
+                window.keycloak.logout(logoutOptions).then((success) => {
+                    console.log("logout success", success);
+                }).catch((error) => {
+                    console.error("logout failed", error);
+                });
+                return;
             }
-            window.keycloak.logout(logoutOptions).then((success) => {
-                console.log("logout success", success);
-            }).catch((error) => {
-                console.error("logout failed", error);
-            })
+
+            localStorage.removeItem('auth-token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('vue-token');
+            localStorage.removeItem('vue-refresh-token');
+            this.$router.push('/login');
         },
         changePassword(event) {
             event.preventDefault();
@@ -386,27 +395,12 @@ export default {
                         </li>
                     </ul>
                     
-                    <li v-if="hasLogout" class="nav-item nav-dropdown" data-bs-toggle="collapse"
-                        data-bs-target="#profile-list">
-                        <div class="nav-link">
-                            <i class="fa fa-user fa-lg nav-icon"></i>
-                            <span class="nav-text" v-if="hasUserProfile">{{ userProfile.name }}</span>
-                            <span class="nav-text" v-if="!hasUserProfile">{{ $t('profile') }}</span>
-                            <span class="nav-arrow"></span>
-                        </div>
+                    <li v-if="hasSessionLogout" class="nav-item">
+                        <a href="#" class="nav-link" @click.prevent="logout($event)">
+                            <i class="fa fa-solid fa-arrow-right-from-bracket fa-lg nav-icon"></i>
+                            <span class="nav-text">{{ $t('logout') }}</span>
+                        </a>
                     </li>
-                    <ul class="sub-menu collapse" id="profile-list" ref="profile-collapsible">
-                        <li v-if="uiOptions.EnableChangePassword">
-                            <a v-bind:href="'#'" @click="changePassword($event)">
-                                <i class="fa fa-solid fa-key fa-lg menu-icon"></i>{{ $t('change_password') }}
-                            </a>
-                        </li>
-                        <li v-if="hasLogout">
-                            <a v-bind:href="'#'" @click="logout($event)">
-                                <i class="fa fa-solid fa-arrow-right-from-bracket fa-lg menu-icon"></i>{{ $t('logout') }}
-                            </a>
-                        </li>
-                    </ul>
                     
                     <li v-if="hasJobs" class="nav-item">
                         <div class="nav-link">
