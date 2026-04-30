@@ -474,8 +474,24 @@ app.use((req, res, next) => {
   proxy(req, res, next);
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Backend server running on http://localhost:${PORT}`);
-  console.log(`Proxying Orthanc requests to ${TARGET_SERVICE}`);
-});
+// Start server with automatic fallback if preferred port is busy
+function startBackendServer(portToUse) {
+  const server = app.listen(portToUse, () => {
+    if (portToUse !== PORT) {
+      console.warn(`Port ${PORT} is in use. Backend started on fallback port ${portToUse}.`);
+    }
+    console.log(`Backend server running on http://localhost:${portToUse}`);
+    console.log(`Proxying Orthanc requests to ${TARGET_SERVICE}`);
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      const nextPort = Number(portToUse) + 1;
+      console.warn(`Port ${portToUse} is already in use. Retrying on ${nextPort}...`);
+      return startBackendServer(nextPort);
+    }
+    throw err;
+  });
+}
+
+startBackendServer(Number(PORT));

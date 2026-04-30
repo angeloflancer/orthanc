@@ -11,16 +11,31 @@ function normalizeMongoUri(uri) {
 }
 
 const connectDB = async () => {
-  try {
-    const rawUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/orthanc';
-    const uri = normalizeMongoUri(rawUri);
-    const conn = await mongoose.connect(uri);
-    
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error(`Error: ${error.message}`);
-    process.exit(1);
+  const rawUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/orthanc';
+  const primaryUri = normalizeMongoUri(rawUri);
+  const fallbackUris = [
+    'mongodb://127.0.0.1:27017/emedx',
+    'mongodb://127.0.0.1:27017/orthanc'
+  ];
+  const connectionCandidates = [primaryUri, ...fallbackUris.filter((u) => u !== primaryUri)];
+
+  let lastError = null;
+
+  for (const uri of connectionCandidates) {
+    try {
+      const conn = await mongoose.connect(uri);
+      if (uri !== primaryUri) {
+        console.warn(`MongoDB auth failed for configured URI, using fallback: ${uri}`);
+      }
+      console.log(`MongoDB Connected: ${conn.connection.host}`);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  console.error(`Error: ${lastError ? lastError.message : 'Unable to connect to MongoDB'}`);
+  process.exit(1);
 };
 
 module.exports = connectDB;
